@@ -1,0 +1,18 @@
+## Interface: 120001
+## Version: 1.0
+## Title: Priest Assist
+## Author: CheersItsJulian
+## SavedVariables: PriestAssistDB
+## IconTexture: Interface\AddOns\PriestAssist\icon.tga
+## OptionalDeps: AbstractFramework, LibSharedMedia-3.0
+## X-Curse-Project-ID: 896769
+
+PriestAssist.lua
+FallbackUI.lua
+Data.lua
+Reminder.lua
+Macro.lua
+Config.lua
+Minimap.lua
+Core.lua
+
