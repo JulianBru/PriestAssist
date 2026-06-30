@@ -1,547 +1,429 @@
 local _, ns = ...
-local AF = ns.AF
+local UI = ns.UI
 local frames = ns.frames
 local configControls = frames.configControls
-local fallbackWidgetIndex = 0
 
-local function NextFallbackName(prefix)
-    fallbackWidgetIndex = fallbackWidgetIndex + 1
-    return string.format("PIMGFallback%s%d", prefix, fallbackWidgetIndex)
-end
+-- ─── Panel layout constants ───────────────────────────────────────────────────
+-- These mirror the measurements in UI.lua's CreateHeaderedFrame (TITLE_H=34).
+-- Accent line (2px) + title bar (34px) + separator (1px) = content starts at y=-37.
 
-local function CreateFallbackLabel(parent, text, anchorTo, offsetY)
-    local label = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    label:SetText(text)
+local W          = 520
+local H          = 490
+local HEADER_END = 37   -- y-offset where header ends (px from panel top)
+local TAB_H      = 28
+local FOOTER_H   = 46
+local PAD        = 14
+local CONTENT_W  = W - 2 - PAD * 2   -- 488px
+
+-- y-offset of content frames from panel TOPLEFT
+local CONTENT_Y = -(HEADER_END + TAB_H + 1 + PAD)   -- -80
+
+-- ─── Helpers ─────────────────────────────────────────────────────────────────
+
+local function SectionHeader(parent, text, anchorTo, offsetY)
+    local f = CreateFrame("Frame", nil, parent)
+    f:SetHeight(14)
     if anchorTo then
-        label:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, offsetY or -24)
-    end
-    return label
-end
-
-local function CreateFallbackCheckButton(parent, text, anchorTo, offsetY, onClick)
-    local check = CreateFrame("CheckButton", NextFallbackName("Check"), parent, "InterfaceOptionsCheckButtonTemplate")
-    check.Text:SetText(text)
-    check:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", -4, offsetY or -16)
-    check:SetScript("OnClick", function(self)
-        onClick(self:GetChecked() and true or false)
-    end)
-    return check
-end
-
-local function CreateFallbackSlider(parent, text, anchorTo, offsetY, minValue, maxValue, step, onChanged)
-    local sliderName = NextFallbackName("Slider")
-    local slider = CreateFrame("Slider", sliderName, parent, "OptionsSliderTemplate")
-    slider:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, offsetY or -40)
-    slider:SetWidth(320)
-    slider:SetMinMaxValues(minValue, maxValue)
-    slider:SetValueStep(step or 1)
-    slider:SetObeyStepOnDrag(true)
-    slider:EnableMouseWheel(true)
-    slider:SetScript("OnMouseWheel", function(self, delta)
-        self:SetValue(self:GetValue() + ((step or 1) * delta))
-    end)
-
-    _G[sliderName .. "Text"]:SetText(text)
-    _G[sliderName .. "Low"]:SetText(tostring(minValue))
-    _G[sliderName .. "High"]:SetText(tostring(maxValue))
-
-    slider.valueText = parent:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    slider.valueText:SetPoint("TOP", slider, "BOTTOM", 0, -2)
-
-    slider:SetScript("OnValueChanged", function(self, value)
-        value = math.floor((value / (step or 1)) + 0.5) * (step or 1)
-        self.valueText:SetText(tostring(value))
-        onChanged(value)
-    end)
-
-    return slider
-end
-
-local function CreateFallbackDropdown(parent, labelText, anchorTo, offsetY, width, items, onSelect)
-    local container = CreateFrame("Frame", NextFallbackName("DropdownContainer"), parent)
-    container:SetSize((width or 230) + 12, 48)
-    container:SetPoint("TOPLEFT", anchorTo, "BOTTOMLEFT", 0, offsetY or -10)
-
-    container.label = container:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    container.label:SetPoint("TOPLEFT", 0, 0)
-    container.label:SetText(labelText)
-
-    local dropdownName = NextFallbackName("Dropdown")
-    local dropdown = CreateFrame("Frame", dropdownName, container, "UIDropDownMenuTemplate")
-    dropdown:SetPoint("TOPLEFT", -16, -14)
-    UIDropDownMenu_SetWidth(dropdown, width or 230)
-    UIDropDownMenu_JustifyText(dropdown, "LEFT")
-
-    container.dropdown = dropdown
-    container.items = items or {}
-    container.selectedValue = nil
-
-    function container:SetItems(newItems)
-        self.items = newItems or {}
-        UIDropDownMenu_Initialize(self.dropdown, function(frame, level)
-            for _, item in ipairs(container.items) do
-                local info = UIDropDownMenu_CreateInfo()
-                info.text = item.text
-                info.value = item.value
-                info.func = function()
-                    container:SetSelectedValue(item.value)
-                    if onSelect then
-                        onSelect(item.value)
-                    end
-                end
-                info.checked = (container.selectedValue == item.value)
-                UIDropDownMenu_AddButton(info, level)
-
-                local listFrame = _G["DropDownList" .. tostring(level or 1)]
-                local buttonIndex = listFrame and listFrame.numButtons
-                local listButton = buttonIndex and _G[listFrame:GetName() .. "Button" .. tostring(buttonIndex)]
-                local check = listButton and (_G[listButton:GetName() .. "Check"] or listButton.Check)
-                local text = listButton and (_G[listButton:GetName() .. "NormalText"] or listButton.NormalText or listButton:GetFontString())
-                if check and text then
-                    text:ClearAllPoints()
-                    text:SetPoint("LEFT", check, "RIGHT", 8, 0)
-                    text:SetPoint("RIGHT", listButton, "RIGHT", -12, 0)
-                    text:SetJustifyH("LEFT")
-                end
-            end
-        end)
+        f:SetPoint("TOPLEFT",  anchorTo, "BOTTOMLEFT",  0, offsetY or -12)
+        f:SetPoint("TOPRIGHT", parent,   "TOPRIGHT",     0, 0)
+    else
+        f:SetPoint("TOPLEFT",  parent, "TOPLEFT",  0, 0)
+        f:SetPoint("TOPRIGHT", parent, "TOPRIGHT", 0, 0)
     end
 
-    function container:SetSelectedValue(value)
-        self.selectedValue = value
-        for _, item in ipairs(self.items) do
-            if item.value == value then
-                UIDropDownMenu_SetSelectedValue(self.dropdown, value)
-                UIDropDownMenu_SetText(self.dropdown, item.text)
-                return
-            end
-        end
-        UIDropDownMenu_SetText(self.dropdown, "")
+    local lbl = UI.CreateFontString(f, (text or ""):upper(), "text", "FONT_SMALL")
+    lbl:SetPoint("LEFT", 0, 0)
+
+    local r, g, b = UI.GetColorRGB("separator")
+    local line = f:CreateTexture(nil, "ARTWORK")
+    line:SetHeight(1)
+    line:SetPoint("LEFT",  lbl,  "RIGHT", 6, 0)
+    line:SetPoint("RIGHT", f,    "RIGHT", 0, 0)
+    line:SetColorTexture(r, g, b, 0.8)
+
+    return f
+end
+
+local function Elevate(dd, panel)
+    if dd and dd.list then
+        dd.list:SetFrameStrata("TOOLTIP")
+        dd.list:SetFrameLevel((panel:GetFrameLevel() or 1) + 50)
     end
-
-    container:SetItems(items)
-    return container
 end
 
-local function CreateFallbackButton(parent, text, width, anchorTo, anchorPoint, relativePoint, offsetX, offsetY, onClick)
-    local button = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    button:SetSize(width, 22)
-    button:SetText(text)
-    button:SetPoint(anchorPoint or "TOPLEFT", anchorTo, relativePoint or "BOTTOMLEFT", offsetX or 0, offsetY or 0)
-    button:SetScript("OnClick", onClick)
-    return button
-end
-
-local function CreateConfigHint(parent, text)
-    local hint = AF.CreateFontString(parent, text, "gray")
-    hint:SetJustifyH("LEFT")
-    hint:SetJustifyV("TOP")
-    return hint
-end
-
-local function CreateActionButton(parent, text, width, onClick)
-    local button = AF.CreateButton(parent, text, ns.GetThemeAccentName(), width, 22)
-    button:SetOnClick(onClick)
-    return button
-end
-
-local function ElevateDropdownList(dropdown, ownerFrame)
-    if not dropdown or not dropdown.list then
-        return
-    end
-
-    dropdown.list:SetFrameStrata("TOOLTIP")
-    dropdown.list:SetFrameLevel((ownerFrame and ownerFrame:GetFrameLevel() or 1) + 50)
-end
+-- ─── RefreshConfigPanel ───────────────────────────────────────────────────────
 
 function ns.RefreshConfigPanel()
-    local configPanel = frames.configPanel
-    if not configPanel then
-        return
-    end
-
+    if not frames.configPanel then return end
     local db = ns.GetDB()
-    if configControls.reminderEnabled then
-        configControls.reminderEnabled:SetChecked(db.reminderEnabled and true or false)
-    end
+    local cc = configControls
 
-    if configControls.announceTarget then
-        configControls.announceTarget:SetChecked(db.announceTarget and true or false)
+    if cc.reminderEnabled     then cc.reminderEnabled:SetChecked(db.reminderEnabled and true or false) end
+    if cc.announceTarget      then cc.announceTarget:SetChecked(db.announceTarget and true or false) end
+    if cc.minimapEnabled      then cc.minimapEnabled:SetChecked(not (db.minimap and db.minimap.hidden)) end
+    if cc.durationSlider      then cc.durationSlider:SetValue(db.reminderDuration or ns.DEFAULTS.reminderDuration) end
+    if cc.fontSizeSlider      then cc.fontSizeSlider:SetValue(db.reminderFontSize or ns.DEFAULTS.reminderFontSize) end
+    if cc.macroVariant        then cc.macroVariant:SetSelectedValue(db.macroVariant or ns.DEFAULTS.macroVariant) end
+    if cc.combatPotion        then cc.combatPotion:SetSelectedValue(db.combatPotion or ns.DEFAULTS.combatPotion) end
+    if cc.combatPotionQuality then cc.combatPotionQuality:SetSelectedValue(db.combatPotionQuality or ns.DEFAULTS.combatPotionQuality) end
+    if cc.reminderStrata      then cc.reminderStrata:SetSelectedValue(db.reminderStrata or ns.DEFAULTS.reminderStrata) end
+    if cc.fontDropdown        then
+        cc.fontDropdown:SetItems(ns.GetFontDropdownItems())
+        cc.fontDropdown:SetSelectedValue(db.reminderFont or ns.DEFAULTS.reminderFont)
     end
-
-    if configControls.minimapEnabled then
-        configControls.minimapEnabled:SetChecked(not (db.minimap and db.minimap.hidden))
-    end
-
-    if configControls.durationSlider then
-        configControls.durationSlider:SetValue(db.reminderDuration or ns.DEFAULTS.reminderDuration)
-    end
-
-    if configControls.fontSizeSlider then
-        configControls.fontSizeSlider:SetValue(db.reminderFontSize or ns.DEFAULTS.reminderFontSize)
-    end
-
-    if configControls.macroVariant then
-        configControls.macroVariant:SetSelectedValue(db.macroVariant or ns.DEFAULTS.macroVariant)
-    end
-
-    if configControls.combatPotion then
-        configControls.combatPotion:SetSelectedValue(db.combatPotion or ns.DEFAULTS.combatPotion)
-    end
-
-    if configControls.combatPotionQuality then
-        configControls.combatPotionQuality:SetSelectedValue(db.combatPotionQuality or ns.DEFAULTS.combatPotionQuality)
-    end
-
-    if configControls.voidformPotionWarning then
-        configControls.voidformPotionWarning:SetText(ns.GetVoidformPotionWarningText())
-        if ns.ShouldShowVoidformPotionWarning() then
-            configControls.voidformPotionWarning:Show()
-        else
-            configControls.voidformPotionWarning:Hide()
-        end
-    end
-
-    if configControls.reminderStrata then
-        configControls.reminderStrata:SetSelectedValue(db.reminderStrata or ns.DEFAULTS.reminderStrata)
-    end
-
-    if configControls.fontDropdown then
-        configControls.fontDropdown:SetItems(ns.GetFontDropdownItems())
-        configControls.fontDropdown:SetSelectedValue(db.reminderFont or ns.DEFAULTS.reminderFont)
-    end
-
-    if configControls.outlineDropdown then
-        configControls.outlineDropdown:SetSelectedValue(db.reminderOutline or ns.DEFAULTS.reminderOutline)
+    if cc.outlineDropdown     then cc.outlineDropdown:SetSelectedValue(db.reminderOutline or ns.DEFAULTS.reminderOutline) end
+    if cc.voidformPotionWarning then
+        cc.voidformPotionWarning:SetText(ns.GetVoidformPotionWarningText())
+        cc.voidformPotionWarning:SetShown(ns.ShouldShowVoidformPotionWarning())
     end
 end
 
+-- ─── CreateConfigPanel ────────────────────────────────────────────────────────
+
 function ns.CreateConfigPanel()
-    if frames.configPanel then
-        return
+    if frames.configPanel then return end
+
+    local accent = ns.GetThemeAccentName()
+    local ar, ag, ab = UI.GetColorRGB(accent)
+    local dr, dg, db = UI.GetColorRGB("textDim")
+    local tr, tg, tb = UI.GetColorRGB("text")
+    local pr, pg, pb, pa = UI.GetColorRGB("bgPanel")
+    local sr, sg, sb = UI.GetColorRGB("separator")
+
+    -- ── Main frame ────────────────────────────────────────────────────────────
+    local configPanel = UI.CreateHeaderedFrame(
+        UI.UIParent or UIParent,
+        "PIMGConfigPanel",
+        ns.ADDON_DISPLAY_NAME,
+        W, H,
+        "FULLSCREEN_DIALOG", 20
+    )
+    frames.configPanel = configPanel
+    configPanel:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+    configPanel:SetTitleColor(accent)
+    configPanel:Hide()
+    configPanel:SetScript("OnHide", UI.CloseDropdown)
+
+    -- Addon icon in the header (left of title text)
+    local headerIcon = configPanel:CreateTexture(nil, "OVERLAY")
+    headerIcon:SetSize(18, 18)
+    headerIcon:SetPoint("LEFT", configPanel, "TOPLEFT", 10, -HEADER_END / 2 + 1)
+    headerIcon:SetTexture(ns.ADDON_ICON_PATH)
+
+    -- Version label (right side of header, before close button)
+    local versionStr = (C_AddOns and C_AddOns.GetAddOnMetadata("PriestAssist", "Version")) or "1.0"
+    local versionLabel = configPanel:CreateFontString(nil, "OVERLAY")
+    versionLabel:SetFont(select(1, GameFontNormal:GetFont()), 10, nil)
+    versionLabel:SetText("v" .. versionStr)
+    versionLabel:SetTextColor(dr, dg, db, 1)
+    versionLabel:SetPoint("RIGHT", configPanel.close, "LEFT", -6, -1)
+
+    -- ── Tab bar ───────────────────────────────────────────────────────────────
+    local tabBar = CreateFrame("Frame", nil, configPanel)
+    tabBar:SetPoint("TOPLEFT",  configPanel, "TOPLEFT",  1, -HEADER_END)
+    tabBar:SetPoint("TOPRIGHT", configPanel, "TOPRIGHT", -1, -HEADER_END)
+    tabBar:SetHeight(TAB_H)
+
+    local tbBg = tabBar:CreateTexture(nil, "BACKGROUND")
+    tbBg:SetAllPoints()
+    tbBg:SetColorTexture(pr, pg, pb, pa)
+
+    local tabSep = configPanel:CreateTexture(nil, "OVERLAY")
+    tabSep:SetPoint("TOPLEFT",  configPanel, "TOPLEFT",  1, -(HEADER_END + TAB_H))
+    tabSep:SetPoint("TOPRIGHT", configPanel, "TOPRIGHT", -1, -(HEADER_END + TAB_H))
+    tabSep:SetHeight(1)
+    tabSep:SetColorTexture(sr, sg, sb, 1)
+
+    -- ── Footer ────────────────────────────────────────────────────────────────
+    local footerSep = configPanel:CreateTexture(nil, "OVERLAY")
+    footerSep:SetPoint("BOTTOMLEFT",  configPanel, "BOTTOMLEFT",  1, FOOTER_H)
+    footerSep:SetPoint("BOTTOMRIGHT", configPanel, "BOTTOMRIGHT", -1, FOOTER_H)
+    footerSep:SetHeight(1)
+    footerSep:SetColorTexture(sr, sg, sb, 1)
+
+    local footerBg = configPanel:CreateTexture(nil, "BACKGROUND", nil, 2)
+    footerBg:SetPoint("BOTTOMLEFT",  configPanel, "BOTTOMLEFT",  1, 1)
+    footerBg:SetPoint("BOTTOMRIGHT", configPanel, "BOTTOMRIGHT", -1, 1)
+    footerBg:SetHeight(FOOTER_H - 1)
+    footerBg:SetColorTexture(pr, pg, pb, pa)
+
+    -- Footer buttons
+    local btnRow = UI.CreateFrame(configPanel, nil, CONTENT_W, 26)
+    btnRow:SetPoint("BOTTOM", configPanel, "BOTTOM", 0, 10)
+
+    local function FooterBtn(text, width, onClick)
+        local btn = UI.CreateButton(btnRow, text, accent, width, 26)
+        btn:SetOnClick(onClick)
+        return btn
     end
 
-    if ns.usingFallbackUI then
-        local configPanel = CreateFrame("Frame", "PIMGConfigPanel", UIParent, "BasicFrameTemplateWithInset")
-        frames.configPanel = configPanel
+    configControls.testButton = FooterBtn("Test", 118, function()
+        ns.ShowReminder(true)
+    end)
+    configControls.testButton:SetPoint("LEFT", 0, 0)
 
-        configPanel:SetSize(460, 760)
-        configPanel:SetPoint("CENTER", UIParent, "CENTER", 320, 0)
-        configPanel:SetClampedToScreen(true)
-        configPanel:EnableMouse(true)
-        configPanel:SetMovable(true)
-        configPanel:SetToplevel(true)
-        configPanel:SetFrameStrata("FULLSCREEN_DIALOG")
-        configPanel:SetFrameLevel(20)
-        configPanel:Hide()
-        if not configPanel.Raise then
-            configPanel.Raise = function(self)
-                self:SetFrameLevel((self:GetFrameLevel() or 1) + 10)
+    configControls.updateButton = FooterBtn("Update Macro", 128, function()
+        ns.RequestMacroUpdate()
+    end)
+    configControls.updateButton:SetPoint("LEFT", configControls.testButton, "RIGHT", 10, 0)
+
+    configControls.resetPositionButton = FooterBtn("Reset Position", 138, function()
+        local dbase = ns.GetDB()
+        dbase.reminderPoint = ns.CopyDefaults(ns.DEFAULTS.reminderPoint, {})
+        ns.ApplyReminderSettings()
+    end)
+    configControls.resetPositionButton:SetPoint("LEFT", configControls.updateButton, "RIGHT", 10, 0)
+
+    -- ── Tab content frames ────────────────────────────────────────────────────
+    local function MakeTab()
+        local f = UI.CreateFrame(configPanel, nil, 1, 1)
+        f:SetPoint("TOPLEFT",     configPanel, "TOPLEFT",     1 + PAD,    CONTENT_Y)
+        f:SetPoint("BOTTOMRIGHT", configPanel, "BOTTOMRIGHT", -(1 + PAD), FOOTER_H + 2)
+        f:Hide()
+        return f
+    end
+
+    local tabGeneral  = MakeTab()
+    local tabReminder = MakeTab()
+    local tabMacro    = MakeTab()
+    local tabFrames   = { tabGeneral, tabReminder, tabMacro }
+
+    -- ── Tab button system ─────────────────────────────────────────────────────
+    local tabDefs    = { "General", "Reminder", "Macro" }
+    local tabButtons = {}
+    local activeTab  = 0
+
+    local function ActivateTab(idx)
+        if idx == activeTab then return end
+        UI.CloseDropdown()
+        activeTab = idx
+        for i, f in ipairs(tabFrames) do f:SetShown(i == idx) end
+        for i, btn in ipairs(tabButtons) do
+            if i == idx then
+                btn._bar:Show()
+                btn._lbl:SetTextColor(ar, ag, ab, 1)
+            else
+                btn._bar:Hide()
+                btn._lbl:SetTextColor(dr, dg, db, 1)
             end
         end
+    end
 
-        configPanel.TitleText:SetText(ns.ADDON_DISPLAY_NAME)
-        configPanel.TitleText:SetTextColor(1.0, 0.82, 0.0)
+    local tabX = 8
+    for i, name in ipairs(tabDefs) do
+        local tabBtn = CreateFrame("Button", nil, tabBar)
+        tabBtn:SetSize(90, TAB_H)
+        tabBtn:SetPoint("LEFT", tabBar, "LEFT", tabX, 0)
+        tabX = tabX + 90
 
-        configPanel:SetScript("OnMouseDown", function(self, button)
-            if button == "LeftButton" then
-                self:StartMoving()
-            end
+        local lbl = UI.CreateFontString(tabBtn, name, "textDim", "FONT_SMALL")
+        lbl:SetPoint("CENTER", 0, 0)
+        tabBtn._lbl = lbl
+
+        local bar = tabBtn:CreateTexture(nil, "OVERLAY")
+        bar:SetPoint("BOTTOMLEFT",  tabBtn, "BOTTOMLEFT",  2, 0)
+        bar:SetPoint("BOTTOMRIGHT", tabBtn, "BOTTOMRIGHT", -2, 0)
+        bar:SetHeight(2)
+        bar:SetColorTexture(ar, ag, ab, 1)
+        bar:Hide()
+        tabBtn._bar = bar
+
+        tabBtn:SetScript("OnEnter", function(self)
+            if activeTab ~= i then self._lbl:SetTextColor(tr, tg, tb, 1) end
         end)
-        configPanel:SetScript("OnMouseUp", function(self)
-            self:StopMovingOrSizing()
-        end)
-
-        local content = CreateFrame("Frame", nil, configPanel)
-        content:SetPoint("TOPLEFT", 24, -36)
-        content:SetPoint("BOTTOMRIGHT", -24, 18)
-        configPanel.content = content
-
-        local subtitle = content:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        subtitle:SetPoint("TOPLEFT", 0, 0)
-        subtitle:SetPoint("TOPRIGHT", 0, 0)
-        subtitle:SetJustifyH("LEFT")
-        subtitle:SetText("Reminder and macro settings for Edit Mode.")
-
-        configControls.voidformPotionWarning = content:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        configControls.voidformPotionWarning:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -6)
-        configControls.voidformPotionWarning:SetPoint("TOPRIGHT", content, "TOPRIGHT", -20, 0)
-        configControls.voidformPotionWarning:SetJustifyH("LEFT")
-        configControls.voidformPotionWarning:SetJustifyV("TOP")
-        configControls.voidformPotionWarning:SetTextColor(1.0, 0.82, 0.0, 1.0)
-        configControls.voidformPotionWarning:SetText(ns.GetVoidformPotionWarningText())
-        configControls.voidformPotionWarning:Hide()
-
-        configControls.reminderEnabled = CreateFallbackCheckButton(content, "Show raid and dungeon reminder", configControls.voidformPotionWarning, -18, function(checked)
-            local db = ns.GetDB()
-            db.reminderEnabled = checked and true or false
-            ns.UpdateReminderVisibility()
+        tabBtn:SetScript("OnLeave", function(self)
+            if activeTab ~= i then self._lbl:SetTextColor(dr, dg, db, 1) end
         end)
 
-        configControls.announceTarget = CreateFallbackCheckButton(content, "Announce target in party or raid chat", configControls.reminderEnabled, -12, function(checked)
-            ns.GetDB().announceTarget = checked and true or false
-        end)
+        local idx = i
+        tabBtn:SetScript("OnClick", function() ActivateTab(idx) end)
+        tabButtons[i] = tabBtn
+    end
 
-        configControls.minimapEnabled = CreateFallbackCheckButton(content, "Show minimap button", configControls.announceTarget, -12, function(checked)
-            local db = ns.GetDB()
-            db.minimap.hidden = not checked
-            ns.UpdateMinimapButtonVisibility()
-        end)
+    -- ── TAB 1: General ────────────────────────────────────────────────────────
+    do
+        local p   = tabGeneral
+        local sec = SectionHeader(p, "General")
 
-        configControls.durationSlider = CreateFallbackSlider(content, "Fade Out Delay", configControls.minimapEnabled, -34, 1, 15, 1, function(value)
-            ns.GetDB().reminderDuration = value
-        end)
+        configControls.reminderEnabled = UI.CreateCheckButton(p,
+            "Show raid and dungeon reminder",
+            function(checked)
+                ns.GetDB().reminderEnabled = checked and true or false
+                ns.UpdateReminderVisibility()
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.reminderEnabled)
+        configControls.reminderEnabled:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -14)
 
-        configControls.fontSizeSlider = CreateFallbackSlider(content, "Font Size", configControls.durationSlider, -42, 12, 40, 1, function(value)
-            local db = ns.GetDB()
-            db.reminderFontSize = value
+        configControls.announceTarget = UI.CreateCheckButton(p,
+            "Announce target in party or raid chat",
+            function(checked)
+                ns.GetDB().announceTarget = checked and true or false
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.announceTarget)
+        configControls.announceTarget:SetPoint("TOPLEFT", configControls.reminderEnabled, "BOTTOMLEFT", 0, -10)
+
+        configControls.minimapEnabled = UI.CreateCheckButton(p,
+            "Show minimap button",
+            function(checked)
+                local d = ns.GetDB()
+                d.minimap.hidden = not checked
+                ns.UpdateMinimapButtonVisibility()
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.minimapEnabled)
+        configControls.minimapEnabled:SetPoint("TOPLEFT", configControls.announceTarget, "BOTTOMLEFT", 0, -10)
+    end
+
+    -- ── TAB 2: Reminder ───────────────────────────────────────────────────────
+    do
+        local p = tabReminder
+
+        -- Section: Appearance
+        local secApp = SectionHeader(p, "Appearance")
+
+        -- Font + Outline (two columns)
+        local FONT_W    = math.floor(CONTENT_W * 0.55)
+        local OUTLINE_W = CONTENT_W - FONT_W - 8
+
+        configControls.fontDropdown = UI.CreateDropdown(p, FONT_W, 8)
+        ns.ApplyVoidAccentToDropdown(configControls.fontDropdown)
+        configControls.fontDropdown:SetPoint("TOPLEFT", secApp, "BOTTOMLEFT", 0, -20)
+        configControls.fontDropdown:SetLabel("Font", accent)
+        configControls.fontDropdown:SetItems(ns.GetFontDropdownItems())
+        configControls.fontDropdown:SetOnSelect(function(value)
+            local d = ns.GetDB()
+            d.reminderFont = value
             ns.ApplyReminderSettings()
         end)
 
-        configControls.macroVariant = CreateFallbackDropdown(content, "Macro Variant", configControls.fontSizeSlider, -58, 230, ns.MACRO_VARIANTS, function(value)
+        configControls.outlineDropdown = UI.CreateDropdown(p, OUTLINE_W, 4)
+        ns.ApplyVoidAccentToDropdown(configControls.outlineDropdown)
+        configControls.outlineDropdown:SetPoint("TOPLEFT", configControls.fontDropdown, "TOPRIGHT", 8, 0)
+        configControls.outlineDropdown:SetLabel("Outline", accent)
+        configControls.outlineDropdown:SetItems(ns.OUTLINE_OPTIONS)
+        configControls.outlineDropdown:SetOnSelect(function(value)
+            local d = ns.GetDB()
+            d.reminderOutline = value
+            ns.ApplyReminderSettings()
+        end)
+
+        -- Font Size slider
+        configControls.fontSizeSlider = UI.CreateSlider(p, "Font Size", CONTENT_W - 2, 12, 40, 1, false, true)
+        ns.ApplyVoidAccentToSlider(configControls.fontSizeSlider)
+        configControls.fontSizeSlider.label:SetColor(accent)
+        configControls.fontSizeSlider:SetPoint("TOPLEFT", configControls.fontDropdown, "BOTTOMLEFT", 1, -40)
+        configControls.fontSizeSlider:SetOnValueChanged(function(value)
+            local d = ns.GetDB()
+            d.reminderFontSize = value
+            ns.ApplyReminderSettings()
+        end)
+        configControls.fontSizeSlider:EnableMouseWheel(true)
+
+        -- Section: Display
+        local secDisplay = SectionHeader(p, "Display", configControls.fontSizeSlider, -30)
+
+        configControls.reminderStrata = UI.CreateDropdown(p, CONTENT_W, 6)
+        ns.ApplyVoidAccentToDropdown(configControls.reminderStrata)
+        configControls.reminderStrata:SetPoint("TOPLEFT", secDisplay, "BOTTOMLEFT", 0, -20)
+        configControls.reminderStrata:SetLabel("Frame Strata", accent)
+        configControls.reminderStrata:SetItems(ns.STRATA_OPTIONS)
+        configControls.reminderStrata:SetOnSelect(function(value)
+            local d = ns.GetDB()
+            d.reminderStrata = value
+            ns.ApplyReminderSettings()
+        end)
+
+        -- Section: Timing
+        local secTiming = SectionHeader(p, "Timing", configControls.reminderStrata, -14)
+
+        -- Fade Out Delay slider
+        configControls.durationSlider = UI.CreateSlider(p, "Fade Out Delay", CONTENT_W - 2, 1, 15, 1, false, true)
+        ns.ApplyVoidAccentToSlider(configControls.durationSlider)
+        configControls.durationSlider.label:SetColor(accent)
+        configControls.durationSlider:SetPoint("TOPLEFT", secTiming, "BOTTOMLEFT", 1, -24)
+        configControls.durationSlider:SetOnValueChanged(function(value)
+            ns.GetDB().reminderDuration = value
+        end)
+        configControls.durationSlider:EnableMouseWheel(true)
+    end
+
+    -- ── TAB 3: Macro ──────────────────────────────────────────────────────────
+    do
+        local p   = tabMacro
+        local sec = SectionHeader(p, "Settings")
+
+        configControls.macroVariant = UI.CreateDropdown(p, CONTENT_W, 8)
+        ns.ApplyVoidAccentToDropdown(configControls.macroVariant)
+        configControls.macroVariant:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -20)
+        configControls.macroVariant:SetLabel("Macro Variant", accent)
+        configControls.macroVariant:SetItems(ns.MACRO_VARIANTS)
+        configControls.macroVariant:SetOnSelect(function(value)
             if ns.SetMacroVariant(value) then
                 ns.RequestMacroUpdate()
                 ns.RefreshConfigPanel()
             end
         end)
 
-        configControls.combatPotion = CreateFallbackDropdown(content, "Combat Potion", configControls.macroVariant, -8, 230, ns.COMBAT_POTION_OPTIONS, function(value)
-            local db = ns.GetDB()
-            db.combatPotion = value
+        configControls.combatPotion = UI.CreateDropdown(p, CONTENT_W, 8)
+        ns.ApplyVoidAccentToDropdown(configControls.combatPotion)
+        configControls.combatPotion:SetPoint("TOPLEFT", configControls.macroVariant, "BOTTOMLEFT", 0, -34)
+        configControls.combatPotion:SetLabel("Combat Potion", accent)
+        configControls.combatPotion:SetItems(ns.COMBAT_POTION_OPTIONS)
+        configControls.combatPotion:SetOnSelect(function(value)
+            local d = ns.GetDB()
+            d.combatPotion = value
             ns.RequestMacroUpdate()
             ns.RefreshConfigPanel()
         end)
 
-        configControls.combatPotionQuality = CreateFallbackDropdown(content, "Potion Priority", configControls.combatPotion, -8, 230, ns.COMBAT_POTION_QUALITY_OPTIONS, function(value)
-            local db = ns.GetDB()
-            db.combatPotionQuality = tonumber(value) or ns.DEFAULTS.combatPotionQuality
+        configControls.combatPotionQuality = UI.CreateDropdown(p, CONTENT_W, 4)
+        ns.ApplyVoidAccentToDropdown(configControls.combatPotionQuality)
+        configControls.combatPotionQuality:SetPoint("TOPLEFT", configControls.combatPotion, "BOTTOMLEFT", 0, -34)
+        configControls.combatPotionQuality:SetLabel("Potion Priority", accent)
+        configControls.combatPotionQuality:SetItems(ns.COMBAT_POTION_QUALITY_OPTIONS)
+        configControls.combatPotionQuality:SetOnSelect(function(value)
+            local d = ns.GetDB()
+            d.combatPotionQuality = tonumber(value) or ns.DEFAULTS.combatPotionQuality
             ns.RequestMacroUpdate()
             ns.RefreshConfigPanel()
         end)
 
-        configControls.reminderStrata = CreateFallbackDropdown(content, "Frame Strata", configControls.combatPotionQuality, -8, 230, ns.STRATA_OPTIONS, function(value)
-            local db = ns.GetDB()
-            db.reminderStrata = value
-            ns.ApplyReminderSettings()
-            ns.RefreshConfigPanel()
-        end)
-
-        configControls.fontDropdown = CreateFallbackDropdown(content, "Font", configControls.reminderStrata, -8, 230, ns.GetFontDropdownItems(), function(value)
-            local db = ns.GetDB()
-            db.reminderFont = value
-            ns.ApplyReminderSettings()
-            ns.RefreshConfigPanel()
-        end)
-
-        configControls.outlineDropdown = CreateFallbackDropdown(content, "Outline", configControls.fontDropdown, -8, 230, ns.OUTLINE_OPTIONS, function(value)
-            local db = ns.GetDB()
-            db.reminderOutline = value
-            ns.ApplyReminderSettings()
-            ns.RefreshConfigPanel()
-        end)
-
-        local buttonRow = CreateFrame("Frame", nil, content)
-        buttonRow:SetSize(360, 24)
-        buttonRow:SetPoint("BOTTOM", content, "BOTTOM", 0, 4)
-
-        configControls.testButton = CreateFallbackButton(buttonRow, "Test", 110, buttonRow, "LEFT", "LEFT", 0, 0, function()
-            ns.ShowReminder(true)
-        end)
-
-        configControls.updateButton = CreateFallbackButton(buttonRow, "Update Macro", 120, configControls.testButton, "LEFT", "RIGHT", 10, 0, function()
-            ns.RequestMacroUpdate()
-        end)
-
-        configControls.resetPositionButton = CreateFallbackButton(buttonRow, "Reset Position", 120, configControls.updateButton, "LEFT", "RIGHT", 10, 0, function()
-            local db = ns.GetDB()
-            db.reminderPoint = ns.CopyDefaults(ns.DEFAULTS.reminderPoint, {})
-            ns.ApplyReminderSettings()
-        end)
-
-        return
+        -- Voidform warning (shown only when relevant)
+        configControls.voidformPotionWarning = UI.CreateFontString(p, "", "gold")
+        configControls.voidformPotionWarning:SetPoint("TOPLEFT",  configControls.combatPotionQuality, "BOTTOMLEFT",  0, -14)
+        configControls.voidformPotionWarning:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, 0)
+        configControls.voidformPotionWarning:SetJustifyH("LEFT")
+        configControls.voidformPotionWarning:SetJustifyV("TOP")
+        configControls.voidformPotionWarning:Hide()
     end
 
-    local accentColor = ns.GetThemeAccentName()
-    local configPanel = AF.CreateHeaderedFrame(AF.UIParent or UIParent, "PIMGConfigPanel", ns.ADDON_DISPLAY_NAME, 460, 800, "FULLSCREEN_DIALOG", 20, true)
-    frames.configPanel = configPanel
-
-    configPanel:SetPoint("CENTER", UIParent, "CENTER", 320, 0)
-    configPanel:SetClampedToScreen(true)
-    configPanel:SetMovable(true)
-    configPanel:SetToplevel(true)
-    configPanel:SetFrameStrata("FULLSCREEN_DIALOG")
-    configPanel:SetFrameLevel(20)
-    configPanel:SetTitleColor(accentColor)
-    configPanel:SetTitleBackgroundColor({ ns.VOID_ACCENT_COLOR[1], ns.VOID_ACCENT_COLOR[2], ns.VOID_ACCENT_COLOR[3], 0.18 })
-    configPanel:Hide()
-    configPanel:SetScript("OnHide", function()
-        AF.CloseDropdown()
-    end)
-
-    local content = AF.CreateFrame(configPanel, nil, 1, 1)
-    content:SetPoint("TOPLEFT", 22, -18)
-    content:SetPoint("BOTTOMRIGHT", -22, 18)
-    configPanel.content = content
-
-    local subtitle = CreateConfigHint(content, "Reminder and macro settings for Edit Mode.")
-    subtitle:SetPoint("TOPLEFT", 0, 0)
-    subtitle:SetPoint("TOPRIGHT", 0, 0)
-
-    configControls.voidformPotionWarning = AF.CreateFontString(content, ns.GetVoidformPotionWarningText(), "gold")
-    configControls.voidformPotionWarning:SetPoint("TOPLEFT", subtitle, "BOTTOMLEFT", 0, -8)
-    configControls.voidformPotionWarning:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, 0)
-    configControls.voidformPotionWarning:SetJustifyH("LEFT")
-    configControls.voidformPotionWarning:SetJustifyV("TOP")
-    configControls.voidformPotionWarning:Hide()
-
-    configControls.reminderEnabled = AF.CreateCheckButton(content, "Show raid and dungeon reminder", function(checked)
-        local db = ns.GetDB()
-        db.reminderEnabled = checked and true or false
-        ns.UpdateReminderVisibility()
-    end)
-    ns.ApplyVoidAccentToCheckButton(configControls.reminderEnabled)
-    configControls.reminderEnabled:SetPoint("TOPLEFT", configControls.voidformPotionWarning, "BOTTOMLEFT", 2, -18)
-
-    configControls.announceTarget = AF.CreateCheckButton(content, "Announce target in party or raid chat", function(checked)
-        ns.GetDB().announceTarget = checked and true or false
-    end)
-    ns.ApplyVoidAccentToCheckButton(configControls.announceTarget)
-    configControls.announceTarget:SetPoint("TOPLEFT", configControls.reminderEnabled, "BOTTOMLEFT", 0, -16)
-
-    configControls.minimapEnabled = AF.CreateCheckButton(content, "Show minimap button", function(checked)
-        local db = ns.GetDB()
-        db.minimap.hidden = not checked
-        ns.UpdateMinimapButtonVisibility()
-    end)
-    ns.ApplyVoidAccentToCheckButton(configControls.minimapEnabled)
-    configControls.minimapEnabled:SetPoint("TOPLEFT", configControls.announceTarget, "BOTTOMLEFT", 0, -16)
-
-    configControls.durationSlider = AF.CreateSlider(content, "Fade Out Delay", 300, 1, 15, 1, false, true)
-    ns.ApplyVoidAccentToSlider(configControls.durationSlider)
-    configControls.durationSlider:SetPoint("TOPLEFT", configControls.minimapEnabled, "BOTTOMLEFT", 6, -34)
-    configControls.durationSlider.label:SetColor(accentColor)
-    configControls.durationSlider:SetOnValueChanged(function(value)
-        ns.GetDB().reminderDuration = value
-    end)
-    configControls.durationSlider:EnableMouseWheel(true)
-
-    configControls.fontSizeSlider = AF.CreateSlider(content, "Font Size", 300, 12, 40, 1, false, true)
-    ns.ApplyVoidAccentToSlider(configControls.fontSizeSlider)
-    configControls.fontSizeSlider:SetPoint("TOPLEFT", configControls.durationSlider, "BOTTOMLEFT", 0, -50)
-    configControls.fontSizeSlider.label:SetColor(accentColor)
-    configControls.fontSizeSlider:SetOnValueChanged(function(value)
-        local db = ns.GetDB()
-        db.reminderFontSize = value
-        ns.ApplyReminderSettings()
-    end)
-    configControls.fontSizeSlider:EnableMouseWheel(true)
-
-    configControls.macroVariant = AF.CreateDropdown(content, 300, 8)
-    ns.ApplyVoidAccentToDropdown(configControls.macroVariant)
-    configControls.macroVariant:SetPoint("TOPLEFT", configControls.fontSizeSlider, "BOTTOMLEFT", 0, -72)
-    configControls.macroVariant:SetLabel("Macro Variant", accentColor, "AF_FONT_TITLE")
-    configControls.macroVariant:SetItems(ns.MACRO_VARIANTS)
-    ElevateDropdownList(configControls.macroVariant, configPanel)
-    configControls.macroVariant:SetOnSelect(function(value)
-        if ns.SetMacroVariant(value) then
-            ns.RequestMacroUpdate()
-            ns.RefreshConfigPanel()
+    -- Elevate all dropdown lists above the panel
+    local function ElevateAll()
+        local level = (configPanel:GetFrameLevel() or 1) + 50
+        for _, dd in ipairs({
+            configControls.fontDropdown,
+            configControls.outlineDropdown,
+            configControls.reminderStrata,
+            configControls.macroVariant,
+            configControls.combatPotion,
+            configControls.combatPotionQuality,
+        }) do
+            Elevate(dd, configPanel)
+            if dd and dd.list then dd.list:SetFrameLevel(level) end
         end
-    end)
+    end
 
-    configControls.combatPotion = AF.CreateDropdown(content, 300, 8)
-    ns.ApplyVoidAccentToDropdown(configControls.combatPotion)
-    configControls.combatPotion:SetPoint("TOPLEFT", configControls.macroVariant, "BOTTOMLEFT", 0, -58)
-    configControls.combatPotion:SetLabel("Combat Potion", accentColor, "AF_FONT_TITLE")
-    configControls.combatPotion:SetItems(ns.COMBAT_POTION_OPTIONS)
-    ElevateDropdownList(configControls.combatPotion, configPanel)
-    configControls.combatPotion:SetOnSelect(function(value)
-        local db = ns.GetDB()
-        db.combatPotion = value
-        ns.RequestMacroUpdate()
-        ns.RefreshConfigPanel()
-    end)
+    configPanel._elevateAll = ElevateAll
 
-    configControls.combatPotionQuality = AF.CreateDropdown(content, 300, 8)
-    ns.ApplyVoidAccentToDropdown(configControls.combatPotionQuality)
-    configControls.combatPotionQuality:SetPoint("TOPLEFT", configControls.combatPotion, "BOTTOMLEFT", 0, -58)
-    configControls.combatPotionQuality:SetLabel("Potion Priority", accentColor, "AF_FONT_TITLE")
-    configControls.combatPotionQuality:SetItems(ns.COMBAT_POTION_QUALITY_OPTIONS)
-    ElevateDropdownList(configControls.combatPotionQuality, configPanel)
-    configControls.combatPotionQuality:SetOnSelect(function(value)
-        local db = ns.GetDB()
-        db.combatPotionQuality = tonumber(value) or ns.DEFAULTS.combatPotionQuality
-        ns.RequestMacroUpdate()
-        ns.RefreshConfigPanel()
-    end)
-
-    configControls.reminderStrata = AF.CreateDropdown(content, 300, 8)
-    ns.ApplyVoidAccentToDropdown(configControls.reminderStrata)
-    configControls.reminderStrata:SetPoint("TOPLEFT", configControls.combatPotionQuality, "BOTTOMLEFT", 0, -58)
-    configControls.reminderStrata:SetLabel("Frame Strata", accentColor, "AF_FONT_TITLE")
-    configControls.reminderStrata:SetItems(ns.STRATA_OPTIONS)
-    ElevateDropdownList(configControls.reminderStrata, configPanel)
-    configControls.reminderStrata:SetOnSelect(function(value)
-        local db = ns.GetDB()
-        db.reminderStrata = value
-        ns.ApplyReminderSettings()
-        ns.RefreshConfigPanel()
-    end)
-
-    configControls.fontDropdown = AF.CreateDropdown(content, 300, 8)
-    ns.ApplyVoidAccentToDropdown(configControls.fontDropdown)
-    configControls.fontDropdown:SetPoint("TOPLEFT", configControls.reminderStrata, "BOTTOMLEFT", 0, -58)
-    configControls.fontDropdown:SetLabel("Font", accentColor, "AF_FONT_TITLE")
-    configControls.fontDropdown:SetItems(ns.GetFontDropdownItems())
-    ElevateDropdownList(configControls.fontDropdown, configPanel)
-    configControls.fontDropdown:SetOnSelect(function(value)
-        local db = ns.GetDB()
-        db.reminderFont = value
-        ns.ApplyReminderSettings()
-        ns.RefreshConfigPanel()
-    end)
-
-    configControls.outlineDropdown = AF.CreateDropdown(content, 300, 8)
-    ns.ApplyVoidAccentToDropdown(configControls.outlineDropdown)
-    configControls.outlineDropdown:SetPoint("TOPLEFT", configControls.fontDropdown, "BOTTOMLEFT", 0, -58)
-    configControls.outlineDropdown:SetLabel("Outline", accentColor, "AF_FONT_TITLE")
-    configControls.outlineDropdown:SetItems(ns.OUTLINE_OPTIONS)
-    ElevateDropdownList(configControls.outlineDropdown, configPanel)
-    configControls.outlineDropdown:SetOnSelect(function(value)
-        local db = ns.GetDB()
-        db.reminderOutline = value
-        ns.ApplyReminderSettings()
-        ns.RefreshConfigPanel()
-    end)
-
-    local buttonRow = AF.CreateFrame(content, nil, 408, 22)
-    buttonRow:SetPoint("BOTTOM", content, "BOTTOM", 0, 6)
-
-    configControls.testButton = CreateActionButton(buttonRow, "Test", 118, function()
-        ns.ShowReminder(true)
-    end)
-    configControls.testButton:SetPoint("LEFT", 0, 0)
-
-    configControls.updateButton = CreateActionButton(buttonRow, "Update Macro", 128, function()
-        ns.RequestMacroUpdate()
-    end)
-    configControls.updateButton:SetPoint("LEFT", configControls.testButton, "RIGHT", 12, 0)
-
-    configControls.resetPositionButton = CreateActionButton(buttonRow, "Reset Position", 138, function()
-        local db = ns.GetDB()
-        db.reminderPoint = ns.CopyDefaults(ns.DEFAULTS.reminderPoint, {})
-        ns.ApplyReminderSettings()
-    end)
-    configControls.resetPositionButton:SetPoint("LEFT", configControls.updateButton, "RIGHT", 12, 0)
+    ActivateTab(1)
 end
+
+-- ─── OpenConfigPanel ──────────────────────────────────────────────────────────
 
 function ns.OpenConfigPanel()
     ns.CreateConfigPanel()
     ns.RefreshConfigPanel()
 
-    if AF.CloseDropdown then
-        AF.CloseDropdown()
-    end
+    UI.CloseDropdown()
 
     local configPanel = frames.configPanel
     configPanel:Show()
@@ -549,21 +431,7 @@ function ns.OpenConfigPanel()
     configPanel:SetFrameStrata("FULLSCREEN_DIALOG")
     configPanel:SetFrameLevel(20)
 
-    if ns.usingFallbackUI then
-        return
+    if configPanel._elevateAll then
+        configPanel._elevateAll()
     end
-
-    ns.ApplyVoidAccentToDropdown(configControls.macroVariant)
-    ns.ApplyVoidAccentToDropdown(configControls.combatPotion)
-    ns.ApplyVoidAccentToDropdown(configControls.combatPotionQuality)
-    ns.ApplyVoidAccentToDropdown(configControls.reminderStrata)
-    ns.ApplyVoidAccentToDropdown(configControls.fontDropdown)
-    ns.ApplyVoidAccentToDropdown(configControls.outlineDropdown)
-
-    ElevateDropdownList(configControls.macroVariant, configPanel)
-    ElevateDropdownList(configControls.combatPotion, configPanel)
-    ElevateDropdownList(configControls.combatPotionQuality, configPanel)
-    ElevateDropdownList(configControls.reminderStrata, configPanel)
-    ElevateDropdownList(configControls.fontDropdown, configPanel)
-    ElevateDropdownList(configControls.outlineDropdown, configPanel)
 end

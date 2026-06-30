@@ -68,10 +68,6 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
         ns.CreateMinimapButton()
         ns.ApplyReminderSettings()
 
-        if ns.usingFallbackUI then
-            ns.PIMGPrint("AbstractFramework not found. Using the built-in fallback UI.", "F8C300")
-        end
-
         if ns.IsAddonLoadedSafe("Blizzard_EditMode") then
             ns.HookEditMode()
         end

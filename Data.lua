@@ -1,5 +1,5 @@
 local ADDON_NAME, ns = ...
-local AF = ns.AF
+local UI = ns.UI
 
 ns.POWER_INFUSION_SPELL_ID = 10060
 ns.MACRO_NAME = "PriestAssist"
@@ -9,9 +9,9 @@ ns.ADDON_ICON_PATH = "Interface\\AddOns\\PriestAssist\\icon.tga"
 ns.POWER_INFUSION_ICON = "|TInterface\\Icons\\Spell_Holy_PowerInfusion:0|t"
 ns.DEFAULT_REMINDER_TEXT = "Priest Assist Ready"
 
-ns.VOID_ACCENT_COLOR = { 0.66, 0.40, 0.96, 1.00 }
-ns.VOID_BUTTON_COLOR = { 0.44, 0.20, 0.62, 0.86 }
-ns.VOID_BUTTON_HOVER_COLOR = { 0.58, 0.28, 0.82, 0.96 }
+ns.VOID_ACCENT_COLOR = { 1.00, 1.00, 1.00, 1.00 }
+ns.VOID_BUTTON_COLOR = { 1.00, 1.00, 1.00, 0.10 }
+ns.VOID_BUTTON_HOVER_COLOR = { 1.00, 1.00, 1.00, 0.20 }
 
 ns.BUILTIN_FONTS = {
     { name = "Friz Quadrata", text = "Friz Quadrata", value = "Friz Quadrata", path = "Fonts\\FRIZQT__.TTF" },
@@ -174,14 +174,14 @@ function ns.IsEditModeActive()
 end
 
 function ns.ApplyVoidTheme()
-    if AF and AF.SetAddonAccentColor then
-        AF.SetAddonAccentColor(ADDON_NAME, ns.VOID_ACCENT_COLOR, ns.VOID_BUTTON_COLOR, ns.VOID_BUTTON_HOVER_COLOR)
+    if UI and UI.SetAddonAccentColor then
+        UI.SetAddonAccentColor(ADDON_NAME, ns.VOID_ACCENT_COLOR, ns.VOID_BUTTON_COLOR, ns.VOID_BUTTON_HOVER_COLOR)
     end
 end
 
 function ns.GetThemeAccentName()
-    if AF and AF.GetAddonAccentColorName then
-        return AF.GetAddonAccentColorName(ADDON_NAME)
+    if UI and UI.GetAddonAccentColorName then
+        return UI.GetAddonAccentColorName(ADDON_NAME)
     end
 
     return "accent"
@@ -196,11 +196,11 @@ function ns.ApplyVoidAccentToCheckButton(checkButton)
     checkButton.accentColor = accentName
 
     if checkButton.checkedTexture then
-        checkButton.checkedTexture:SetColorTexture(AF.GetColorRGB(accentName, 0.7))
+        checkButton.checkedTexture:SetColorTexture(UI.GetColorRGB(accentName, 0.7))
     end
 
     if checkButton.highlightTexture then
-        checkButton.highlightTexture:SetColorTexture(AF.GetColorRGB(accentName, 0.1))
+        checkButton.highlightTexture:SetColorTexture(UI.GetColorRGB(accentName, 0.1))
     end
 end
 
@@ -213,15 +213,15 @@ function ns.ApplyVoidAccentToSlider(slider)
     slider.accentColor = accentName
 
     if slider.thumb then
-        slider.thumb:SetColor(AF.GetColorTable(accentName, 0.7))
+        slider.thumb:SetColor(UI.GetColorTable(accentName, 0.7))
     end
 
     if slider.thumbBG2 then
-        slider.thumbBG2:SetColor(AF.GetColorTable(accentName, 0.25))
+        slider.thumbBG2:SetColor(UI.GetColorTable(accentName, 0.25))
     end
 
     if slider.highlight then
-        slider.highlight:SetColor(AF.GetColorTable(accentName, 0.05))
+        slider.highlight:SetColor(UI.GetColorTable(accentName, 0.05))
     end
 end
 

@@ -2,7 +2,7 @@ local ADDON_NAME, ns = ...
 
 ns.ADDON_NAME = ADDON_NAME
 ns.ADDON_DISPLAY_NAME = "Priest Assist"
-ns.AF = _G.AbstractFramework or ns.AF or {}
+ns.UI = ns.UI or {}
 
 ns.state = ns.state or {
     reminderActive = false,

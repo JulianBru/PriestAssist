@@ -176,7 +176,7 @@ function ns.AnnounceMacroTarget(targetName)
         return
     end
 
-    local message = "Power Infusion target set to " .. targetName .. "."
+    local message = "Priest Assist: Power Infusion target set to " .. targetName .. "."
     if C_ChatInfo and C_ChatInfo.SendChatMessage then
         C_ChatInfo.SendChatMessage(message, channel)
     else

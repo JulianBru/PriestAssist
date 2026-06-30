@@ -1,5 +1,5 @@
 local _, ns = ...
-local AF = ns.AF
+local UI = ns.UI
 local frames = ns.frames
 local state = ns.state
 
@@ -195,7 +195,7 @@ function ns.HookEditMode()
     end)
 
     EditModeManagerFrame:HookScript("OnHide", function()
-        AF.CloseDropdown()
+        UI.CloseDropdown()
         if frames.configPanel then
             frames.configPanel:Hide()
         end
@@ -204,7 +204,7 @@ function ns.HookEditMode()
 end
 
 function ns.CreateReminderFrame()
-    local reminderFrame = AF.CreateFrame(UIParent, "PIMGReminderFrame", 700, 110)
+    local reminderFrame = UI.CreateFrame(UIParent, "PIMGReminderFrame", 700, 110)
     frames.reminderFrame = reminderFrame
 
     reminderFrame:SetSize(700, 110)
@@ -339,7 +339,7 @@ function ns.CreateReminderFrame()
 
     reminderFrame.editModeBox:Hide()
 
-    local reminderText = AF.CreateFontString(reminderFrame, nil, "white", "AF_FONT_TITLE")
+    local reminderText = UI.CreateFontString(reminderFrame, nil, "white", "AF_FONT_TITLE")
     frames.reminderText = reminderText
 
     reminderText:SetPoint("TOPLEFT", 8, -8)
