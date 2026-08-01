@@ -1,0 +1,22 @@
+package-as: PriestAssist
+
+# Use the hand-written CHANGELOG.md instead of an auto-generated commit log.
+manual-changelog:
+  filename: CHANGELOG.md
+  markup-type: markdown
+
+# No embedded libraries, so skip the extra -nolib zip.
+enable-nolib-creation: no
+
+# Shown as a relation on the CurseForge project page.
+optional-dependencies:
+  - libsharedmedia-3-0
+
+# Development-only files that should not end up in the published zip.
+ignore:
+  - .github
+  - .vscode
+  - .claude
+  - .gitignore
+  - CURSEFORGE.md
+  - docs

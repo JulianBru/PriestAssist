@@ -3,9 +3,9 @@
 ## Title: Priest Assist
 ## Author: CheersItsJulian
 ## SavedVariables: PriestAssistDB
-## IconTexture: Interface\AddOns\PriestAssist\icon.tga
+## IconTexture: Interface\AddOns\PriestAssist\Media\icon.tga
 ## OptionalDeps: LibSharedMedia-3.0
-## X-Curse-Project-ID: 896769
+## X-Curse-Project-ID: 1634563
 
 PriestAssist.lua
 UI.lua

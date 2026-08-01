@@ -174,6 +174,25 @@ function UI.CreateButton(parent, text, color, width, height)
 
     function btn:SetOnClick(cb) self:SetScript("OnClick", cb) end
 
+    -- Icon + label stay centred as a pair.
+    function btn:SetIcon(texture, size)
+        size = size or 16
+
+        if not self.icon then
+            self.icon = self:CreateTexture(nil, "ARTWORK")
+        end
+
+        self.icon:SetTexture(texture)
+        self.icon:SetSize(size, size)
+
+        self.text:ClearAllPoints()
+        self.text:SetPoint("CENTER", self, "CENTER", (size + 6) / 2, 0)
+
+        self.icon:ClearAllPoints()
+        self.icon:SetPoint("RIGHT", self.text, "LEFT", -6, 0)
+        self.icon:Show()
+    end
+
     btn:SetScript("OnEnter", function(self)
         StyleFrame(self, C.bgHover, C.border)
         local r, g, b = BaseColor(self._color)
@@ -516,6 +535,185 @@ function UI.CreateDropdown(parent, width, maxSlots)
     end)
 
     return dd
+end
+
+-- ─── UI.CreateEditBox ─────────────────────────────────────────────────────────
+-- Multi-line, scrollable text field styled like the rest of the panel.
+-- Commits on focus loss (Escape clears focus); Enter inserts a newline.
+
+function UI.CreateEditBox(parent, width, height)
+    local container = CreateFrame("Frame", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+    container:SetSize(width or 200, height or 100)
+    StyleFrame(container, C.bgWidget, C.border)
+
+    container._accent = "accent"
+
+    container.label = NewFS(container, "", "text", 12)
+    container.label:SetPoint("BOTTOMLEFT", container, "TOPLEFT", 0, 6)
+    container.label:Hide()
+
+    local scroll = CreateFrame("ScrollFrame", nil, container)
+    scroll:SetPoint("TOPLEFT",     container, "TOPLEFT",      7, -7)
+    scroll:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -7,  7)
+    scroll:EnableMouseWheel(true)
+
+    local editBox = CreateFrame("EditBox", nil, scroll)
+    editBox:SetMultiLine(true)
+    editBox:SetAutoFocus(false)
+    -- EditBox:SetFont rejects a nil flags argument, unlike FontString:SetFont.
+    editBox:SetFont(GetFont(), 12, "")
+    editBox:SetTextColor(C.text[1], C.text[2], C.text[3], 1.0)
+    editBox:SetJustifyH("LEFT")
+    editBox:SetJustifyV("TOP")
+    editBox:SetTextInsets(0, 0, 0, 0)
+    editBox:SetSize(math.max(1, (width or 200) - 14), math.max(1, (height or 100) - 14))
+    scroll:SetScrollChild(editBox)
+
+    container.editBox = editBox
+    container.scroll  = scroll
+
+    -- Keep the edit box as wide as the viewport so text wraps correctly.
+    scroll:SetScript("OnSizeChanged", function(self, w)
+        if w and w > 0 then
+            editBox:SetWidth(w)
+        end
+    end)
+
+    scroll:SetScript("OnMouseWheel", function(self, delta)
+        local range = self:GetVerticalScrollRange() or 0
+        local value = (self:GetVerticalScroll() or 0) - delta * 18
+        if value < 0 then
+            value = 0
+        elseif value > range then
+            value = range
+        end
+        self:SetVerticalScroll(value)
+    end)
+
+    -- Clicking anywhere in the box focuses the text field.
+    container:EnableMouse(true)
+    container:SetScript("OnMouseDown", function()
+        editBox:SetFocus()
+    end)
+
+    editBox:SetScript("OnEscapePressed", function(self)
+        self:ClearFocus()
+    end)
+
+    editBox:SetScript("OnEditFocusGained", function()
+        local r, g, b = BaseColor(container._accent)
+        if container.SetBackdropBorderColor then
+            container:SetBackdropBorderColor(r, g, b, 1.0)
+        end
+    end)
+
+    editBox:SetScript("OnEditFocusLost", function(self)
+        StyleFrame(container, C.bgWidget, C.border)
+        if container._onCommit then
+            container._onCommit(self:GetText())
+        end
+    end)
+
+    editBox:SetScript("OnTextChanged", function(self, userInput)
+        if container._onTextChanged then
+            container._onTextChanged(self:GetText(), userInput)
+        end
+    end)
+
+    function container:SetAccent(colorName)
+        self._accent = colorName or "accent"
+    end
+
+    function container:SetLabel(text, color)
+        self.label:SetText(text or "")
+        if color then self.label:SetColor(color) end
+        self.label:SetShown((text or "") ~= "")
+    end
+
+    function container:SetText(text)
+        editBox:SetText(text or "")
+        editBox:SetCursorPosition(0)
+        scroll:SetVerticalScroll(0)
+    end
+
+    function container:GetText()
+        return editBox:GetText()
+    end
+
+    function container:SetMaxLetters(count)
+        editBox:SetMaxLetters(count or 0)
+    end
+
+    function container:IsFocused()
+        return editBox:HasFocus()
+    end
+
+    function container:ClearFocus()
+        editBox:ClearFocus()
+    end
+
+    function container:SetOnCommit(callback)
+        self._onCommit = callback
+    end
+
+    function container:SetOnTextChanged(callback)
+        self._onTextChanged = callback
+    end
+
+    return container
+end
+
+-- ─── UI.CreateCopyBox ─────────────────────────────────────────────────────────
+-- Single-line, read-only text field used to hand out URLs, since WoW addons
+-- cannot open a browser. The player selects the text and copies it.
+
+function UI.CreateCopyBox(parent, width, height)
+    local container = CreateFrame("Frame", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+    container:SetSize(width or 200, height or 24)
+    StyleFrame(container, C.bgWidget, C.border)
+
+    container._value = ""
+
+    local editBox = CreateFrame("EditBox", nil, container)
+    editBox:SetPoint("TOPLEFT",     container, "TOPLEFT",      7, -1)
+    editBox:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -7,  1)
+    editBox:SetAutoFocus(false)
+    editBox:SetFont(GetFont(), 12, "")
+    editBox:SetTextColor(C.text[1], C.text[2], C.text[3], 1.0)
+    editBox:SetTextInsets(0, 0, 0, 0)
+
+    container.editBox = editBox
+
+    editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+    editBox:SetScript("OnEnterPressed",  function(self) self:ClearFocus() end)
+
+    -- Read-only: typing snaps the value straight back.
+    editBox:SetScript("OnTextChanged", function(self, userInput)
+        if userInput and self:GetText() ~= container._value then
+            self:SetText(container._value)
+            self:HighlightText()
+        end
+    end)
+
+    function container:SetValue(text)
+        self._value = text or ""
+        editBox:SetText(self._value)
+        editBox:SetCursorPosition(0)
+    end
+
+    function container:Focus()
+        editBox:SetFocus()
+        editBox:HighlightText()
+    end
+
+    function container:ClearFocus()
+        editBox:ClearFocus()
+    end
+
+    container:EnableMouse(true)
+    container:SetScript("OnMouseDown", function(self) self:Focus() end)
+
+    return container
 end
 
 -- ─── UI.CreateHeaderedFrame ───────────────────────────────────────────────────

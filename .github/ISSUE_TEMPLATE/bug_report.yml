@@ -1,0 +1,107 @@
+name: Bug Report
+description: Report a problem with PriestAssist
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug! Please fill out the fields below so it can be reproduced and fixed quickly.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you start
+      options:
+        - label: I am on Retail WoW (Classic is not supported).
+          required: true
+        - label: I am playing a Priest character.
+          required: true
+        - label: I searched existing issues and this hasn't been reported yet.
+          required: true
+        - label: I tested with only PriestAssist enabled (all other addons disabled).
+          required: false
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: When I ..., the reminder ...
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: How can this be reproduced?
+      placeholder: |
+        1. Open the config with /pa
+        2. Switch to the Macro tab
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+      placeholder: I expected ...
+    validations:
+      required: true
+  - type: textarea
+    id: lua-error
+    attributes:
+      label: Lua error (if any)
+      description: Paste the full error. Enabling `/console scriptErrors 1` or an error addon (BugSack/BugGrabber) helps.
+      render: text
+    validations:
+      required: false
+  - type: input
+    id: addon-version
+    attributes:
+      label: PriestAssist version
+      placeholder: e.g. 1.0
+    validations:
+      required: true
+  - type: input
+    id: wow-version
+    attributes:
+      label: WoW version / build
+      placeholder: e.g. 11.x.x (Retail)
+    validations:
+      required: true
+  - type: dropdown
+    id: spec
+    attributes:
+      label: Which spec were you playing?
+      options:
+        - "Discipline"
+        - "Holy"
+        - "Shadow"
+        - "Not sure / not relevant"
+    validations:
+      required: false
+  - type: dropdown
+    id: macro-mode
+    attributes:
+      label: Which macro is affected?
+      options:
+        - "PriestAssist PI"
+        - "PriestAssist VF"
+        - "Both"
+        - "Not sure / not relevant"
+    validations:
+      required: false
+  - type: textarea
+    id: macro-text
+    attributes:
+      label: Custom macro text (if any)
+      description: Anything you added via `/pa add ...`.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drag & drop images here if it helps illustrate the problem.
+    validations:
+      required: false

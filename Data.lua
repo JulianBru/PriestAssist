@@ -2,12 +2,43 @@ local ADDON_NAME, ns = ...
 local UI = ns.UI
 
 ns.POWER_INFUSION_SPELL_ID = 10060
-ns.MACRO_NAME = "PriestAssist"
+-- One macro per variant. WoW allows 16 characters for a macro name.
+ns.MACRO_NAMES = {
+    standalone = "PriestAssist PI",
+    voidform   = "PriestAssist VF",
+}
+
+-- Name used before the addon split the macro per variant.
+ns.LEGACY_MACRO_NAME = "PriestAssist"
+
 ns.MACRO_ICON_ID = 135939
 ns.AUTO_MACRO_ICON_ID = 134400
-ns.ADDON_ICON_PATH = "Interface\\AddOns\\PriestAssist\\icon.tga"
+
+ns.MACRO_ICONS = {
+    standalone = ns.MACRO_ICON_ID,
+    voidform   = ns.AUTO_MACRO_ICON_ID,
+}
+
+-- Fixed order so both macros are always processed the same way.
+ns.MACRO_VARIANT_ORDER = { "standalone", "voidform" }
+ns.ADDON_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\icon.tga"
 ns.POWER_INFUSION_ICON = "|TInterface\\Icons\\Spell_Holy_PowerInfusion:0|t"
 ns.DEFAULT_REMINDER_TEXT = "Priest Assist Ready"
+
+ns.ADDON_AUTHOR = "CheersItsJulian @ Twitch"
+ns.ADDON_CHARACTER = "Julsanity-Thrall (EU)"
+ns.ADDON_DESCRIPTION =
+    "PriestAssist keeps your Power Infusion macro pointed at the player you want to buff, " ..
+    "and reminds you to set it when you zone into a raid or dungeon. It maintains one macro " ..
+    "for Power Infusion and one for Voidform, both rebuilt whenever you change target."
+
+ns.LINK_GITHUB = "https://github.com/JulianBru/PriestAssist"
+ns.LINK_CURSEFORGE = "https://www.curseforge.com/wow/addons/priestassist"
+
+ns.LINK_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\Links\\"
+ns.LINK_ICON_GITHUB = ns.LINK_ICON_PATH .. "github.tga"
+ns.LINK_ICON_CURSEFORGE = ns.LINK_ICON_PATH .. "curseforge.tga"
+ns.MACRO_MAX_LENGTH = 255
 
 ns.VOID_ACCENT_COLOR = { 1.00, 1.00, 1.00, 1.00 }
 ns.VOID_BUTTON_COLOR = { 1.00, 1.00, 1.00, 0.10 }
@@ -25,10 +56,26 @@ ns.MACRO_VARIANTS = {
     { text = "Voidform", value = "voidform" },
 }
 
+-- WoW keeps general macros at indices 1-120 and character macros at 121-138.
+ns.MAX_GENERAL_MACROS = 120
+ns.MAX_CHARACTER_MACROS = 18
+
+ns.MACRO_SCOPE_OPTIONS = {
+    { text = "General (all characters)", value = "general" },
+    { text = "This character only", value = "character" },
+}
+
 ns.COMBAT_POTION_OPTIONS = {
     { text = "None", value = "none" },
     { text = "Light's Potential", value = "lights_potential" },
     { text = "Draught of Rampant Abandon", value = "draught_of_rampant_abandon" },
+}
+
+ns.TRINKET_OPTIONS = {
+    { text = "None", value = "none" },
+    { text = "Top slot (13)", value = "13" },
+    { text = "Bottom slot (14)", value = "14" },
+    { text = "Both (13 + 14)", value = "both" },
 }
 
 ns.COMBAT_POTION_QUALITY_OPTIONS = {
@@ -66,10 +113,15 @@ ns.OUTLINE_OPTIONS = {
 }
 
 ns.DEFAULTS = {
-    userAdded = "",
+    userAddedByVariant = {
+        standalone = "",
+        voidform   = "",
+    },
     macroVariant = "standalone",
+    macroScope = "general",
     combatPotion = "none",
     combatPotionQuality = 2,
+    trinketSlot = "13",
     announceTarget = false,
     reminderEnabled = true,
     reminderDuration = 5,
@@ -245,22 +297,30 @@ function ns.ApplyVoidAccentToDropdown(dropdown)
 end
 
 function ns.InitializeDatabase()
-    local existingData = PriestAssistDB or PIMGDB
-    local legacyUserAdded
+    local existingData = PriestAssistDB
 
-    if type(existingData) == "string" then
-        legacyUserAdded = existingData
-        existingData = {}
-    elseif type(existingData) ~= "table" then
+    if type(existingData) ~= "table" then
         existingData = {}
     end
 
+    -- Custom macro lines used to be a single string shared by both variants.
+    -- Move them to the variant that was selected at the time.
+    local sharedUserAdded = existingData.userAdded
+    existingData.userAdded = nil
+
     PriestAssistDB = ns.CopyDefaults(ns.DEFAULTS, existingData)
 
-    if legacyUserAdded and legacyUserAdded ~= "" then
-        PriestAssistDB.userAdded = ns.NormalizeUserAdded(legacyUserAdded)
-    else
-        PriestAssistDB.userAdded = ns.NormalizeUserAdded(PriestAssistDB.userAdded)
+    if type(sharedUserAdded) == "string" and sharedUserAdded ~= "" then
+        local variant = PriestAssistDB.macroVariant
+        if variant ~= "standalone" and variant ~= "voidform" then
+            variant = ns.DEFAULTS.macroVariant
+        end
+        PriestAssistDB.userAddedByVariant[variant] = sharedUserAdded
+    end
+
+    for _, variant in ipairs(ns.MACRO_VARIANT_ORDER) do
+        PriestAssistDB.userAddedByVariant[variant] =
+            ns.NormalizeUserAdded(PriestAssistDB.userAddedByVariant[variant])
     end
 
     PriestAssistDB.reminderFontPath, PriestAssistDB.reminderFont = ns.ResolveFont(PriestAssistDB.reminderFont)

@@ -1,4 +1,4 @@
-Copyright © 2026 CheersItsJulian.
+Copyright © 2026 CheersItsJulian <addons@jsnlabs.eu>.
 
 The contents of this addon, excluding third-party resources, are copyrighted to its authors with all rights reserved.
 
@@ -10,3 +10,13 @@ The author of this addon hereby grants you the following rights:
 	2.	Do not modify the name of this addon, including the addon folders.
 
 All rights not explicitly addressed in this license are reserved by the copyright holder.
+
+--------------------------------------------------------------------------------
+
+Third-party resources:
+
+LibSharedMedia-3.0 is not part of this addon. All rights to LibSharedMedia-3.0,
+including its name, code, and media, belong to its respective author(s). This
+addon merely integrates with LibSharedMedia-3.0 when it is present and is
+neither affiliated with nor endorsed by it. Any use of LibSharedMedia-3.0 is
+governed by LibSharedMedia-3.0's own license and terms.

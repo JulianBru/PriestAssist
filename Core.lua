@@ -15,7 +15,7 @@ function ns.HandleSlashCommand(msg)
 
     if command == "add" then
         if rest == "" then
-            ns.PIMGPrint("Usage: /pim add /cast SpellName", "F82C00")
+            ns.Print("Usage: /pa add /cast SpellName", "F82C00")
             return
         end
 
@@ -43,15 +43,15 @@ function ns.HandleSlashCommand(msg)
     end
 
     if command == "help" then
-        ns.PIMGPrint("Commands: /pim, /passist, /pras, /pim add ..., /pim reset, /pim mode powerinfusion|voidform, /pim show", "A5AAD9")
+        ns.Print("Commands: /pa, /pa add ..., /pa reset, /pa mode powerinfusion|voidform (picks the primary macro), /pa show", "A5AAD9")
         return
     end
 
     ns.RequestMacroUpdate()
 end
 
-SLASH_PIMG1, SLASH_PIMG2, SLASH_PIMG3 = "/pim", "/passist", "/pras"
-SlashCmdList["PIMG"] = ns.HandleSlashCommand
+SLASH_PRIESTASSIST1 = "/pa"
+SlashCmdList["PRIESTASSIST"] = ns.HandleSlashCommand
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("PLAYER_LOGIN")

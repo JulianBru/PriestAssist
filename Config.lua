@@ -51,6 +51,15 @@ local function Elevate(dd, panel)
     end
 end
 
+local function UpdateMacroTextCounter(text)
+    local counter = configControls.macroTextCounter
+    if not counter then return end
+
+    local length = string.len(text or "")
+    counter:SetText(length .. " / " .. ns.MACRO_MAX_LENGTH)
+    counter:SetColor(length >= ns.MACRO_MAX_LENGTH and "gold" or "textDim")
+end
+
 -- ─── RefreshConfigPanel ───────────────────────────────────────────────────────
 
 function ns.RefreshConfigPanel()
@@ -64,8 +73,10 @@ function ns.RefreshConfigPanel()
     if cc.durationSlider      then cc.durationSlider:SetValue(db.reminderDuration or ns.DEFAULTS.reminderDuration) end
     if cc.fontSizeSlider      then cc.fontSizeSlider:SetValue(db.reminderFontSize or ns.DEFAULTS.reminderFontSize) end
     if cc.macroVariant        then cc.macroVariant:SetSelectedValue(db.macroVariant or ns.DEFAULTS.macroVariant) end
+    if cc.macroScope          then cc.macroScope:SetSelectedValue(db.macroScope or ns.DEFAULTS.macroScope) end
     if cc.combatPotion        then cc.combatPotion:SetSelectedValue(db.combatPotion or ns.DEFAULTS.combatPotion) end
     if cc.combatPotionQuality then cc.combatPotionQuality:SetSelectedValue(db.combatPotionQuality or ns.DEFAULTS.combatPotionQuality) end
+    if cc.trinketSlot         then cc.trinketSlot:SetSelectedValue(db.trinketSlot or ns.DEFAULTS.trinketSlot) end
     if cc.reminderStrata      then cc.reminderStrata:SetSelectedValue(db.reminderStrata or ns.DEFAULTS.reminderStrata) end
     if cc.fontDropdown        then
         cc.fontDropdown:SetItems(ns.GetFontDropdownItems())
@@ -75,6 +86,17 @@ function ns.RefreshConfigPanel()
     if cc.voidformPotionWarning then
         cc.voidformPotionWarning:SetText(ns.GetVoidformPotionWarningText())
         cc.voidformPotionWarning:SetShown(ns.ShouldShowVoidformPotionWarning())
+    end
+    -- Never overwrite the field while the user is typing in it.
+    if cc.macroText and not cc.macroText:IsFocused() then
+        local variant = db.macroVariant or ns.DEFAULTS.macroVariant
+        local macroBody = ns.BuildMacroBody(variant)
+
+        -- Remember which macro the content belongs to, so a commit cannot be
+        -- attributed to the wrong variant if the selection changes meanwhile.
+        cc.macroText._variant = variant
+        cc.macroText:SetText(macroBody)
+        UpdateMacroTextCounter(macroBody)
     end
 end
 
@@ -93,7 +115,7 @@ function ns.CreateConfigPanel()
     -- ── Main frame ────────────────────────────────────────────────────────────
     local configPanel = UI.CreateHeaderedFrame(
         UI.UIParent or UIParent,
-        "PIMGConfigPanel",
+        "PriestAssistConfigPanel",
         ns.ADDON_DISPLAY_NAME,
         W, H,
         "FULLSCREEN_DIALOG", 20
@@ -102,7 +124,16 @@ function ns.CreateConfigPanel()
     configPanel:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
     configPanel:SetTitleColor(accent)
     configPanel:Hide()
-    configPanel:SetScript("OnHide", UI.CloseDropdown)
+    -- Clearing focus commits a pending edit before the panel disappears.
+    configPanel:SetScript("OnHide", function()
+        UI.CloseDropdown()
+        if configControls.macroText then
+            configControls.macroText:ClearFocus()
+        end
+        if configControls.aboutUrl then
+            configControls.aboutUrl:ClearFocus()
+        end
+    end)
 
     -- Addon icon in the header (left of title text)
     local headerIcon = configPanel:CreateTexture(nil, "OVERLAY")
@@ -186,10 +217,11 @@ function ns.CreateConfigPanel()
     local tabGeneral  = MakeTab()
     local tabReminder = MakeTab()
     local tabMacro    = MakeTab()
-    local tabFrames   = { tabGeneral, tabReminder, tabMacro }
+    local tabAbout    = MakeTab()
+    local tabFrames   = { tabGeneral, tabReminder, tabMacro, tabAbout }
 
     -- ── Tab button system ─────────────────────────────────────────────────────
-    local tabDefs    = { "General", "Reminder", "Macro" }
+    local tabDefs    = { "General", "Reminder", "Macro", "About" }
     local tabButtons = {}
     local activeTab  = 0
 
@@ -351,16 +383,36 @@ function ns.CreateConfigPanel()
         local p   = tabMacro
         local sec = SectionHeader(p, "Settings")
 
-        configControls.macroVariant = UI.CreateDropdown(p, CONTENT_W, 8)
+        -- Variant + location share one row (two columns)
+        local VARIANT_W = math.floor(CONTENT_W * 0.55)
+        local SCOPE_W   = CONTENT_W - VARIANT_W - 8
+
+        configControls.macroVariant = UI.CreateDropdown(p, VARIANT_W, 8)
         ns.ApplyVoidAccentToDropdown(configControls.macroVariant)
         configControls.macroVariant:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -20)
-        configControls.macroVariant:SetLabel("Macro Variant", accent)
+        -- The primary macro carries the shared cooldowns (trinket, Power
+        -- Infusion, potion) and is the one shown in the text field below.
+        configControls.macroVariant:SetLabel("Primary Macro", accent)
         configControls.macroVariant:SetItems(ns.MACRO_VARIANTS)
         configControls.macroVariant:SetOnSelect(function(value)
             if ns.SetMacroVariant(value) then
                 ns.RequestMacroUpdate()
                 ns.RefreshConfigPanel()
             end
+        end)
+
+        configControls.macroScope = UI.CreateDropdown(p, SCOPE_W, 4)
+        ns.ApplyVoidAccentToDropdown(configControls.macroScope)
+        configControls.macroScope:SetPoint("TOPLEFT", configControls.macroVariant, "TOPRIGHT", 8, 0)
+        configControls.macroScope:SetLabel("Macro Tab", accent)
+        configControls.macroScope:SetItems(ns.MACRO_SCOPE_OPTIONS)
+        configControls.macroScope:SetOnSelect(function(value)
+            local d = ns.GetDB()
+            if d.macroScope == value then return end
+
+            d.macroScope = value
+            ns.RequestMacroUpdate()
+            ns.RefreshConfigPanel()
         end)
 
         configControls.combatPotion = UI.CreateDropdown(p, CONTENT_W, 8)
@@ -375,7 +427,23 @@ function ns.CreateConfigPanel()
             ns.RefreshConfigPanel()
         end)
 
-        configControls.combatPotionQuality = UI.CreateDropdown(p, CONTENT_W, 4)
+        -- Potion priority + trinket share one row (two columns)
+        local QUALITY_W = math.floor(CONTENT_W * 0.55)
+        local TRINKET_W = CONTENT_W - QUALITY_W - 8
+
+        configControls.trinketSlot = UI.CreateDropdown(p, TRINKET_W, 4)
+        ns.ApplyVoidAccentToDropdown(configControls.trinketSlot)
+        configControls.trinketSlot:SetPoint("TOPLEFT", configControls.combatPotion, "BOTTOMLEFT", QUALITY_W + 8, -34)
+        configControls.trinketSlot:SetLabel("Trinket", accent)
+        configControls.trinketSlot:SetItems(ns.TRINKET_OPTIONS)
+        configControls.trinketSlot:SetOnSelect(function(value)
+            local d = ns.GetDB()
+            d.trinketSlot = value
+            ns.RequestMacroUpdate()
+            ns.RefreshConfigPanel()
+        end)
+
+        configControls.combatPotionQuality = UI.CreateDropdown(p, QUALITY_W, 4)
         ns.ApplyVoidAccentToDropdown(configControls.combatPotionQuality)
         configControls.combatPotionQuality:SetPoint("TOPLEFT", configControls.combatPotion, "BOTTOMLEFT", 0, -34)
         configControls.combatPotionQuality:SetLabel("Potion Priority", accent)
@@ -394,6 +462,90 @@ function ns.CreateConfigPanel()
         configControls.voidformPotionWarning:SetJustifyH("LEFT")
         configControls.voidformPotionWarning:SetJustifyV("TOP")
         configControls.voidformPotionWarning:Hide()
+
+        -- ── Editable macro text ───────────────────────────────────────────────
+        -- Shows the complete macro. The generated lines are rebuilt on every
+        -- update; anything below them is kept as the user's own addition.
+        local secText = SectionHeader(p, "Macro Text", configControls.voidformPotionWarning, -18)
+
+        configControls.macroText = UI.CreateEditBox(p, CONTENT_W, 120)
+        configControls.macroText:SetAccent(accent)
+        configControls.macroText:SetMaxLetters(ns.MACRO_MAX_LENGTH)
+        configControls.macroText:SetPoint("TOPLEFT",     secText, "BOTTOMLEFT",  0, -10)
+        configControls.macroText:SetPoint("BOTTOMRIGHT", p,       "BOTTOMRIGHT", 0, 20)
+
+        configControls.macroTextHint = UI.CreateFontString(p,
+            "Click away to apply. Generated lines are rebuilt automatically.",
+            "textDim", "FONT_SMALL")
+        configControls.macroTextHint:SetPoint("TOPLEFT", configControls.macroText, "BOTTOMLEFT", 0, -5)
+
+        configControls.macroTextCounter = UI.CreateFontString(p, "", "textDim", "FONT_SMALL")
+        configControls.macroTextCounter:SetPoint("TOPRIGHT", configControls.macroText, "BOTTOMRIGHT", 0, -5)
+
+        configControls.macroText:SetOnTextChanged(function(text)
+            UpdateMacroTextCounter(text)
+        end)
+
+        configControls.macroText:SetOnCommit(function(text)
+            ns.ApplyMacroTextFromPanel(text, configControls.macroText._variant)
+            ns.RefreshConfigPanel()
+        end)
+    end
+
+    -- ── TAB 4: About ──────────────────────────────────────────────────────────
+    do
+        local p   = tabAbout
+        local sec = SectionHeader(p, "About")
+
+        local title = UI.CreateFontString(p, ns.ADDON_DISPLAY_NAME, accent, "FONT_HEADER")
+        title:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -14)
+
+        local description = UI.CreateFontString(p, ns.ADDON_DESCRIPTION, "text")
+        description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
+        description:SetWidth(CONTENT_W)
+        description:SetJustifyH("LEFT")
+        description:SetJustifyV("TOP")
+        description:SetSpacing(3)
+        description:SetWordWrap(true)
+
+        -- Author
+        local secAuthor = SectionHeader(p, "Author", description, -22)
+
+        local authorName = UI.CreateFontString(p, ns.ADDON_AUTHOR, accent, "FONT_TITLE")
+        authorName:SetPoint("TOPLEFT", secAuthor, "BOTTOMLEFT", 0, -14)
+
+        local authorChar = UI.CreateFontString(p, ns.ADDON_CHARACTER, "textDim", "FONT_SMALL")
+        authorChar:SetPoint("TOPLEFT", authorName, "BOTTOMLEFT", 0, -6)
+
+        -- Links
+        local secLinks = SectionHeader(p, "Links", authorChar, -22)
+
+        local LINK_BTN_W = 150
+
+        configControls.aboutUrl = UI.CreateCopyBox(p, CONTENT_W, 24)
+
+        local function ShowLink(url)
+            configControls.aboutUrl:SetValue(url)
+            configControls.aboutUrl:Focus()
+        end
+
+        configControls.githubButton = UI.CreateButton(p, "GitHub", accent, LINK_BTN_W, 26)
+        configControls.githubButton:SetPoint("TOPLEFT", secLinks, "BOTTOMLEFT", 0, -14)
+        configControls.githubButton:SetIcon(ns.LINK_ICON_GITHUB, 16)
+        configControls.githubButton:SetOnClick(function() ShowLink(ns.LINK_GITHUB) end)
+
+        configControls.curseforgeButton = UI.CreateButton(p, "CurseForge", accent, LINK_BTN_W, 26)
+        configControls.curseforgeButton:SetPoint("LEFT", configControls.githubButton, "RIGHT", 10, 0)
+        configControls.curseforgeButton:SetIcon(ns.LINK_ICON_CURSEFORGE, 16)
+        configControls.curseforgeButton:SetOnClick(function() ShowLink(ns.LINK_CURSEFORGE) end)
+
+        configControls.aboutUrl:SetPoint("TOPLEFT", configControls.githubButton, "BOTTOMLEFT", 0, -14)
+        configControls.aboutUrl:SetValue(ns.LINK_CURSEFORGE)
+
+        local urlHint = UI.CreateFontString(p,
+            "Pick a link, then press Ctrl+C to copy it. Addons cannot open a browser.",
+            "textDim", "FONT_SMALL")
+        urlHint:SetPoint("TOPLEFT", configControls.aboutUrl, "BOTTOMLEFT", 0, -6)
     end
 
     -- Elevate all dropdown lists above the panel
@@ -404,8 +556,10 @@ function ns.CreateConfigPanel()
             configControls.outlineDropdown,
             configControls.reminderStrata,
             configControls.macroVariant,
+            configControls.macroScope,
             configControls.combatPotion,
             configControls.combatPotionQuality,
+            configControls.trinketSlot,
         }) do
             Elevate(dd, configPanel)
             if dd and dd.list then dd.list:SetFrameLevel(level) end

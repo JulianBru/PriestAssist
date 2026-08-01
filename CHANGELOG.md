@@ -1,74 +1,33 @@
 # Priest Assist
 
-## [1.0](https://github.com/Slothpala/PIMG/tree/1.0) (2026-03-15)
+## [1.0](https://github.com/JulianBru/PriestAssist/tree/1.0) (2026-08-01)
 
-- Added an option to hide the minimap button
-- Set the addon version to `1.0` for release
+Initial release.
 
-## [1.2.9](https://github.com/Slothpala/PIMG/tree/1.2.9) (2026-03-15)
+### Macro
 
-- Renamed the visible addon name from `PIMG` to `Priest Assist`
-- Added `/passist` and `/pras` as additional slash command aliases while keeping `/pim`
-- Updated the config window title, reminder title, minimap tooltip, and macro name to match the new branding
+- Maintains two macros side by side, both rebuilt around your current target with `/pa`:
+  - **PriestAssist PI** — Power Infusion
+  - **PriestAssist VF** — `Void Volley` / `Voidform`
+- The shared cooldowns (trinket, Power Infusion, combat potion) go into whichever macro you pick as primary, so pressing the other one never fires them early
+- Choice of macro tab: general (shared by all characters) or character-specific
+- Falls back to your current target and then to yourself when the assigned target is dead or out of range
+- Optional combat potion lines for Light's Potential and Draught of Rampant Abandon, with configurable quality priority
+- Selectable trinket slot: none, top (`/use 13`), bottom (`/use 14`) or both
+- Editable macro text field in the Macro tab showing the complete macro, with a live character counter against WoW's 255-character limit
+- Custom macro lines per macro, added in the text field or via `/pa add`, preserved across rebuilds until cleared with `/pa reset`
+- Macro updates are queued until combat ends instead of failing under combat lockdown
+- Warns when the macro exceeds WoW's 255-character limit or when the macro list is full
 
-## [1.2.8](https://github.com/Slothpala/PIMG/tree/1.2.8) (2026-03-15)
+### Reminder
 
-- Switched back to the externally installed `AbstractFramework` as the primary UI backend
-- Added a built-in fallback UI so PIMG still loads and remains configurable when `AbstractFramework` is not installed
-- Removed the embedded framework loader from the TOC
+- Text reminder when entering a raid or dungeon, with configurable font, outline, size, frame strata and fade-out delay
+- Picks up LibSharedMedia-3.0 fonts automatically when the library is installed, with the Blizzard fonts as fallback
+- Movable in Edit Mode; the position is saved account-wide
 
-## [1.2.7](https://github.com/Slothpala/PIMG/tree/1.2.7) (2026-03-15)
+### Other
 
-- Embedded the required AbstractFramework files under `Libs/AbstractFramework`
-- Removed the external `AbstractFramework` addon dependency from the TOC
-- Patched the embedded framework to initialize inside `PIMG` and load its media from the embedded library path
-
-## [1.2.6](https://github.com/Slothpala/PIMG/tree/1.2.6) (2026-03-15)
-
-- Replaced deprecated `SendChatMessage` usage with `C_ChatInfo.SendChatMessage` and kept a fallback for older clients
-
-## [1.2.5](https://github.com/Slothpala/PIMG/tree/1.2.5) (2026-03-15)
-
-- Deferred macro updates and instance reminder checks until combat ends
-- Added a combat-safe queue so raid and dungeon logic only executes outside of combat lockdown
-- Split the addon into smaller Lua files for data, macro logic, reminder UI, config UI, minimap, and core bootstrapping
-
-## [1.2.4](https://github.com/Slothpala/PIMG/tree/1.2.4) (2026-03-15)
-
-- Limited combat potion fallback lines in the Voidform macro to the prioritized quality only
-- Keeps the Voidform variant within the WoW macro length limit more reliably
-
-## [1.2.3](https://github.com/Slothpala/PIMG/tree/1.2.3) (2026-03-15)
-
-- Added configurable combat potion support with potion selection and preferred quality ordering
-- Macro generation now inserts `/use item:<itemid>` lines for the selected potion before the Power Infusion lines
-
-## [1.2.2](https://github.com/Slothpala/PIMG/tree/1.2.2) (2026-03-15)
-
-- Updated the AbstractFramework UI theme to a Void-inspired purple accent palette
-- Recolored the config window title and action buttons to match the Void theme
-
-## [1.2.1](https://github.com/Slothpala/PIMG/tree/1.2.1) (2026-03-15)
-
-- Added an optional target announcement that is off by default
-- Announces the selected Power Infusion target to raid or party chat depending on the current instance type
-
-## [1.2.0](https://github.com/Slothpala/PIMG/tree/1.2.0) (2026-03-15)
-
-- Rebuilt the reminder widget and config window on top of AbstractFramework
-- Replaced the custom font picker with an AbstractFramework dropdown that scrolls automatically
-- Added AbstractFramework as a required dependency for the addon
-
-## [1.1.0](https://github.com/Slothpala/PIMG/tree/1.1.0) (2026-03-15)
-
-- Added a raid and dungeon reminder frame with configurable duration, strata, font size and font selection
-- Added a movable minimap button that runs `/pim` on left-click and opens the config menu on right-click
-- Added standalone and Voidform macro variants while keeping `/pim add` support
-- Migrated saved variables from the legacy string format to a settings table
-
-## [1.0.3](https://github.com/Slothpala/PIMG/tree/1.0.3) (2024-08-29)
-[Full Changelog](https://github.com/Slothpala/PIMG/compare/1.0.2...1.0.3) 
-
-- Updated to 110002  
-- Moved from the now removed API call GetSpellInfo to C\_Spell.GetSpellInfo  
-
+- Optional Power Infusion target announcement to party, raid or instance chat (off by default)
+- About tab with the addon description, author credits and copyable GitHub and CurseForge links
+- Draggable minimap button — left-click updates the macro, right-click opens the config; can be hidden
+- Slash commands: `/pa`, `/pa add`, `/pa reset`, `/pa mode powerinfusion|voidform`, `/pa show`, `/pa help`

@@ -1,0 +1,28 @@
+name: Package and Release
+
+# Runs when you push a version tag (e.g. "v1.5" or "1.5").
+on:
+  push:
+    tags:
+      - '**'
+
+permissions:
+  contents: write   # needed to create the GitHub release
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history + tags, required for changelog/versioning
+
+      - name: Package and upload to CurseForge
+        uses: BigWigsMods/packager@v2
+        env:
+          # Create at https://legacy.curseforge.com/account/api-tokens
+          # and store it as a repo secret named CF_API_KEY.
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          # Provided automatically by GitHub Actions (for the GitHub release).
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -67,7 +67,7 @@ local function UpdateMinimapAngleFromCursor()
 end
 
 function ns.CreateMinimapButton()
-    local minimapButton = CreateFrame("Button", "PIMGMinimapButton", Minimap)
+    local minimapButton = CreateFrame("Button", "PriestAssistMinimapButton", Minimap)
     frames.minimapButton = minimapButton
 
     minimapButton:SetSize(31, 31)
@@ -109,7 +109,7 @@ function ns.CreateMinimapButton()
     minimapButton:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:AddLine(ns.ADDON_DISPLAY_NAME, 1, 0.82, 0)
-        GameTooltip:AddLine("Left-click: run /pim", 1, 1, 1)
+        GameTooltip:AddLine("Left-click: run /pa", 1, 1, 1)
         GameTooltip:AddLine("Right-click: open settings", 1, 1, 1)
         GameTooltip:AddLine("Drag: move around the minimap", 1, 1, 1)
         GameTooltip:Show()

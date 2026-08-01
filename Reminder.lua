@@ -33,7 +33,7 @@ function ns.ApplyReminderFont(fontPath, fontSize, outlineStyle)
 end
 
 function ns.GetReminderPreviewText()
-    local preview = ns.DEFAULT_REMINDER_TEXT .. "\n" .. ns.POWER_INFUSION_ICON .. " Set a target and use /pim " .. ns.POWER_INFUSION_ICON
+    local preview = ns.DEFAULT_REMINDER_TEXT .. "\n" .. ns.POWER_INFUSION_ICON .. " Set a target and use /pa " .. ns.POWER_INFUSION_ICON
 
     if ns.IsEditModeActive() then
         preview = preview .. "\nDrag to move, click to configure."
@@ -204,7 +204,7 @@ function ns.HookEditMode()
 end
 
 function ns.CreateReminderFrame()
-    local reminderFrame = UI.CreateFrame(UIParent, "PIMGReminderFrame", 700, 110)
+    local reminderFrame = UI.CreateFrame(UIParent, "PriestAssistReminderFrame", 700, 110)
     frames.reminderFrame = reminderFrame
 
     reminderFrame:SetSize(700, 110)

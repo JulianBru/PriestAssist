@@ -19,7 +19,7 @@ ns.frames = ns.frames or {
     configControls = {},
 }
 
-function ns.PIMGPrint(text, color)
+function ns.Print(text, color)
     local messageColor = color or "FFFFFF"
     print("\124cffFFD700" .. ns.ADDON_DISPLAY_NAME .. ": \124r\124cff" .. messageColor .. text .. "\124r")
 end

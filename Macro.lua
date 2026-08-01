@@ -88,54 +88,233 @@ function ns.BuildCombatPotionLines(macroVariant)
     return table.concat(lines, "\n")
 end
 
+function ns.BuildTrinketLines()
+    local slot = ns.GetDB().trinketSlot or ns.DEFAULTS.trinketSlot
+
+    if slot == "13" then
+        return "/use 13"
+    elseif slot == "14" then
+        return "/use 14"
+    elseif slot == "both" then
+        return "/use 13\n/use 14"
+    end
+
+    return nil
+end
+
+-- The potion only ever goes into the primary macro, so the length warning
+-- applies when Voidform is the primary one.
 function ns.ShouldShowVoidformPotionWarning()
     local db = ns.GetDB()
     return db.macroVariant == "voidform" and (db.combatPotion or "none") ~= "none"
 end
 
 function ns.GetVoidformPotionWarningText()
-    return "Voidform supports only one potion quality because WoW macros are limited to 255 characters."
+    return "The Voidform macro uses only one potion quality because WoW macros are limited to 255 characters."
 end
 
-function ns.BuildMacroBody()
+-- Falls back to the configured default for anything unexpected.
+function ns.ResolveMacroVariant(variant)
+    if variant == "standalone" or variant == "voidform" then
+        return variant
+    end
+
+    local current = ns.GetDB().macroVariant
+    if current == "standalone" or current == "voidform" then
+        return current
+    end
+
+    return ns.DEFAULTS.macroVariant
+end
+
+function ns.GetUserAdded(variant)
     local db = ns.GetDB()
+    return (db.userAddedByVariant and db.userAddedByVariant[ns.ResolveMacroVariant(variant)]) or ""
+end
+
+function ns.SetUserAdded(variant, text)
+    local db = ns.GetDB()
+    db.userAddedByVariant = db.userAddedByVariant or {}
+    db.userAddedByVariant[ns.ResolveMacroVariant(variant)] = text or ""
+end
+
+function ns.GetMacroIconForVariant(variant)
+    return ns.MACRO_ICONS[ns.ResolveMacroVariant(variant)] or ns.MACRO_ICON_ID
+end
+
+function ns.GetMacroNameForVariant(variant)
+    return ns.MACRO_NAMES[ns.ResolveMacroVariant(variant)]
+end
+
+-- Everything the addon generates itself, i.e. the macro without the user's own
+-- lines appended. Used both for building the final macro and for splitting the
+-- generated part back off the text the user edited in the config panel.
+function ns.BuildGeneratedMacroBody(variant)
+    variant = ns.ResolveMacroVariant(variant)
+
+    local isPrimary = (variant == ns.ResolveMacroVariant(ns.GetDB().macroVariant))
     local targetName = UnitName("target") or ""
-    local powerInfusionLines = ns.BuildPowerInfusionLines(targetName)
-    local combatPotionLines = ns.BuildCombatPotionLines(db.macroVariant)
-    local macroBody
+    local lines = {}
 
-    if db.macroVariant == "voidform" then
-        macroBody = "#showtooltip [known: Void Volley] Void Volley; Voidform;\n/cast [known: Void Volley] Void Volley; Voidform;\n/use 13"
+    -- Each macro always carries its own signature spell.
+    if variant == "voidform" then
+        lines[#lines + 1] = "#showtooltip [known: Void Volley] Void Volley; Voidform;"
+        lines[#lines + 1] = "/cast [known: Void Volley] Void Volley; Voidform;"
     else
-        macroBody = "#showtooltip"
+        lines[#lines + 1] = "#showtooltip"
+        lines[#lines + 1] = ns.BuildPowerInfusionLines(targetName)
     end
 
-    if combatPotionLines then
-        macroBody = macroBody .. "\n" .. powerInfusionLines .. "\n" .. combatPotionLines
-    else
-        macroBody = macroBody .. "\n" .. powerInfusionLines
+    -- Trinket, Power Infusion and potion are shared cooldowns. They only go
+    -- into the primary macro, so pressing the other one never fires them early.
+    if isPrimary then
+        local trinketLines = ns.BuildTrinketLines()
+        if trinketLines then
+            lines[#lines + 1] = trinketLines
+        end
+
+        if variant == "voidform" then
+            lines[#lines + 1] = ns.BuildPowerInfusionLines(targetName)
+        end
+
+        local combatPotionLines = ns.BuildCombatPotionLines(variant)
+        if combatPotionLines then
+            lines[#lines + 1] = combatPotionLines
+        end
     end
 
-    return macroBody .. (db.userAdded or ""), targetName
+    return table.concat(lines, "\n"), targetName
 end
 
-function ns.GetSelectedMacroIcon()
-    local db = ns.GetDB()
-    if db.macroVariant == "voidform" then
-        return ns.AUTO_MACRO_ICON_ID
-    end
+function ns.BuildMacroBody(variant)
+    variant = ns.ResolveMacroVariant(variant)
 
-    return ns.MACRO_ICON_ID
+    local generatedBody, targetName = ns.BuildGeneratedMacroBody(variant)
+
+    return generatedBody .. ns.GetUserAdded(variant), targetName
 end
 
-function ns.EnsureMacroCapacity()
-    local numGlobalMacros = GetNumMacros()
-    local hasMacro = GetMacroIndexByName(ns.MACRO_NAME) ~= 0
+local function CountLines(text)
+    local count = 1
 
-    if numGlobalMacros > 119 and not hasMacro then
-        ns.PIMGPrint("You can't have any more macros! Please delete one and repeat.", "F82C00")
+    for _ in (text or ""):gmatch("\n") do
+        count = count + 1
+    end
+
+    return count
+end
+
+local function SplitLines(text)
+    local normalized = (text or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
+    local lines = {}
+
+    for line in (normalized .. "\n"):gmatch("([^\n]*)\n") do
+        lines[#lines + 1] = line
+    end
+
+    return lines
+end
+
+-- Normalizes text that already contains real line breaks, unlike
+-- ns.NormalizeUserAdded which has to split a single /pa add line on slashes.
+function ns.NormalizeUserAddedLines(text)
+    local normalized = (text or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
+
+    normalized = normalized:gsub("%s+$", "")
+    normalized = normalized:gsub("^\n+", "")
+
+    if normalized == "" then
+        return ""
+    end
+
+    return "\n" .. normalized
+end
+
+-- Takes the full macro text as edited in the config panel and returns just the
+-- user's own lines. The generated part is matched by line count, so edits made
+-- to those lines are discarded and rebuilt on the next update.
+function ns.ExtractUserAddedFromMacroText(fullText, variant)
+    local generatedBody = ns.BuildGeneratedMacroBody(variant)
+    local generatedLineCount = CountLines(generatedBody)
+    local lines = SplitLines(fullText)
+    local remainder = {}
+
+    for index = generatedLineCount + 1, #lines do
+        remainder[#remainder + 1] = lines[index]
+    end
+
+    return ns.NormalizeUserAddedLines(table.concat(remainder, "\n"))
+end
+
+-- Applies text edited in the config panel. Returns true when the macro changed.
+function ns.ApplyMacroTextFromPanel(fullText, variant)
+    variant = ns.ResolveMacroVariant(variant)
+
+    local userAdded = ns.ExtractUserAddedFromMacroText(fullText, variant)
+
+    if userAdded == ns.GetUserAdded(variant) then
         return false
     end
+
+    ns.SetUserAdded(variant, userAdded)
+    ns.RequestMacroUpdate()
+    return true
+end
+
+function ns.IsCharacterMacroScope()
+    return ns.GetDB().macroScope == "character"
+end
+
+-- Character macros live at indices above MAX_GENERAL_MACROS.
+function ns.IsCharacterMacroIndex(index)
+    return (index or 0) > ns.MAX_GENERAL_MACROS
+end
+
+-- True when the existing macro sits in the tab the user did not select.
+-- EditMacro cannot move a macro between tabs, so it has to be recreated.
+function ns.MacroNeedsRelocation(index)
+    if not index or index == 0 then
+        return false
+    end
+
+    return ns.IsCharacterMacroIndex(index) ~= ns.IsCharacterMacroScope()
+end
+
+-- Checks whether the selected tab has room for `needed` additional macros.
+function ns.EnsureMacroCapacity(needed)
+    needed = needed or 1
+
+    if needed <= 0 then
+        return true
+    end
+
+    local numGeneralMacros, numCharacterMacros = GetNumMacros()
+    local isCharacterMacro = ns.IsCharacterMacroScope()
+    local used = (isCharacterMacro and numCharacterMacros or numGeneralMacros) or 0
+    local maximum = isCharacterMacro and ns.MAX_CHARACTER_MACROS or ns.MAX_GENERAL_MACROS
+
+    if used + needed > maximum then
+        local missing = used + needed - maximum
+        ns.Print("Your " .. (isCharacterMacro and "character" or "general") ..
+            " macro tab needs " .. missing .. " more free slot(s) (" .. maximum ..
+            " total). Please delete some macros and try again.", "F82C00")
+        return false
+    end
+
+    return true
+end
+
+-- Removes the single macro used before the addon split it per variant.
+function ns.RemoveLegacyMacro()
+    local legacyIndex = GetMacroIndexByName(ns.LEGACY_MACRO_NAME)
+
+    if legacyIndex == 0 then
+        return false
+    end
+
+    DeleteMacro(legacyIndex)
+    ns.Print("Removed the old \"" .. ns.LEGACY_MACRO_NAME ..
+        "\" macro. It has been replaced by one macro per variant.", "F8C300")
 
     return true
 end
@@ -186,41 +365,89 @@ end
 
 function ns.UpdateMacro()
     if MacroFrame and MacroFrame:IsShown() then
-        ns.PIMGPrint("Can't update the macro while the Macro Frame is open. Please close it and try again.", "F82C00")
+        ns.Print("Can't update the macro while the Macro Frame is open. Please close it and try again.", "F82C00")
         return
     end
 
-    if not ns.EnsureMacroCapacity() then
+    ns.RemoveLegacyMacro()
+
+    local isCharacterMacro = ns.IsCharacterMacroScope()
+    local tabName = isCharacterMacro and "character" or "general"
+    local targetName = UnitName("target") or ""
+
+    -- Count what has to be created before touching anything, so a tab that is
+    -- too full can never leave the player with a half-applied set of macros.
+    local pendingCreations = 0
+
+    for _, variant in ipairs(ns.MACRO_VARIANT_ORDER) do
+        local index = GetMacroIndexByName(ns.GetMacroNameForVariant(variant))
+
+        if index == 0 or ns.MacroNeedsRelocation(index) then
+            pendingCreations = pendingCreations + 1
+        end
+    end
+
+    if not ns.EnsureMacroCapacity(pendingCreations) then
         return
     end
 
-    local body, targetName = ns.BuildMacroBody()
-    local macroIcon = ns.GetSelectedMacroIcon()
-    local hasMacro = GetMacroIndexByName(ns.MACRO_NAME) ~= 0
+    local createdCount, movedCount = 0, 0
 
-    if body:len() > 255 then
-        ns.PIMGPrint("Macro body is longer than 255 characters and may be truncated by WoW.", "F82C00")
+    for _, variant in ipairs(ns.MACRO_VARIANT_ORDER) do
+        local macroName = ns.GetMacroNameForVariant(variant)
+        local body = ns.BuildMacroBody(variant)
+
+        if body:len() > ns.MACRO_MAX_LENGTH then
+            ns.Print("\"" .. macroName .. "\" is longer than " .. ns.MACRO_MAX_LENGTH ..
+                " characters and may be truncated by WoW.", "F82C00")
+        end
+
+        -- Indices shift whenever a macro is deleted, so resolve them freshly.
+        local index = GetMacroIndexByName(macroName)
+        local relocated = ns.MacroNeedsRelocation(index)
+
+        if relocated then
+            DeleteMacro(index)
+            index = 0
+        end
+
+        if index == 0 then
+            CreateMacro(macroName, ns.GetMacroIconForVariant(variant), body, isCharacterMacro or nil)
+
+            if relocated then
+                movedCount = movedCount + 1
+            else
+                createdCount = createdCount + 1
+            end
+        else
+            EditMacro(index, macroName, ns.GetMacroIconForVariant(variant), body)
+        end
     end
 
-    if not hasMacro then
-        CreateMacro(ns.MACRO_NAME, macroIcon, body)
-        ns.PIMGPrint("A Macro in your General Macros tab has been generated.", "61EE96")
-    else
-        EditMacro(ns.MACRO_NAME, ns.MACRO_NAME, macroIcon, body)
+    if createdCount > 0 then
+        ns.Print(createdCount .. " macro(s) created in your " .. tabName ..
+            " macro tab. Drag them onto your action bar.", "61EE96")
+    end
+
+    if movedCount > 0 then
+        ns.Print(movedCount .. " macro(s) moved to your " .. tabName ..
+            " macro tab. Please drag them back onto your action bar.", "F8C300")
     end
 
     if targetName ~= "" then
-        ns.PIMGPrint("New PI target: " .. (ns.GetTargetDisplayName() or targetName), "90EE90")
+        ns.Print("New PI target: " .. (ns.GetTargetDisplayName() or targetName), "90EE90")
         ns.AnnounceMacroTarget(targetName)
     else
-        ns.PIMGPrint("Macro updated without a target. It will default to your current target or yourself.", "A5AAD9")
+        ns.Print("Macro updated without a target. It will default to your current target or yourself.", "A5AAD9")
     end
+
+    ns.RefreshConfigPanel()
 end
 
 function ns.RequestMacroUpdate()
     if ns.IsCombatLockdownActive() then
         if not state.pendingMacroUpdate then
-            ns.PIMGPrint("Macro update queued until combat ends.", "F8C300")
+            ns.Print("Macro update queued until combat ends.", "F8C300")
         end
         state.pendingMacroUpdate = true
         return false
@@ -239,23 +466,27 @@ function ns.SetMacroVariant(variant)
     end
 
     if variant ~= "standalone" and variant ~= "voidform" then
-        ns.PIMGPrint("Usage: /pim mode powerinfusion|voidform", "F82C00")
+        ns.Print("Usage: /pa mode powerinfusion|voidform", "F82C00")
         return false
     end
 
     db.macroVariant = variant
-    ns.PIMGPrint("Macro variant set to " .. (variant == "standalone" and "powerinfusion" or variant) .. ".", "61EE96")
+    ns.Print("\"" .. ns.GetMacroNameForVariant(variant) ..
+        "\" is now your primary macro and carries the shared cooldowns.", "61EE96")
     return true
 end
 
+-- Applies to the variant currently selected for editing.
 function ns.SetAdditionalMacroText(text)
-    local db = ns.GetDB()
-    db.userAdded = ns.NormalizeUserAdded(text)
+    local variant = ns.ResolveMacroVariant()
+    local userAdded = ns.NormalizeUserAdded(text)
 
-    if db.userAdded == "" then
-        ns.PIMGPrint("User added values removed.")
+    ns.SetUserAdded(variant, userAdded)
+
+    if userAdded == "" then
+        ns.Print("Custom lines removed from \"" .. ns.GetMacroNameForVariant(variant) .. "\".")
         return
     end
 
-    ns.PIMGPrint("Additional macro lines saved.", "A5AAD9")
+    ns.Print("Custom lines saved to \"" .. ns.GetMacroNameForVariant(variant) .. "\".", "A5AAD9")
 end
