@@ -1,66 +1,48 @@
-<<<<<<< HEAD
-# Compiled Lua sources
-luac.out
+# ------------------------------------------------------------------------------
+#  JulsanityUI DataBars - .gitignore
+# ------------------------------------------------------------------------------
 
-# luarocks build files
-*.src.rock
-*.zip
-*.tar.gz
+# Reference copies of third-party addons (EllesmereUI, Syndicator, etc.).
+# Kept locally as a development/API reference only - never published.
+_ref/
+/_ref
 
-# Object files
-*.o
-*.os
-*.ko
-*.obj
-*.elf
+# Editor / IDE / tooling
+.vscode/
+.idea/
+*.code-workspace
+.claude/
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-*.def
-*.exp
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-=======
-# OS files
+# OS clutter
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 Desktop.ini
-.DS_Store
 
-# Editor settings
-.idea/
-.vscode/
-*.code-workspace
+# WoW SavedVariables / runtime artifacts (should never be in the repo)
+*.bak
+SavedVariables/
+WTF/
 
-# Logs and temp files
+# Build / packaging artifacts
+*.zip
+*.7z
+*.tar
+*.tar.gz
+*.tgz
+/dist/
+/build/
+/.release/
+/.packager/
+
+# Logs & temp
 *.log
 *.tmp
-*.bak
+*~
 
-# Release artifacts
-*.zip
-dist/
-build/
-
-# Local vendor clones
-.af_vendor/
->>>>>>> c641e0e (First Version Release)
+# Local docs (architecture notes, dev guides) - not published
+docs/
