@@ -318,9 +318,12 @@ function ns.InitializeDatabase()
         PriestAssistDB.userAddedByVariant[variant] = sharedUserAdded
     end
 
+    -- Stored text already contains real line breaks, so it must not go through
+    -- ns.NormalizeUserAdded — that one splits on slashes and would insert an
+    -- extra blank line on every login.
     for _, variant in ipairs(ns.MACRO_VARIANT_ORDER) do
         PriestAssistDB.userAddedByVariant[variant] =
-            ns.NormalizeUserAdded(PriestAssistDB.userAddedByVariant[variant])
+            ns.NormalizeUserAddedLines(PriestAssistDB.userAddedByVariant[variant])
     end
 
     PriestAssistDB.reminderFontPath, PriestAssistDB.reminderFont = ns.ResolveFont(PriestAssistDB.reminderFont)
