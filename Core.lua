@@ -5,8 +5,9 @@ local frames = ns.frames
 function ns.HandleSlashCommand(msg)
     local commandText = ns.Trim(msg)
 
+    -- Bare /pa is the deliberate assignment: it captures your current target.
     if commandText == "" then
-        ns.RequestMacroUpdate()
+        ns.RequestMacroUpdate(true)
         return
     end
 
@@ -47,7 +48,7 @@ function ns.HandleSlashCommand(msg)
         return
     end
 
-    ns.RequestMacroUpdate()
+    ns.RequestMacroUpdate(true)
 end
 
 SLASH_PRIESTASSIST1 = "/pa"
@@ -78,8 +79,10 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
 
     if event == "PLAYER_REGEN_ENABLED" then
         if state.pendingMacroUpdate then
+            local reportAssignment = state.pendingAssignTarget
             state.pendingMacroUpdate = false
-            ns.UpdateMacro()
+            state.pendingAssignTarget = false
+            ns.UpdateMacro(reportAssignment)
         end
 
         if state.pendingInstanceReminder then

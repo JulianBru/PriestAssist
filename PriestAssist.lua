@@ -12,6 +12,7 @@ ns.state = ns.state or {
     pendingInstanceReminder = false,
     instanceReminderTimerToken = 0,
     pendingMacroUpdate = false,
+    pendingAssignTarget = false,
     reminderWasDragged = false,
 }
 

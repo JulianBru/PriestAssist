@@ -69,6 +69,8 @@ ns.COMBAT_POTION_OPTIONS = {
     { text = "None", value = "none" },
     { text = "Light's Potential", value = "lights_potential" },
     { text = "Draught of Rampant Abandon", value = "draught_of_rampant_abandon" },
+    { text = "Potion of Recklessness", value = "potion_of_recklessness" },
+    { text = "Liquid Luster", value = "liquid_luster" },
 }
 
 ns.TRINKET_OPTIONS = {
@@ -79,21 +81,36 @@ ns.TRINKET_OPTIONS = {
 }
 
 ns.COMBAT_POTION_QUALITY_OPTIONS = {
-    { text = "Quality 1 First", value = 1 },
-    { text = "Quality 2 First", value = 2 },
+    { text = "Max rank first", value = 2 },
+    { text = "Rank 1 first", value = 1 },
 }
 
+-- qualities[2] is the max rank, qualities[1] is rank 1. Lines are emitted in
+-- list order, and within a rank the fleeting id comes before the crafted one
+-- so the cheap potions are consumed first.
 ns.COMBAT_POTIONS = {
     lights_potential = {
         qualities = {
-            [1] = { 241309, 245897 },
-            [2] = { 241308, 245898 },
+            [1] = { 245897, 241309 },
+            [2] = { 245898, 241308 },
         },
     },
     draught_of_rampant_abandon = {
         qualities = {
-            [1] = { 241293 },
-            [2] = { 241292 },
+            [1] = { 245911, 241293 },
+            [2] = { 245910, 241292 },
+        },
+    },
+    potion_of_recklessness = {
+        qualities = {
+            [1] = { 245903, 241289 },
+            [2] = { 245902, 241288 },
+        },
+    },
+    liquid_luster = {
+        qualities = {
+            [1] = { 274763, 271886 },
+            [2] = { 274764, 271887 },
         },
     },
 }
@@ -119,6 +136,9 @@ ns.DEFAULTS = {
     },
     macroVariant = "standalone",
     macroScope = "general",
+    -- The player you assigned with /pa. Kept so that changing a setting
+    -- rebuilds the macros without silently reassigning them.
+    assignedTarget = "",
     combatPotion = "none",
     combatPotionQuality = 2,
     trinketSlot = "13",
@@ -324,6 +344,11 @@ function ns.InitializeDatabase()
     for _, variant in ipairs(ns.MACRO_VARIANT_ORDER) do
         PriestAssistDB.userAddedByVariant[variant] =
             ns.NormalizeUserAddedLines(PriestAssistDB.userAddedByVariant[variant])
+    end
+
+    -- Belt and braces: a secret value must never survive into a macro body.
+    if type(PriestAssistDB.assignedTarget) ~= "string" or ns.IsSecretValue(PriestAssistDB.assignedTarget) then
+        PriestAssistDB.assignedTarget = ""
     end
 
     PriestAssistDB.reminderFontPath, PriestAssistDB.reminderFont = ns.ResolveFont(PriestAssistDB.reminderFont)

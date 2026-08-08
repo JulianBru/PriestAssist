@@ -50,7 +50,7 @@ Pick which of the two is your primary. That macro gets the shared cooldowns — 
 
 **Combat potions built in**
 
-Pick a potion in the config and PriestAssist injects the `/use item:` lines for you, ordered by the quality you prefer. Currently supports Light's Potential and Draught of Rampant Abandon, both qualities. A separate setting decides which trinket slot gets used — none, the top one, the bottom one, or both.
+Pick a potion in the config and PriestAssist injects the `/use item:` lines for you, ordered by the rank you prefer. Currently supports Light's Potential, Draught of Rampant Abandon, Potion of Recklessness and Liquid Luster — crafted and fleeting versions, both ranks, with the cheap fleeting ones consumed first. A separate setting decides which trinket slot gets used — none, the top one, the bottom one, or both.
 
 **Edit the macro right in the config**
 
@@ -64,9 +64,13 @@ Each macro keeps its own additions, which matters because whichever macro is pri
 
 A configurable text reminder fades in when you enter an instance. Choose the font (LibSharedMedia fonts are picked up automatically), outline, size, frame strata and fade-out delay. Drag it anywhere in Edit Mode.
 
+**Your assignment stays put**
+
+The target you assign with `/pa` is remembered. Change your potion, swap the primary macro or move things to the character tab mid-raid — the macros rebuild around the same player, with no chat announcement. Only `/pa` and the Update Macro button reassign, and the assignment survives a reload.
+
 **Optional target announcements**
 
-Off by default. Turn it on and PriestAssist posts your Power Infusion target to party, raid or instance chat — whichever matches the group you're actually in.
+Off by default. Turn it on and PriestAssist posts your Power Infusion target to party, raid or instance chat — whichever matches the group you're actually in. It fires only when you actually assign someone, never when you change a setting.
 
 **Combat safe**
 

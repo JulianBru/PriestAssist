@@ -90,11 +90,15 @@ function ns.RefreshConfigPanel()
     -- Never overwrite the field while the user is typing in it.
     if cc.macroText and not cc.macroText:IsFocused() then
         local variant = db.macroVariant or ns.DEFAULTS.macroVariant
+        local generatedBody = ns.BuildGeneratedMacroBody(variant)
         local macroBody = ns.BuildMacroBody(variant)
 
-        -- Remember which macro the content belongs to, so a commit cannot be
-        -- attributed to the wrong variant if the selection changes meanwhile.
+        -- Remember which macro the content belongs to, and exactly which lines
+        -- were shown as generated. A commit is split against that snapshot, so
+        -- neither a variant switch nor a target change in between can misfile
+        -- the player's own lines.
         cc.macroText._variant = variant
+        cc.macroText._generated = generatedBody
         cc.macroText:SetText(macroBody)
         UpdateMacroTextCounter(macroBody)
     end
@@ -141,11 +145,12 @@ function ns.CreateConfigPanel()
     headerIcon:SetPoint("LEFT", configPanel, "TOPLEFT", 10, -HEADER_END / 2 + 1)
     headerIcon:SetTexture(ns.ADDON_ICON_PATH)
 
-    -- Version label (right side of header, before close button)
-    local versionStr = (C_AddOns and C_AddOns.GetAddOnMetadata("PriestAssist", "Version")) or "1.0"
+    -- Version label (right side of header, before close button).
+    -- Read from the TOC at runtime, so it never needs bumping by hand.
+    local versionStr = C_AddOns and C_AddOns.GetAddOnMetadata(ns.ADDON_NAME, "Version")
     local versionLabel = configPanel:CreateFontString(nil, "OVERLAY")
     versionLabel:SetFont(select(1, GameFontNormal:GetFont()), 10, nil)
-    versionLabel:SetText("v" .. versionStr)
+    versionLabel:SetText(versionStr and ("v" .. versionStr) or "")
     versionLabel:SetTextColor(dr, dg, db, 1)
     versionLabel:SetPoint("RIGHT", configPanel.close, "LEFT", -6, -1)
 
@@ -194,7 +199,7 @@ function ns.CreateConfigPanel()
     configControls.testButton:SetPoint("LEFT", 0, 0)
 
     configControls.updateButton = FooterBtn("Update Macro", 128, function()
-        ns.RequestMacroUpdate()
+        ns.RequestMacroUpdate(true)
     end)
     configControls.updateButton:SetPoint("LEFT", configControls.testButton, "RIGHT", 10, 0)
 
@@ -487,7 +492,9 @@ function ns.CreateConfigPanel()
         end)
 
         configControls.macroText:SetOnCommit(function(text)
-            ns.ApplyMacroTextFromPanel(text, configControls.macroText._variant)
+            ns.ApplyMacroTextFromPanel(text,
+                configControls.macroText._variant,
+                configControls.macroText._generated)
             ns.RefreshConfigPanel()
         end)
     end

@@ -20,21 +20,29 @@ function ns.NormalizeUserAdded(text)
     return normalized
 end
 
-function ns.GetTargetDisplayName()
-    local name = UnitName("target")
-    if not name then
+-- Class-colours the assigned name, but only while that player is still the
+-- current target -- the class is only available for a live unit.
+function ns.GetTargetDisplayName(targetName)
+    if not targetName or targetName == "" then
         return nil
+    end
+
+    local currentName = UnitName("target")
+
+    -- Secrets must not be compared, so bail out before touching the name.
+    if ns.IsSecretValue(currentName) or currentName ~= targetName then
+        return targetName
     end
 
     local _, classFile = UnitClass("target")
     if classFile then
         local classColor = C_ClassColor.GetClassColor(classFile)
         if classColor then
-            return classColor:GenerateHexColorMarkup() .. name .. "\124r"
+            return classColor:GenerateHexColorMarkup() .. targetName .. "\124r"
         end
     end
 
-    return name
+    return targetName
 end
 
 function ns.GetPowerInfusionName()
@@ -146,6 +154,37 @@ function ns.GetMacroNameForVariant(variant)
     return ns.MACRO_NAMES[ns.ResolveMacroVariant(variant)]
 end
 
+-- The player the macros are currently pointed at. Only /pa and the
+-- "Update Macro" button change this; setting changes leave it alone.
+function ns.GetAssignedTarget()
+    return ns.GetDB().assignedTarget or ""
+end
+
+function ns.SetAssignedTarget(targetName)
+    ns.GetDB().assignedTarget = targetName or ""
+end
+
+function ns.IsSecretValue(value)
+    return issecretvalue ~= nil and issecretvalue(value)
+end
+
+-- Since 12.0.0, UnitName returns a secret value in combat when the unit is not
+-- player-controlled or not in your party/raid. Secrets must never reach the
+-- macro body: the length check and the config text field would both break on
+-- them. Assigning a group member -- the normal case -- is unaffected.
+function ns.CaptureAssignedTarget()
+    local targetName = UnitName("target")
+
+    if ns.IsSecretValue(targetName) then
+        ns.Print("Can't read that target during combat. Assign a party or raid member, " ..
+            "or try again once you are out of combat.", "F82C00")
+        return false
+    end
+
+    ns.SetAssignedTarget(targetName or "")
+    return true
+end
+
 -- Everything the addon generates itself, i.e. the macro without the user's own
 -- lines appended. Used both for building the final macro and for splitting the
 -- generated part back off the text the user edited in the config panel.
@@ -153,7 +192,7 @@ function ns.BuildGeneratedMacroBody(variant)
     variant = ns.ResolveMacroVariant(variant)
 
     local isPrimary = (variant == ns.ResolveMacroVariant(ns.GetDB().macroVariant))
-    local targetName = UnitName("target") or ""
+    local targetName = ns.GetAssignedTarget()
     local lines = {}
 
     -- Each macro always carries its own signature spell.
@@ -194,16 +233,6 @@ function ns.BuildMacroBody(variant)
     return generatedBody .. ns.GetUserAdded(variant), targetName
 end
 
-local function CountLines(text)
-    local count = 1
-
-    for _ in (text or ""):gmatch("\n") do
-        count = count + 1
-    end
-
-    return count
-end
-
 local function SplitLines(text)
     local normalized = (text or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
     local lines = {}
@@ -230,27 +259,62 @@ function ns.NormalizeUserAddedLines(text)
     return "\n" .. normalized
 end
 
--- Takes the full macro text as edited in the config panel and returns just the
--- user's own lines. The generated part is matched by line count, so edits made
--- to those lines are discarded and rebuilt on the next update.
-function ns.ExtractUserAddedFromMacroText(fullText, variant)
-    local generatedBody = ns.BuildGeneratedMacroBody(variant)
-    local generatedLineCount = CountLines(generatedBody)
+-- Takes the full macro text as edited in the config panel and returns the
+-- player's own lines, plus whether the generated block was still intact.
+--
+-- The generated lines are subtracted by content, not by position: every line
+-- the panel showed as generated is struck off the edited text once, wherever
+-- it sits. Whatever is left over is the player's. That way deleting, moving or
+-- inserting lines can no longer swallow a custom line, which line counting did.
+--
+-- shownGeneratedBody is the block the panel actually displayed. Falling back to
+-- a freshly built one would misfire if the target changed while typing.
+function ns.ExtractUserAddedFromMacroText(fullText, variant, shownGeneratedBody)
+    local reference = shownGeneratedBody or ns.BuildGeneratedMacroBody(variant)
+    local referenceLines = SplitLines(reference)
     local lines = SplitLines(fullText)
-    local remainder = {}
+    local consumed = {}
+    local generatedIntact = true
 
-    for index = generatedLineCount + 1, #lines do
-        remainder[#remainder + 1] = lines[index]
+    for _, referenceLine in ipairs(referenceLines) do
+        local matched = false
+
+        for index, line in ipairs(lines) do
+            if not consumed[index] and line == referenceLine then
+                consumed[index] = true
+                matched = true
+                break
+            end
+        end
+
+        if not matched then
+            generatedIntact = false
+        end
     end
 
-    return ns.NormalizeUserAddedLines(table.concat(remainder, "\n"))
+    local remainder = {}
+
+    for index, line in ipairs(lines) do
+        if not consumed[index] then
+            remainder[#remainder + 1] = line
+        end
+    end
+
+    return ns.NormalizeUserAddedLines(table.concat(remainder, "\n")), generatedIntact
 end
 
 -- Applies text edited in the config panel. Returns true when the macro changed.
-function ns.ApplyMacroTextFromPanel(fullText, variant)
+function ns.ApplyMacroTextFromPanel(fullText, variant, shownGeneratedBody)
     variant = ns.ResolveMacroVariant(variant)
 
-    local userAdded = ns.ExtractUserAddedFromMacroText(fullText, variant)
+    local userAdded, generatedIntact =
+        ns.ExtractUserAddedFromMacroText(fullText, variant, shownGeneratedBody)
+
+    -- Local chat only; nothing leaves the client.
+    if not generatedIntact then
+        ns.Print("The generated lines are managed by the addon and have been restored. " ..
+            "Anything left over was kept below as one of your own lines. Use /pa to set the target.", "F8C300")
+    end
 
     if userAdded == ns.GetUserAdded(variant) then
         return false
@@ -363,7 +427,12 @@ function ns.AnnounceMacroTarget(targetName)
     end
 end
 
-function ns.UpdateMacro()
+-- reportAssignment: true only for deliberate assignments (/pa, the minimap
+-- button, the "Update Macro" button). Those report the target and may announce
+-- it. Everything else rebuilds with the stored target and stays silent, so
+-- changing a setting never reassigns the macros or spams chat.
+-- The target itself is captured in ns.RequestMacroUpdate, not here.
+function ns.UpdateMacro(reportAssignment)
     if MacroFrame and MacroFrame:IsShown() then
         ns.Print("Can't update the macro while the Macro Frame is open. Please close it and try again.", "F82C00")
         return
@@ -373,7 +442,7 @@ function ns.UpdateMacro()
 
     local isCharacterMacro = ns.IsCharacterMacroScope()
     local tabName = isCharacterMacro and "character" or "general"
-    local targetName = UnitName("target") or ""
+    local targetName = ns.GetAssignedTarget()
 
     -- Count what has to be created before touching anything, so a tab that is
     -- too full can never leave the player with a half-applied set of macros.
@@ -434,27 +503,41 @@ function ns.UpdateMacro()
             " macro tab. Please drag them back onto your action bar.", "F8C300")
     end
 
-    if targetName ~= "" then
-        ns.Print("New PI target: " .. (ns.GetTargetDisplayName() or targetName), "90EE90")
-        ns.AnnounceMacroTarget(targetName)
-    else
-        ns.Print("Macro updated without a target. It will default to your current target or yourself.", "A5AAD9")
+    -- Only a deliberate assignment reports the target or announces it.
+    if reportAssignment then
+        if targetName ~= "" then
+            ns.Print("New PI target: " .. (ns.GetTargetDisplayName(targetName) or targetName), "90EE90")
+            ns.AnnounceMacroTarget(targetName)
+        else
+            ns.Print("Macro updated without a target. It will default to your current target or yourself.", "A5AAD9")
+        end
     end
 
     ns.RefreshConfigPanel()
 end
 
-function ns.RequestMacroUpdate()
+function ns.RequestMacroUpdate(assignTarget)
+    -- Capture immediately: in combat the update is queued, and by the time it
+    -- runs the player may well be targeting something else.
+    if assignTarget and not ns.CaptureAssignedTarget() then
+        return false
+    end
+
     if ns.IsCombatLockdownActive() then
         if not state.pendingMacroUpdate then
             ns.Print("Macro update queued until combat ends.", "F8C300")
         end
+
         state.pendingMacroUpdate = true
+        -- A queued assignment must stay an assignment, even if a plain rebuild
+        -- is requested afterwards while still in combat.
+        state.pendingAssignTarget = state.pendingAssignTarget or (assignTarget and true or false)
         return false
     end
 
     state.pendingMacroUpdate = false
-    ns.UpdateMacro()
+    state.pendingAssignTarget = false
+    ns.UpdateMacro(assignTarget)
     return true
 end
 

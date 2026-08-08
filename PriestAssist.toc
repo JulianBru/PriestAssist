@@ -1,5 +1,5 @@
 ## Interface: 120000, 120001, 120005, 120007, 120100
-## Version: 1.0
+## Version: 1.1
 ## Title: Priest Assist
 ## Author: CheersItsJulian
 ## SavedVariables: PriestAssistDB
