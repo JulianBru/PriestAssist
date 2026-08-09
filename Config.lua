@@ -1,6 +1,7 @@
 local _, ns = ...
 local UI = ns.UI
 local frames = ns.frames
+local state = ns.state
 local configControls = frames.configControls
 
 -- ─── Panel layout constants ───────────────────────────────────────────────────
@@ -8,7 +9,9 @@ local configControls = frames.configControls
 -- Accent line (2px) + title bar (34px) + separator (1px) = content starts at y=-37.
 
 local W          = 520
-local H          = 490
+-- Raised in 1.2: the Macro tab gained the profile selector and the announce
+-- checkbox, which left the text field without usable height at 490.
+local H          = 560
 local HEADER_END = 37   -- y-offset where header ends (px from panel top)
 local TAB_H      = 28
 local FOOTER_H   = 46
@@ -66,38 +69,64 @@ function ns.RefreshConfigPanel()
     if not frames.configPanel then return end
     local db = ns.GetDB()
     local cc = configControls
+    local profile = ns.GetActiveProfile()
+    local profileKey = ns.GetActiveProfileKey()
 
     if cc.reminderEnabled     then cc.reminderEnabled:SetChecked(db.reminderEnabled and true or false) end
-    if cc.announceTarget      then cc.announceTarget:SetChecked(db.announceTarget and true or false) end
     if cc.minimapEnabled      then cc.minimapEnabled:SetChecked(not (db.minimap and db.minimap.hidden)) end
     if cc.durationSlider      then cc.durationSlider:SetValue(db.reminderDuration or ns.DEFAULTS.reminderDuration) end
     if cc.fontSizeSlider      then cc.fontSizeSlider:SetValue(db.reminderFontSize or ns.DEFAULTS.reminderFontSize) end
-    if cc.macroVariant        then cc.macroVariant:SetSelectedValue(db.macroVariant or ns.DEFAULTS.macroVariant) end
     if cc.macroScope          then cc.macroScope:SetSelectedValue(db.macroScope or ns.DEFAULTS.macroScope) end
-    if cc.combatPotion        then cc.combatPotion:SetSelectedValue(db.combatPotion or ns.DEFAULTS.combatPotion) end
-    if cc.combatPotionQuality then cc.combatPotionQuality:SetSelectedValue(db.combatPotionQuality or ns.DEFAULTS.combatPotionQuality) end
-    if cc.trinketSlot         then cc.trinketSlot:SetSelectedValue(db.trinketSlot or ns.DEFAULTS.trinketSlot) end
     if cc.reminderStrata      then cc.reminderStrata:SetSelectedValue(db.reminderStrata or ns.DEFAULTS.reminderStrata) end
     if cc.fontDropdown        then
         cc.fontDropdown:SetItems(ns.GetFontDropdownItems())
         cc.fontDropdown:SetSelectedValue(db.reminderFont or ns.DEFAULTS.reminderFont)
     end
     if cc.outlineDropdown     then cc.outlineDropdown:SetSelectedValue(db.reminderOutline or ns.DEFAULTS.reminderOutline) end
+
+    -- Profile-bound controls
+    if cc.profileSelect       then cc.profileSelect:SetSelectedValue(profileKey) end
+    if cc.announceTarget      then cc.announceTarget:SetChecked(profile.announceTarget and true or false) end
+    if cc.macroVariant        then cc.macroVariant:SetSelectedValue(profile.macroVariant or ns.PROFILE_DEFAULTS.macroVariant) end
+    if cc.combatPotion        then cc.combatPotion:SetSelectedValue(profile.combatPotion or ns.PROFILE_DEFAULTS.combatPotion) end
+    if cc.combatPotionQuality then cc.combatPotionQuality:SetSelectedValue(profile.combatPotionQuality or ns.PROFILE_DEFAULTS.combatPotionQuality) end
+    if cc.trinketSlot         then cc.trinketSlot:SetSelectedValue(profile.trinketSlot or ns.PROFILE_DEFAULTS.trinketSlot) end
     if cc.voidformPotionWarning then
         cc.voidformPotionWarning:SetText(ns.GetVoidformPotionWarningText())
-        cc.voidformPotionWarning:SetShown(ns.ShouldShowVoidformPotionWarning())
+        cc.voidformPotionWarning:SetShown(ns.ShouldShowVoidformPotionWarning(profile))
     end
+
+    -- Profiles tab
+    if cc.autoSwitchProfiles then cc.autoSwitchProfiles:SetChecked(db.autoSwitchProfiles and true or false) end
+    for _, contentType in ipairs(ns.CONTENT_ORDER) do
+        local dropdown = cc.contentProfile and cc.contentProfile[contentType]
+        if dropdown then
+            dropdown:SetSelectedValue(db.contentProfiles[contentType])
+            dropdown:SetAlpha(db.autoSwitchProfiles and 1.0 or 0.4)
+            -- The clickable part is the inner button, not the container.
+            if dropdown.button then
+                dropdown.button:EnableMouse(db.autoSwitchProfiles and true or false)
+            end
+        end
+    end
+    if cc.contentStatus then
+        local contentType = ns.GetCurrentContentType()
+        cc.contentStatus:SetText("Currently in: " .. ns.GetContentDisplayName(contentType) ..
+            "   \194\187   profile \"" .. ns.GetProfileDisplayName(ns.GetProfileForContent(contentType)) .. "\"")
+    end
+    if cc.profileList then cc.profileList:Refresh() end
+
     -- Never overwrite the field while the user is typing in it.
     if cc.macroText and not cc.macroText:IsFocused() then
-        local variant = db.macroVariant or ns.DEFAULTS.macroVariant
-        local generatedBody = ns.BuildGeneratedMacroBody(variant)
-        local macroBody = ns.BuildMacroBody(variant)
+        local variant = profile.macroVariant or ns.PROFILE_DEFAULTS.macroVariant
+        local generatedBody = ns.BuildGeneratedMacroBody(variant, profile)
+        local macroBody = ns.BuildMacroBody(variant, profile)
 
-        -- Remember which macro the content belongs to, and exactly which lines
-        -- were shown as generated. A commit is split against that snapshot, so
-        -- neither a variant switch nor a target change in between can misfile
-        -- the player's own lines.
+        -- Remember which macro and profile the content belongs to, and exactly
+        -- which lines were shown as generated. A commit is split against that
+        -- snapshot, so no switch in between can misfile the player's own lines.
         cc.macroText._variant = variant
+        cc.macroText._profile = profileKey
         cc.macroText._generated = generatedBody
         cc.macroText:SetText(macroBody)
         UpdateMacroTextCounter(macroBody)
@@ -222,11 +251,12 @@ function ns.CreateConfigPanel()
     local tabGeneral  = MakeTab()
     local tabReminder = MakeTab()
     local tabMacro    = MakeTab()
+    local tabProfiles = MakeTab()
     local tabAbout    = MakeTab()
-    local tabFrames   = { tabGeneral, tabReminder, tabMacro, tabAbout }
+    local tabFrames   = { tabGeneral, tabReminder, tabMacro, tabProfiles, tabAbout }
 
     -- ── Tab button system ─────────────────────────────────────────────────────
-    local tabDefs    = { "General", "Reminder", "Macro", "About" }
+    local tabDefs    = { "General", "Reminder", "Macro", "Profiles", "About" }
     local tabButtons = {}
     local activeTab  = 0
 
@@ -291,14 +321,6 @@ function ns.CreateConfigPanel()
         ns.ApplyVoidAccentToCheckButton(configControls.reminderEnabled)
         configControls.reminderEnabled:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -14)
 
-        configControls.announceTarget = UI.CreateCheckButton(p,
-            "Announce target in party or raid chat",
-            function(checked)
-                ns.GetDB().announceTarget = checked and true or false
-            end)
-        ns.ApplyVoidAccentToCheckButton(configControls.announceTarget)
-        configControls.announceTarget:SetPoint("TOPLEFT", configControls.reminderEnabled, "BOTTOMLEFT", 0, -10)
-
         configControls.minimapEnabled = UI.CreateCheckButton(p,
             "Show minimap button",
             function(checked)
@@ -307,7 +329,25 @@ function ns.CreateConfigPanel()
                 ns.UpdateMinimapButtonVisibility()
             end)
         ns.ApplyVoidAccentToCheckButton(configControls.minimapEnabled)
-        configControls.minimapEnabled:SetPoint("TOPLEFT", configControls.announceTarget, "BOTTOMLEFT", 0, -10)
+        configControls.minimapEnabled:SetPoint("TOPLEFT", configControls.reminderEnabled, "BOTTOMLEFT", 0, -10)
+
+        -- Global on purpose: there are exactly two macros, they cannot change
+        -- tab per zone without losing their action bar placement.
+        local secMacros = SectionHeader(p, "Macros", configControls.minimapEnabled, -22)
+
+        configControls.macroScope = UI.CreateDropdown(p, CONTENT_W, 4)
+        ns.ApplyVoidAccentToDropdown(configControls.macroScope)
+        configControls.macroScope:SetPoint("TOPLEFT", secMacros, "BOTTOMLEFT", 0, -20)
+        configControls.macroScope:SetLabel("Macro Tab", accent)
+        configControls.macroScope:SetItems(ns.MACRO_SCOPE_OPTIONS)
+        configControls.macroScope:SetOnSelect(function(value)
+            local d = ns.GetDB()
+            if d.macroScope == value then return end
+
+            d.macroScope = value
+            ns.RequestMacroUpdate()
+            ns.RefreshConfigPanel()
+        end)
     end
 
     -- ── TAB 2: Reminder ───────────────────────────────────────────────────────
@@ -384,15 +424,29 @@ function ns.CreateConfigPanel()
     end
 
     -- ── TAB 3: Macro ──────────────────────────────────────────────────────────
+    -- Everything on this tab belongs to the selected profile.
     do
-        local p   = tabMacro
-        local sec = SectionHeader(p, "Settings")
+        local p       = tabMacro
+        local secProf = SectionHeader(p, "Profile")
 
-        -- Variant + location share one row (two columns)
+        configControls.profileSelect = UI.CreateDropdown(p, CONTENT_W, 4)
+        ns.ApplyVoidAccentToDropdown(configControls.profileSelect)
+        configControls.profileSelect:SetPoint("TOPLEFT", secProf, "BOTTOMLEFT", 0, -20)
+        configControls.profileSelect:SetLabel("Editing", accent)
+        configControls.profileSelect:SetItems(ns.PROFILE_OPTIONS)
+        configControls.profileSelect:SetOnSelect(function(value)
+            -- Selecting a profile also activates it. Auto-switching overrides
+            -- that again on the next content change.
+            ns.SetActiveProfile(value)
+        end)
+
+        local sec = SectionHeader(p, "Settings", configControls.profileSelect, -14)
+
+        -- Primary macro + trinket share one row (two columns)
         local VARIANT_W = math.floor(CONTENT_W * 0.55)
-        local SCOPE_W   = CONTENT_W - VARIANT_W - 8
+        local TRINKET_W = CONTENT_W - VARIANT_W - 8
 
-        configControls.macroVariant = UI.CreateDropdown(p, VARIANT_W, 8)
+        configControls.macroVariant = UI.CreateDropdown(p, VARIANT_W, 4)
         ns.ApplyVoidAccentToDropdown(configControls.macroVariant)
         configControls.macroVariant:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -20)
         -- The primary macro carries the shared cooldowns (trinket, Power
@@ -406,63 +460,54 @@ function ns.CreateConfigPanel()
             end
         end)
 
-        configControls.macroScope = UI.CreateDropdown(p, SCOPE_W, 4)
-        ns.ApplyVoidAccentToDropdown(configControls.macroScope)
-        configControls.macroScope:SetPoint("TOPLEFT", configControls.macroVariant, "TOPRIGHT", 8, 0)
-        configControls.macroScope:SetLabel("Macro Tab", accent)
-        configControls.macroScope:SetItems(ns.MACRO_SCOPE_OPTIONS)
-        configControls.macroScope:SetOnSelect(function(value)
-            local d = ns.GetDB()
-            if d.macroScope == value then return end
-
-            d.macroScope = value
+        configControls.trinketSlot = UI.CreateDropdown(p, TRINKET_W, 4)
+        ns.ApplyVoidAccentToDropdown(configControls.trinketSlot)
+        configControls.trinketSlot:SetPoint("TOPLEFT", configControls.macroVariant, "TOPRIGHT", 8, 0)
+        configControls.trinketSlot:SetLabel("Trinket", accent)
+        configControls.trinketSlot:SetItems(ns.TRINKET_OPTIONS)
+        configControls.trinketSlot:SetOnSelect(function(value)
+            ns.GetActiveProfile().trinketSlot = value
             ns.RequestMacroUpdate()
             ns.RefreshConfigPanel()
         end)
 
-        configControls.combatPotion = UI.CreateDropdown(p, CONTENT_W, 8)
+        -- Potion + priority share the next row, keeping height for the text field.
+        local POTION_W  = math.floor(CONTENT_W * 0.55)
+        local QUALITY_W = CONTENT_W - POTION_W - 8
+
+        configControls.combatPotion = UI.CreateDropdown(p, POTION_W, 8)
         ns.ApplyVoidAccentToDropdown(configControls.combatPotion)
         configControls.combatPotion:SetPoint("TOPLEFT", configControls.macroVariant, "BOTTOMLEFT", 0, -34)
         configControls.combatPotion:SetLabel("Combat Potion", accent)
         configControls.combatPotion:SetItems(ns.COMBAT_POTION_OPTIONS)
         configControls.combatPotion:SetOnSelect(function(value)
-            local d = ns.GetDB()
-            d.combatPotion = value
-            ns.RequestMacroUpdate()
-            ns.RefreshConfigPanel()
-        end)
-
-        -- Potion priority + trinket share one row (two columns)
-        local QUALITY_W = math.floor(CONTENT_W * 0.55)
-        local TRINKET_W = CONTENT_W - QUALITY_W - 8
-
-        configControls.trinketSlot = UI.CreateDropdown(p, TRINKET_W, 4)
-        ns.ApplyVoidAccentToDropdown(configControls.trinketSlot)
-        configControls.trinketSlot:SetPoint("TOPLEFT", configControls.combatPotion, "BOTTOMLEFT", QUALITY_W + 8, -34)
-        configControls.trinketSlot:SetLabel("Trinket", accent)
-        configControls.trinketSlot:SetItems(ns.TRINKET_OPTIONS)
-        configControls.trinketSlot:SetOnSelect(function(value)
-            local d = ns.GetDB()
-            d.trinketSlot = value
+            ns.GetActiveProfile().combatPotion = value
             ns.RequestMacroUpdate()
             ns.RefreshConfigPanel()
         end)
 
         configControls.combatPotionQuality = UI.CreateDropdown(p, QUALITY_W, 4)
         ns.ApplyVoidAccentToDropdown(configControls.combatPotionQuality)
-        configControls.combatPotionQuality:SetPoint("TOPLEFT", configControls.combatPotion, "BOTTOMLEFT", 0, -34)
+        configControls.combatPotionQuality:SetPoint("TOPLEFT", configControls.combatPotion, "TOPRIGHT", 8, 0)
         configControls.combatPotionQuality:SetLabel("Potion Priority", accent)
         configControls.combatPotionQuality:SetItems(ns.COMBAT_POTION_QUALITY_OPTIONS)
         configControls.combatPotionQuality:SetOnSelect(function(value)
-            local d = ns.GetDB()
-            d.combatPotionQuality = tonumber(value) or ns.DEFAULTS.combatPotionQuality
+            ns.GetActiveProfile().combatPotionQuality = tonumber(value) or ns.PROFILE_DEFAULTS.combatPotionQuality
             ns.RequestMacroUpdate()
             ns.RefreshConfigPanel()
         end)
 
+        configControls.announceTarget = UI.CreateCheckButton(p,
+            "Announce target in party or raid chat",
+            function(checked)
+                ns.GetActiveProfile().announceTarget = checked and true or false
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.announceTarget)
+        configControls.announceTarget:SetPoint("TOPLEFT", configControls.combatPotion, "BOTTOMLEFT", 0, -14)
+
         -- Voidform warning (shown only when relevant)
         configControls.voidformPotionWarning = UI.CreateFontString(p, "", "gold")
-        configControls.voidformPotionWarning:SetPoint("TOPLEFT",  configControls.combatPotionQuality, "BOTTOMLEFT",  0, -14)
+        configControls.voidformPotionWarning:SetPoint("TOPLEFT",  configControls.announceTarget, "BOTTOMLEFT",  0, -12)
         configControls.voidformPotionWarning:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, 0)
         configControls.voidformPotionWarning:SetJustifyH("LEFT")
         configControls.voidformPotionWarning:SetJustifyV("TOP")
@@ -471,7 +516,7 @@ function ns.CreateConfigPanel()
         -- ── Editable macro text ───────────────────────────────────────────────
         -- Shows the complete macro. The generated lines are rebuilt on every
         -- update; anything below them is kept as the user's own addition.
-        local secText = SectionHeader(p, "Macro Text", configControls.voidformPotionWarning, -18)
+        local secText = SectionHeader(p, "Macro Text", configControls.voidformPotionWarning, -16)
 
         configControls.macroText = UI.CreateEditBox(p, CONTENT_W, 120)
         configControls.macroText:SetAccent(accent)
@@ -494,12 +539,117 @@ function ns.CreateConfigPanel()
         configControls.macroText:SetOnCommit(function(text)
             ns.ApplyMacroTextFromPanel(text,
                 configControls.macroText._variant,
-                configControls.macroText._generated)
+                configControls.macroText._generated,
+                configControls.macroText._profile)
             ns.RefreshConfigPanel()
         end)
     end
 
-    -- ── TAB 4: About ──────────────────────────────────────────────────────────
+    -- ── TAB 4: Profiles ───────────────────────────────────────────────────────
+    do
+        local p   = tabProfiles
+        local sec = SectionHeader(p, "Profiles")
+
+        -- Read-only list for now; free naming and management can follow later.
+        local listFrame = CreateFrame("Frame", nil, p, BackdropTemplateMixin and "BackdropTemplate" or nil)
+        listFrame:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -14)
+        listFrame:SetSize(CONTENT_W, #ns.PROFILE_ORDER * 22 + 12)
+        if listFrame.SetBackdrop then
+            listFrame:SetBackdrop({
+                bgFile   = "Interface\\Buttons\\WHITE8x8",
+                edgeFile = "Interface\\Buttons\\WHITE8x8",
+                edgeSize = 1,
+                insets   = { left = 1, right = 1, top = 1, bottom = 1 },
+            })
+            local wr, wg, wb = UI.GetColorRGB("bgWidget")
+            listFrame:SetBackdropColor(wr, wg, wb, 1)
+            listFrame:SetBackdropBorderColor(sr, sg, sb, 1)
+        end
+
+        local rows = {}
+
+        for index, key in ipairs(ns.PROFILE_ORDER) do
+            local row = CreateFrame("Button", nil, listFrame)
+            row:SetPoint("TOPLEFT", listFrame, "TOPLEFT", 6, -(6 + (index - 1) * 22))
+            row:SetPoint("TOPRIGHT", listFrame, "TOPRIGHT", -6, -(6 + (index - 1) * 22))
+            row:SetHeight(22)
+
+            row.label = UI.CreateFontString(row, ns.GetProfileDisplayName(key), "text")
+            row.label:SetPoint("LEFT", 4, 0)
+
+            row.marker = UI.CreateFontString(row, "", accent, "FONT_SMALL")
+            row.marker:SetPoint("RIGHT", -4, 0)
+
+            row.profileKey = key
+            row:SetScript("OnClick", function() ns.SetActiveProfile(key) end)
+            row:SetScript("OnEnter", function(self) self.label:SetColor(accent) end)
+            row:SetScript("OnLeave", function(self)
+                self.label:SetColor(self.profileKey == ns.GetActiveProfileKey() and accent or "text")
+            end)
+
+            rows[#rows + 1] = row
+        end
+
+        function listFrame:Refresh()
+            local activeKey = ns.GetActiveProfileKey()
+
+            for _, row in ipairs(rows) do
+                local isActive = (row.profileKey == activeKey)
+                row.label:SetColor(isActive and accent or "text")
+                row.marker:SetText(isActive and "\226\151\143 active" or "")
+            end
+        end
+
+        configControls.profileList = listFrame
+
+        -- ── Automatic switching ───────────────────────────────────────────────
+        local secAuto = SectionHeader(p, "Automatic Switching", listFrame, -22)
+
+        configControls.autoSwitchProfiles = UI.CreateCheckButton(p,
+            "Switch profile automatically based on content",
+            function(checked)
+                ns.GetDB().autoSwitchProfiles = checked and true or false
+                ns.RefreshConfigPanel()
+
+                if checked then
+                    -- Apply straight away instead of waiting for a zone change.
+                    state.lastContentType = nil
+                    ns.CheckContentProfile()
+                end
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.autoSwitchProfiles)
+        configControls.autoSwitchProfiles:SetPoint("TOPLEFT", secAuto, "BOTTOMLEFT", 0, -14)
+
+        -- Five mappings in two columns to stay inside the panel height.
+        local MAP_W = math.floor((CONTENT_W - 12) / 2)
+
+        configControls.contentProfile = {}
+
+        for index, contentType in ipairs(ns.CONTENT_ORDER) do
+            local column = (index - 1) % 2
+            local rowIdx = math.floor((index - 1) / 2)
+
+            local dropdown = UI.CreateDropdown(p, MAP_W, 4)
+            ns.ApplyVoidAccentToDropdown(dropdown)
+            dropdown:SetPoint("TOPLEFT", configControls.autoSwitchProfiles, "BOTTOMLEFT",
+                column * (MAP_W + 12), -(20 + rowIdx * 46))
+            dropdown:SetLabel(ns.GetContentDisplayName(contentType), accent)
+            dropdown:SetItems(ns.PROFILE_OPTIONS)
+            dropdown:SetOnSelect(function(value)
+                ns.GetDB().contentProfiles[contentType] = value
+                state.lastContentType = nil
+                ns.CheckContentProfile()
+                ns.RefreshConfigPanel()
+            end)
+
+            configControls.contentProfile[contentType] = dropdown
+        end
+
+        configControls.contentStatus = UI.CreateFontString(p, "", "textDim", "FONT_SMALL")
+        configControls.contentStatus:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 0, 4)
+    end
+
+    -- ── TAB 5: About ──────────────────────────────────────────────────────────
     do
         local p   = tabAbout
         local sec = SectionHeader(p, "About")
@@ -558,16 +708,24 @@ function ns.CreateConfigPanel()
     -- Elevate all dropdown lists above the panel
     local function ElevateAll()
         local level = (configPanel:GetFrameLevel() or 1) + 50
-        for _, dd in ipairs({
+        local dropdowns = {
             configControls.fontDropdown,
             configControls.outlineDropdown,
             configControls.reminderStrata,
+            configControls.profileSelect,
             configControls.macroVariant,
             configControls.macroScope,
             configControls.combatPotion,
             configControls.combatPotionQuality,
             configControls.trinketSlot,
-        }) do
+        }
+
+        for _, contentType in ipairs(ns.CONTENT_ORDER) do
+            dropdowns[#dropdowns + 1] = configControls.contentProfile
+                and configControls.contentProfile[contentType]
+        end
+
+        for _, dd in ipairs(dropdowns) do
             Elevate(dd, configPanel)
             if dd and dd.list then dd.list:SetFrameLevel(level) end
         end

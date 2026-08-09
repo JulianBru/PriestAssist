@@ -129,20 +129,81 @@ ns.OUTLINE_OPTIONS = {
     { text = "Thick Outline", value = "THICKOUTLINE" },
 }
 
-ns.DEFAULTS = {
+-- ─── Profiles ────────────────────────────────────────────────────────────────
+-- Fixed set for now. Free naming can follow later without touching the model.
+
+-- One profile per content type, so the two lists line up.
+ns.PROFILE_ORDER = { "world", "delve", "dungeon", "raid", "pvp" }
+
+ns.PROFILE_NAMES = {
+    world   = "Open World",
+    delve   = "Delves",
+    dungeon = "Dungeon",
+    raid    = "Raid",
+    pvp     = "PvP",
+}
+
+ns.PROFILE_OPTIONS = {}
+for _, key in ipairs(ns.PROFILE_ORDER) do
+    ns.PROFILE_OPTIONS[#ns.PROFILE_OPTIONS + 1] = { text = ns.PROFILE_NAMES[key], value = key }
+end
+
+-- Content types the addon can detect. Dungeon and Mythic+ deliberately share
+-- one type, so the key going live mid-instance never triggers a switch.
+ns.CONTENT_ORDER = { "world", "delve", "dungeon", "raid", "pvp" }
+
+ns.CONTENT_NAMES = {
+    world   = "Open World",
+    delve   = "Delves",
+    dungeon = "Dungeon",
+    raid    = "Raid",
+    pvp     = "PvP",
+}
+
+-- Delves report as a scenario, so this difficulty has to be checked first.
+ns.DELVE_DIFFICULTY_ID = 208
+
+-- Same problem for these: PvP content that GetInstanceInfo reports as a
+-- scenario, so the instance type alone would file them under Open World.
+-- 25 and 32 are "World PvP Scenario", 45 is "PvP".
+ns.PVP_DIFFICULTY_IDS = {
+    [25] = true,
+    [32] = true,
+    [45] = true,
+}
+
+-- Settings that live inside a profile.
+ns.PROFILE_DEFAULTS = {
     userAddedByVariant = {
         standalone = "",
         voidform   = "",
     },
     macroVariant = "standalone",
-    macroScope = "general",
-    -- The player you assigned with /pa. Kept so that changing a setting
-    -- rebuilds the macros without silently reassigning them.
-    assignedTarget = "",
     combatPotion = "none",
     combatPotionQuality = 2,
     trinketSlot = "13",
     announceTarget = false,
+}
+
+-- Note: `profiles` is intentionally absent here. It is built per profile key in
+-- ns.InitializeDatabase, because CopyDefaults cannot express "one entry per key".
+ns.DEFAULTS = {
+    contentProfiles = {
+        world   = "world",
+        delve   = "delve",
+        dungeon = "dungeon",
+        raid    = "raid",
+        pvp     = "pvp",
+    },
+    autoSwitchProfiles = false,
+    -- One selected profile: it is both what the panel edits and what the macros
+    -- are built from. Auto-switching simply changes this on a content change.
+    activeProfile = "world",
+
+    macroScope = "general",
+    -- The player you assigned with /pa. Kept so that changing a setting
+    -- rebuilds the macros without silently reassigning them.
+    assignedTarget = "",
     reminderEnabled = true,
     reminderDuration = 5,
     reminderEnterDelay = 2,
@@ -316,6 +377,42 @@ function ns.ApplyVoidAccentToDropdown(dropdown)
     end
 end
 
+-- The settings that moved into profiles in 1.2. Read off the old flat table so
+-- an upgrade keeps behaving exactly as before.
+local LEGACY_PROFILE_KEYS = {
+    "macroVariant", "combatPotion", "combatPotionQuality",
+    "trinketSlot", "announceTarget", "userAddedByVariant",
+}
+
+local function MigrateProfiles(existingData)
+    if type(existingData.profiles) == "table" then
+        return
+    end
+
+    local carried = {}
+    local hasLegacy = false
+
+    for _, key in ipairs(LEGACY_PROFILE_KEYS) do
+        if existingData[key] ~= nil then
+            carried[key] = existingData[key]
+            hasLegacy = true
+        end
+        existingData[key] = nil
+    end
+
+    -- Every profile starts from the old settings, so switching between them
+    -- changes nothing until the player actually edits one.
+    existingData.profiles = {}
+
+    for _, key in ipairs(ns.PROFILE_ORDER) do
+        existingData.profiles[key] = ns.CopyDefaults(ns.PROFILE_DEFAULTS, ns.CopyDefaults(carried, {}))
+    end
+
+    if hasLegacy then
+        ns.pendingProfileMigrationNotice = true
+    end
+end
+
 function ns.InitializeDatabase()
     local existingData = PriestAssistDB
 
@@ -328,22 +425,51 @@ function ns.InitializeDatabase()
     local sharedUserAdded = existingData.userAdded
     existingData.userAdded = nil
 
+    MigrateProfiles(existingData)
+
     PriestAssistDB = ns.CopyDefaults(ns.DEFAULTS, existingData)
 
+    -- Fill in any profile the stored data does not have yet.
+    PriestAssistDB.profiles = PriestAssistDB.profiles or {}
+
+    for _, key in ipairs(ns.PROFILE_ORDER) do
+        PriestAssistDB.profiles[key] = ns.CopyDefaults(ns.PROFILE_DEFAULTS, PriestAssistDB.profiles[key])
+    end
+
     if type(sharedUserAdded) == "string" and sharedUserAdded ~= "" then
-        local variant = PriestAssistDB.macroVariant
-        if variant ~= "standalone" and variant ~= "voidform" then
-            variant = ns.DEFAULTS.macroVariant
+        for _, key in ipairs(ns.PROFILE_ORDER) do
+            local profile = PriestAssistDB.profiles[key]
+            local variant = profile.macroVariant
+
+            if variant ~= "standalone" and variant ~= "voidform" then
+                variant = ns.PROFILE_DEFAULTS.macroVariant
+            end
+
+            profile.userAddedByVariant[variant] = sharedUserAdded
         end
-        PriestAssistDB.userAddedByVariant[variant] = sharedUserAdded
     end
 
     -- Stored text already contains real line breaks, so it must not go through
     -- ns.NormalizeUserAdded — that one splits on slashes and would insert an
     -- extra blank line on every login.
-    for _, variant in ipairs(ns.MACRO_VARIANT_ORDER) do
-        PriestAssistDB.userAddedByVariant[variant] =
-            ns.NormalizeUserAddedLines(PriestAssistDB.userAddedByVariant[variant])
+    for _, key in ipairs(ns.PROFILE_ORDER) do
+        local profile = PriestAssistDB.profiles[key]
+
+        for _, variant in ipairs(ns.MACRO_VARIANT_ORDER) do
+            profile.userAddedByVariant[variant] =
+                ns.NormalizeUserAddedLines(profile.userAddedByVariant[variant])
+        end
+    end
+
+    -- Guard against a stored profile key that no longer exists.
+    if not PriestAssistDB.profiles[PriestAssistDB.activeProfile] then
+        PriestAssistDB.activeProfile = ns.DEFAULTS.activeProfile
+    end
+
+    for _, contentType in ipairs(ns.CONTENT_ORDER) do
+        if not PriestAssistDB.profiles[PriestAssistDB.contentProfiles[contentType]] then
+            PriestAssistDB.contentProfiles[contentType] = ns.DEFAULTS.contentProfiles[contentType]
+        end
     end
 
     -- Belt and braces: a secret value must never survive into a macro body.

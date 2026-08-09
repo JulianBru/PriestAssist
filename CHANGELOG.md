@@ -1,5 +1,27 @@
 # Priest Assist
 
+## 1.2-alpha (2026-08-08)
+
+Not a release build. Profiles are new and largely untested in the field — please report anything odd.
+
+### Added
+
+- **Profiles.** Five of them, one per content type: Open World, Delves, Dungeon, Raid and PvP. Each carries its own primary macro, combat potion, potion priority, trinket slot, target announcement and custom macro lines.
+- **Automatic switching by content.** Off by default. Turn it on in the new Profiles tab and map each kind of content to a profile — Open World, Delves, Dungeon, Raid and PvP. Detection is state based, so it covers every way in and out, including hearthing out of a raid mid-run.
+- **Profiles tab** showing the profile list, the content mapping and a live readout of what the addon currently detects.
+
+### Changed
+
+- The Macro tab is now entirely profile-bound. `Macro Tab` moved to the General tab, because two macros cannot change tab per zone without losing their action bar spot; `Announce target in party or raid chat` moved here from General, because announcing in a raid but not in the open world is exactly what profiles are for.
+- The config window grew from 490 to 560 pixels tall to fit the profile selector without shrinking the macro text field.
+- `/pa mode` now sets the primary macro of the selected profile.
+
+### Notes
+
+- Mythic+ deliberately shares the Dungeon profile. A key going live flips the difficulty from 23 to 8, but the content type stays `dungeon`, so nothing is rewritten mid-instance. Separating the two is a small change if it turns out to be wanted.
+- Switching profiles uses the silent update path introduced in 1.1: the assigned target is untouched and nothing is posted to chat.
+- Your 1.1 settings are copied into **all five** profiles on first login, so nothing changes until you edit one or enable automatic switching.
+
 ## [1.1](https://github.com/JulianBru/PriestAssist/tree/1.1) (2026-08-08)
 
 ### Changed

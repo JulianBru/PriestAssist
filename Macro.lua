@@ -63,16 +63,175 @@ function ns.BuildPowerInfusionLines(targetName)
     return firstLine .. "\n/cast [@player] " .. spellName
 end
 
-function ns.BuildCombatPotionLines(macroVariant)
+-- ─── Profile access ──────────────────────────────────────────────────────────
+-- There is exactly one selected profile. It is what the config panel edits and
+-- what the macros are built from; auto-switching just changes which one it is.
+
+function ns.GetProfile(key)
     local db = ns.GetDB()
-    local potionData = ns.COMBAT_POTIONS[db.combatPotion or "none"]
+    local profiles = db.profiles or {}
+
+    return profiles[key] or profiles[db.activeProfile] or profiles[ns.DEFAULTS.activeProfile]
+end
+
+function ns.GetActiveProfile()
+    return ns.GetProfile(ns.GetDB().activeProfile)
+end
+
+function ns.GetActiveProfileKey()
+    return ns.GetDB().activeProfile
+end
+
+function ns.GetProfileDisplayName(key)
+    return ns.PROFILE_NAMES[key] or tostring(key)
+end
+
+function ns.GetContentDisplayName(contentType)
+    return ns.CONTENT_NAMES[contentType] or tostring(contentType)
+end
+
+-- Solo Shuffle and Battleground Blitz (Solo RBG in the API) run on arena and
+-- battleground maps, so the instance type should already report them. Checking
+-- the queue mode as well means a mode the instance type does not cover still
+-- lands in the PvP profile. Every call is guarded: these are newer APIs.
+local PVP_QUEUE_CHECKS = {
+    "IsSoloShuffle", "IsRatedSoloShuffle",
+    "IsSoloRBG", "IsRatedSoloRBG",
+    "IsBrawlSoloShuffle", "IsBrawlSoloRBG",
+}
+
+local function IsPvPQueueMode()
+    if type(C_PvP) ~= "table" then
+        return false
+    end
+
+    for _, name in ipairs(PVP_QUEUE_CHECKS) do
+        local check = C_PvP[name]
+
+        if type(check) == "function" then
+            local ok, result = pcall(check)
+            if ok and result then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
+-- Which kind of content the player is in right now. State based on purpose:
+-- asking "where am I" covers every way in and out, including hearthing out of
+-- a raid, a disconnect or a /reload inside the instance.
+function ns.GetCurrentContentType()
+    local inInstance, instanceType = IsInInstance()
+
+    if not inInstance then
+        return "world"
+    end
+
+    local _, _, difficultyID = GetInstanceInfo()
+
+    -- Delves report as a scenario, so this has to be checked first.
+    if difficultyID == ns.DELVE_DIFFICULTY_ID then
+        return "delve"
+    end
+
+    -- PvP content that reports as a scenario, same reason as Delves above.
+    if ns.PVP_DIFFICULTY_IDS[difficultyID] then
+        return "pvp"
+    end
+
+    -- Only meaningful inside an instance; the queue flags can be set earlier.
+    if IsPvPQueueMode() then
+        return "pvp"
+    end
+
+    if instanceType == "party" then
+        return "dungeon"        -- Mythic+ deliberately shares this type
+    end
+
+    if instanceType == "raid" then
+        return "raid"
+    end
+
+    if instanceType == "pvp" or instanceType == "arena" then
+        return "pvp"
+    end
+
+    return "world"              -- scenarios, Torghast, anything else
+end
+
+function ns.GetProfileForContent(contentType)
+    local mapped = ns.GetDB().contentProfiles[contentType]
+    return ns.GetDB().profiles[mapped] and mapped or ns.DEFAULTS.activeProfile
+end
+
+-- Switches the selected profile and rebuilds. Uses the silent update path, so
+-- the assigned target is untouched and nothing is posted to chat.
+function ns.SetActiveProfile(key, reason)
+    local db = ns.GetDB()
+
+    if not db.profiles[key] or db.activeProfile == key then
+        return false
+    end
+
+    db.activeProfile = key
+    ns.Print("Profile \"" .. ns.GetProfileDisplayName(key) .. "\" activated" ..
+        (reason and (" (" .. reason .. ")") or "") .. ".", "A5AAD9")
+    ns.RequestMacroUpdate()
+    ns.RefreshConfigPanel()
+    return true
+end
+
+-- Compares the content type, never the difficultyID: a Mythic dungeon turning
+-- into a Mythic+ run flips difficulty 23 to 8 but stays "dungeon", so nothing
+-- is rewritten mid-instance.
+function ns.CheckContentProfile()
+    local db = ns.GetDB()
+    local contentType = ns.GetCurrentContentType()
+
+    if contentType == state.lastContentType then
+        return false
+    end
+
+    state.lastContentType = contentType
+
+    if not db.autoSwitchProfiles then
+        ns.RefreshConfigPanel()
+        return false
+    end
+
+    return ns.SetActiveProfile(ns.GetProfileForContent(contentType),
+        ns.GetContentDisplayName(contentType))
+end
+
+-- GetInstanceInfo can still report the previous zone right after a loading
+-- screen, so give it a moment. The reminder does the same thing.
+function ns.ScheduleContentProfileCheck(delay)
+    state.contentCheckToken = (state.contentCheckToken or 0) + 1
+
+    local token = state.contentCheckToken
+
+    C_Timer.After(delay or 1, function()
+        if token ~= state.contentCheckToken then
+            return
+        end
+
+        ns.CheckContentProfile()
+    end)
+end
+
+function ns.BuildCombatPotionLines(macroVariant, profile)
+    profile = profile or ns.GetActiveProfile()
+
+    local potionData = ns.COMBAT_POTIONS[profile.combatPotion or "none"]
     if not potionData then
         return nil
     end
 
-    local preferredQuality = tonumber(db.combatPotionQuality) or ns.DEFAULTS.combatPotionQuality
+    local preferredQuality = tonumber(profile.combatPotionQuality) or ns.PROFILE_DEFAULTS.combatPotionQuality
     if preferredQuality ~= 1 and preferredQuality ~= 2 then
-        preferredQuality = ns.DEFAULTS.combatPotionQuality
+        preferredQuality = ns.PROFILE_DEFAULTS.combatPotionQuality
     end
 
     local qualityOrder
@@ -96,8 +255,10 @@ function ns.BuildCombatPotionLines(macroVariant)
     return table.concat(lines, "\n")
 end
 
-function ns.BuildTrinketLines()
-    local slot = ns.GetDB().trinketSlot or ns.DEFAULTS.trinketSlot
+function ns.BuildTrinketLines(profile)
+    profile = profile or ns.GetActiveProfile()
+
+    local slot = profile.trinketSlot or ns.PROFILE_DEFAULTS.trinketSlot
 
     if slot == "13" then
         return "/use 13"
@@ -112,38 +273,40 @@ end
 
 -- The potion only ever goes into the primary macro, so the length warning
 -- applies when Voidform is the primary one.
-function ns.ShouldShowVoidformPotionWarning()
-    local db = ns.GetDB()
-    return db.macroVariant == "voidform" and (db.combatPotion or "none") ~= "none"
+function ns.ShouldShowVoidformPotionWarning(profile)
+    profile = profile or ns.GetActiveProfile()
+    return profile.macroVariant == "voidform" and (profile.combatPotion or "none") ~= "none"
 end
 
 function ns.GetVoidformPotionWarningText()
     return "The Voidform macro uses only one potion quality because WoW macros are limited to 255 characters."
 end
 
--- Falls back to the configured default for anything unexpected.
-function ns.ResolveMacroVariant(variant)
+-- Falls back to the profile's primary macro for anything unexpected.
+function ns.ResolveMacroVariant(variant, profile)
     if variant == "standalone" or variant == "voidform" then
         return variant
     end
 
-    local current = ns.GetDB().macroVariant
+    local current = (profile or ns.GetActiveProfile()).macroVariant
     if current == "standalone" or current == "voidform" then
         return current
     end
 
-    return ns.DEFAULTS.macroVariant
+    return ns.PROFILE_DEFAULTS.macroVariant
 end
 
-function ns.GetUserAdded(variant)
-    local db = ns.GetDB()
-    return (db.userAddedByVariant and db.userAddedByVariant[ns.ResolveMacroVariant(variant)]) or ""
+function ns.GetUserAdded(variant, profile)
+    profile = profile or ns.GetActiveProfile()
+
+    return (profile.userAddedByVariant
+        and profile.userAddedByVariant[ns.ResolveMacroVariant(variant, profile)]) or ""
 end
 
-function ns.SetUserAdded(variant, text)
-    local db = ns.GetDB()
-    db.userAddedByVariant = db.userAddedByVariant or {}
-    db.userAddedByVariant[ns.ResolveMacroVariant(variant)] = text or ""
+function ns.SetUserAdded(variant, text, profile)
+    profile = profile or ns.GetActiveProfile()
+    profile.userAddedByVariant = profile.userAddedByVariant or {}
+    profile.userAddedByVariant[ns.ResolveMacroVariant(variant, profile)] = text or ""
 end
 
 function ns.GetMacroIconForVariant(variant)
@@ -188,10 +351,11 @@ end
 -- Everything the addon generates itself, i.e. the macro without the user's own
 -- lines appended. Used both for building the final macro and for splitting the
 -- generated part back off the text the user edited in the config panel.
-function ns.BuildGeneratedMacroBody(variant)
-    variant = ns.ResolveMacroVariant(variant)
+function ns.BuildGeneratedMacroBody(variant, profile)
+    profile = profile or ns.GetActiveProfile()
+    variant = ns.ResolveMacroVariant(variant, profile)
 
-    local isPrimary = (variant == ns.ResolveMacroVariant(ns.GetDB().macroVariant))
+    local isPrimary = (variant == ns.ResolveMacroVariant(profile.macroVariant, profile))
     local targetName = ns.GetAssignedTarget()
     local lines = {}
 
@@ -207,7 +371,7 @@ function ns.BuildGeneratedMacroBody(variant)
     -- Trinket, Power Infusion and potion are shared cooldowns. They only go
     -- into the primary macro, so pressing the other one never fires them early.
     if isPrimary then
-        local trinketLines = ns.BuildTrinketLines()
+        local trinketLines = ns.BuildTrinketLines(profile)
         if trinketLines then
             lines[#lines + 1] = trinketLines
         end
@@ -216,7 +380,7 @@ function ns.BuildGeneratedMacroBody(variant)
             lines[#lines + 1] = ns.BuildPowerInfusionLines(targetName)
         end
 
-        local combatPotionLines = ns.BuildCombatPotionLines(variant)
+        local combatPotionLines = ns.BuildCombatPotionLines(variant, profile)
         if combatPotionLines then
             lines[#lines + 1] = combatPotionLines
         end
@@ -225,12 +389,13 @@ function ns.BuildGeneratedMacroBody(variant)
     return table.concat(lines, "\n"), targetName
 end
 
-function ns.BuildMacroBody(variant)
-    variant = ns.ResolveMacroVariant(variant)
+function ns.BuildMacroBody(variant, profile)
+    profile = profile or ns.GetActiveProfile()
+    variant = ns.ResolveMacroVariant(variant, profile)
 
-    local generatedBody, targetName = ns.BuildGeneratedMacroBody(variant)
+    local generatedBody, targetName = ns.BuildGeneratedMacroBody(variant, profile)
 
-    return generatedBody .. ns.GetUserAdded(variant), targetName
+    return generatedBody .. ns.GetUserAdded(variant, profile), targetName
 end
 
 local function SplitLines(text)
@@ -269,8 +434,8 @@ end
 --
 -- shownGeneratedBody is the block the panel actually displayed. Falling back to
 -- a freshly built one would misfire if the target changed while typing.
-function ns.ExtractUserAddedFromMacroText(fullText, variant, shownGeneratedBody)
-    local reference = shownGeneratedBody or ns.BuildGeneratedMacroBody(variant)
+function ns.ExtractUserAddedFromMacroText(fullText, variant, shownGeneratedBody, profile)
+    local reference = shownGeneratedBody or ns.BuildGeneratedMacroBody(variant, profile)
     local referenceLines = SplitLines(reference)
     local lines = SplitLines(fullText)
     local consumed = {}
@@ -304,11 +469,12 @@ function ns.ExtractUserAddedFromMacroText(fullText, variant, shownGeneratedBody)
 end
 
 -- Applies text edited in the config panel. Returns true when the macro changed.
-function ns.ApplyMacroTextFromPanel(fullText, variant, shownGeneratedBody)
-    variant = ns.ResolveMacroVariant(variant)
+function ns.ApplyMacroTextFromPanel(fullText, variant, shownGeneratedBody, profileKey)
+    local profile = profileKey and ns.GetProfile(profileKey) or ns.GetActiveProfile()
+    variant = ns.ResolveMacroVariant(variant, profile)
 
     local userAdded, generatedIntact =
-        ns.ExtractUserAddedFromMacroText(fullText, variant, shownGeneratedBody)
+        ns.ExtractUserAddedFromMacroText(fullText, variant, shownGeneratedBody, profile)
 
     -- Local chat only; nothing leaves the client.
     if not generatedIntact then
@@ -316,11 +482,11 @@ function ns.ApplyMacroTextFromPanel(fullText, variant, shownGeneratedBody)
             "Anything left over was kept below as one of your own lines. Use /pa to set the target.", "F8C300")
     end
 
-    if userAdded == ns.GetUserAdded(variant) then
+    if userAdded == ns.GetUserAdded(variant, profile) then
         return false
     end
 
-    ns.SetUserAdded(variant, userAdded)
+    ns.SetUserAdded(variant, userAdded, profile)
     ns.RequestMacroUpdate()
     return true
 end
@@ -409,8 +575,7 @@ function ns.GetAnnouncementChannel()
 end
 
 function ns.AnnounceMacroTarget(targetName)
-    local db = ns.GetDB()
-    if not db.announceTarget or not targetName or targetName == "" then
+    if not ns.GetActiveProfile().announceTarget or not targetName or targetName == "" then
         return
     end
 
@@ -541,9 +706,8 @@ function ns.RequestMacroUpdate(assignTarget)
     return true
 end
 
+-- Applies to the selected profile.
 function ns.SetMacroVariant(variant)
-    local db = ns.GetDB()
-
     if variant == "powerinfusion" then
         variant = "standalone"
     end
@@ -553,9 +717,9 @@ function ns.SetMacroVariant(variant)
         return false
     end
 
-    db.macroVariant = variant
-    ns.Print("\"" .. ns.GetMacroNameForVariant(variant) ..
-        "\" is now your primary macro and carries the shared cooldowns.", "61EE96")
+    ns.GetActiveProfile().macroVariant = variant
+    ns.Print("\"" .. ns.GetMacroNameForVariant(variant) .. "\" is now the primary macro of profile \"" ..
+        ns.GetProfileDisplayName(ns.GetActiveProfileKey()) .. "\".", "61EE96")
     return true
 end
 

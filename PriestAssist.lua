@@ -13,6 +13,8 @@ ns.state = ns.state or {
     instanceReminderTimerToken = 0,
     pendingMacroUpdate = false,
     pendingAssignTarget = false,
+    lastContentType = nil,
+    contentCheckToken = 0,
     reminderWasDragged = false,
 }
 

@@ -60,6 +60,8 @@ eventFrame:RegisterEvent("LOADING_SCREEN_DISABLED")
 eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+eventFrame:RegisterEvent("PLAYER_DIFFICULTY_CHANGED")
 eventFrame:SetScript("OnEvent", function(_, event, arg1)
     if event == "PLAYER_LOGIN" then
         ns.InitializeDatabase()
@@ -73,7 +75,14 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
             ns.HookEditMode()
         end
 
+        if ns.pendingProfileMigrationNotice then
+            ns.pendingProfileMigrationNotice = nil
+            ns.Print("Your settings were moved into profiles. All profiles start from your " ..
+                "previous configuration, so nothing has changed until you edit one.", "A5AAD9")
+        end
+
         ns.ScheduleInstanceReminder(1)
+        ns.ScheduleContentProfileCheck(1)
         return
     end
 
@@ -98,9 +107,17 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
         return
     end
 
-    if event == "LOADING_SCREEN_DISABLED" or event == "ZONE_CHANGED_NEW_AREA" then
+    -- PLAYER_ENTERING_WORLD fires after every loading screen, so hearthing out
+    -- of a raid is covered without watching for any "leaving" event.
+    if event == "LOADING_SCREEN_DISABLED"
+        or event == "ZONE_CHANGED_NEW_AREA"
+        or event == "PLAYER_ENTERING_WORLD"
+        or event == "PLAYER_DIFFICULTY_CHANGED" then
+
         if frames.reminderFrame then
             ns.ScheduleInstanceReminder()
         end
+
+        ns.ScheduleContentProfileCheck()
     end
 end)
