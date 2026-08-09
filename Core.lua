@@ -43,8 +43,13 @@ function ns.HandleSlashCommand(msg)
         return
     end
 
+    if command == "note" then
+        ns.ReportNoteAssignment()
+        return
+    end
+
     if command == "help" then
-        ns.Print("Commands: /pa, /pa add ..., /pa reset, /pa mode powerinfusion|voidform (picks the primary macro), /pa show", "A5AAD9")
+        ns.Print("Commands: /pa, /pa add ..., /pa reset, /pa mode powerinfusion|voidform (picks the primary macro), /pa show, /pa note (check the raid note)", "A5AAD9")
         return
     end
 

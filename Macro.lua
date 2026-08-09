@@ -415,6 +415,56 @@ function ns.CheckNoteAssignment(force)
     return true
 end
 
+-- Diagnostic for /pa note. Reports what the parser sees without the raid gate,
+-- so the whole chain can be checked solo at a training dummy.
+function ns.ReportNoteAssignment()
+    local sources = ns.GetRaidNoteSources()
+
+    ns.Print("Note sources: " .. (#sources > 0 and table.concat(sources, ", ") or "none found"), "A5AAD9")
+
+    local note = ns.GetRaidNote()
+
+    if not note then
+        ns.Print("No note text available. Write one in MRT, or have the raid lead share it.", "F82C00")
+        return
+    end
+
+    local playerName = UnitName("player")
+    local target, sawAnyAssignment, ambiguous = ns.ParsePowerInfusionAssignment(note, playerName)
+
+    ns.Print("Note is " .. string.len(note) .. " characters. Your character: " ..
+        tostring(playerName) .. ".", "A5AAD9")
+
+    if not sawAnyAssignment then
+        ns.Print("No \"PI:\" lines with two names found at all.", "F8C300")
+    elseif not target then
+        ns.Print("Found PI lines, but none naming you.", "F8C300")
+    else
+        ns.Print("Match: " .. target, "61EE96")
+    end
+
+    if ambiguous then
+        ns.Print("Careful: more than one different target is assigned to you.", "F8C300")
+    end
+
+    local contentType = ns.GetCurrentContentType()
+
+    if not ns.GetDB().useNoteAssignment then
+        ns.Print("The option is off, so nothing would be applied. General tab.", "F8C300")
+        return
+    end
+
+    if contentType ~= "raid" then
+        ns.Print("You are in " .. ns.GetContentDisplayName(contentType) ..
+            ", so nothing is applied. Raid only.", "F8C300")
+        return
+    end
+
+    -- Force a fresh read so repeated calls keep working.
+    state.lastNoteText = nil
+    ns.CheckNoteAssignment(true)
+end
+
 -- GetInstanceInfo can still report the previous zone right after a loading
 -- screen, so give it a moment. The reminder does the same thing.
 function ns.ScheduleContentProfileCheck(delay)
