@@ -1,7 +1,13 @@
 local ADDON_NAME, ns = ...
 local UI = ns.UI
 
+-- Spell names are read from the client at runtime, so the macros are built in
+-- whatever language the player runs. The known: conditional uses the ID rather
+-- than the name: locale independent by construction, and shorter in every
+-- language than spelling the name out.
 ns.POWER_INFUSION_SPELL_ID = 10060
+ns.VOID_VOLLEY_SPELL_ID = 1242173
+ns.VOIDFORM_SPELL_ID = 228260
 -- One macro per variant. WoW allows 16 characters for a macro name.
 ns.MACRO_NAMES = {
     standalone = "PriestAssist PI",

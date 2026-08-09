@@ -45,9 +45,30 @@ function ns.GetTargetDisplayName(targetName)
     return targetName
 end
 
+-- The English fallback only applies if the client does not know the spell.
+function ns.GetSpellName(spellID, fallback)
+    local spellInfo = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(spellID)
+    local name = spellInfo and spellInfo.name
+
+    if type(name) == "string" and name ~= "" then
+        return name
+    end
+
+    return fallback
+end
+
 function ns.GetPowerInfusionName()
-    local spellInfo = C_Spell.GetSpellInfo(ns.POWER_INFUSION_SPELL_ID)
-    return spellInfo and spellInfo.name or "Power Infusion"
+    return ns.GetSpellName(ns.POWER_INFUSION_SPELL_ID, "Power Infusion")
+end
+
+-- #showtooltip and /cast need the localised name, the conditional does not.
+function ns.BuildVoidformLines()
+    local voidVolley = ns.GetSpellName(ns.VOID_VOLLEY_SPELL_ID, "Void Volley")
+    local voidform = ns.GetSpellName(ns.VOIDFORM_SPELL_ID, "Voidform")
+    local spells = " " .. voidVolley .. "; " .. voidform .. ";"
+    local known = "[known:" .. ns.VOID_VOLLEY_SPELL_ID .. "]"
+
+    return "#showtooltip " .. known .. spells, "/cast " .. known .. spells
 end
 
 function ns.BuildPowerInfusionLines(targetName)
@@ -550,8 +571,9 @@ function ns.BuildGeneratedMacroBody(variant, profile)
 
     -- Each macro always carries its own signature spell.
     if variant == "voidform" then
-        lines[#lines + 1] = "#showtooltip [known: Void Volley] Void Volley; Voidform;"
-        lines[#lines + 1] = "/cast [known: Void Volley] Void Volley; Voidform;"
+        local showtooltipLine, castLine = ns.BuildVoidformLines()
+        lines[#lines + 1] = showtooltipLine
+        lines[#lines + 1] = castLine
     else
         lines[#lines + 1] = "#showtooltip"
         lines[#lines + 1] = ns.BuildPowerInfusionLines(targetName)

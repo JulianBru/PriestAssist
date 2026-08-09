@@ -13,6 +13,7 @@ Not a release build. Profiles are new and largely untested in the field — plea
 
 ### Changed
 
+- **The macros are built in the client's language.** Spell names are read from their IDs at runtime instead of being written out in English, so a German client gets `Seele der Macht` and `Leerengestalt` without any translation table — and so does every other locale. The `known:` conditional now uses the spell ID rather than the name, which is language-independent and ten characters shorter than spelling it out, in English too.
 - The Macro tab is now entirely profile-bound. `Macro Tab` moved to the General tab, because two macros cannot change tab per zone without losing their action bar spot; `Announce target in party or raid chat` moved here from General, because announcing in a raid but not in the open world is exactly what profiles are for.
 - The config window grew from 490 to 560 pixels tall to fit the profile selector without shrinking the macro text field.
 - `/pa mode` now sets the primary macro of the selected profile.
