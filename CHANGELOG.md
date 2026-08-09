@@ -1,8 +1,6 @@
 # Priest Assist
 
-## 1.2-alpha (2026-08-08)
-
-Not a release build. Profiles are new and largely untested in the field — please report anything odd.
+## [1.2](https://github.com/JulianBru/PriestAssist/tree/1.2) (2026-08-09)
 
 ### Added
 
