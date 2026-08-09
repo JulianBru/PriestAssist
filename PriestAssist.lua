@@ -15,6 +15,7 @@ ns.state = ns.state or {
     pendingAssignTarget = false,
     lastContentType = nil,
     contentCheckToken = 0,
+    lastNoteText = nil,
     reminderWasDragged = false,
 }
 

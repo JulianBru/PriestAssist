@@ -9,6 +9,7 @@ Not a release build. Profiles are new and largely untested in the field — plea
 - **Profiles.** Five of them, one per content type: Open World, Delves, Dungeon, Raid and PvP. Each carries its own primary macro, combat potion, potion priority, trinket slot, target announcement and custom macro lines.
 - **Automatic switching by content.** Off by default. Turn it on in the new Profiles tab and map each kind of content to a profile — Open World, Delves, Dungeon, Raid and PvP. Detection is state based, so it covers every way in and out, including hearthing out of a raid mid-run.
 - **Profiles tab** showing the profile list, the content mapping and a live readout of what the addon currently detects.
+- **Power Infusion assignments from the raid note.** Off by default, switch it on in the General tab. Reads `PI: YourName TargetName` lines out of the raid note on ready check, pull and roster changes, and sets your target from it. `/pa` still overrides until the note is edited again. If no assignment for you is found, you get a note in your own chat instead of silence.
 
 ### Changed
 
@@ -21,6 +22,7 @@ Not a release build. Profiles are new and largely untested in the field — plea
 - Mythic+ deliberately shares the Dungeon profile. A key going live flips the difficulty from 23 to 8, but the content type stays `dungeon`, so nothing is rewritten mid-instance. Separating the two is a small change if it turns out to be wanted.
 - Switching profiles uses the silent update path introduced in 1.1: the assigned target is untouched and nothing is posted to chat.
 - Your 1.1 settings are copied into **all five** profiles on first login, so nothing changes until you edit one or enable automatic switching.
+- Raid note assignments read from **both** MRT (`VMRT.Note`) and NorthernSkyRaidTools (`NSRT.StoredSharedReminder`, what the raid lead broadcasts on ready check). Either addon is enough; without MRT, NSRT's own reminder is the only note the group has. A note that names more than one different target for you uses the first and warns; a leading `EncounterID:...` header is the normal per-boss note and passes without comment.
 
 ## [1.1](https://github.com/JulianBru/PriestAssist/tree/1.1) (2026-08-08)
 

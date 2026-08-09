@@ -74,6 +74,19 @@ function ns.RefreshConfigPanel()
 
     if cc.reminderEnabled     then cc.reminderEnabled:SetChecked(db.reminderEnabled and true or false) end
     if cc.minimapEnabled      then cc.minimapEnabled:SetChecked(not (db.minimap and db.minimap.hidden)) end
+    if cc.useNoteAssignment   then cc.useNoteAssignment:SetChecked(db.useNoteAssignment and true or false) end
+    if cc.noteStatus then
+        local sources = ns.GetRaidNoteSources()
+
+        if not db.useNoteAssignment then
+            cc.noteStatus:SetText("Only applies in raids. Expects lines like \"PI: YourName TargetName\".")
+        elseif #sources == 0 then
+            cc.noteStatus:SetText("Neither MRT nor NorthernSkyRaidTools is enabled, so there is no note to read.")
+        else
+            cc.noteStatus:SetText("Reading from " .. table.concat(sources, " and ") ..
+                " on ready check, pull and roster changes. /pa still overrides it.")
+        end
+    end
     if cc.durationSlider      then cc.durationSlider:SetValue(db.reminderDuration or ns.DEFAULTS.reminderDuration) end
     if cc.fontSizeSlider      then cc.fontSizeSlider:SetValue(db.reminderFontSize or ns.DEFAULTS.reminderFontSize) end
     if cc.macroScope          then cc.macroScope:SetSelectedValue(db.macroScope or ns.DEFAULTS.macroScope) end
@@ -110,9 +123,18 @@ function ns.RefreshConfigPanel()
         end
     end
     if cc.contentStatus then
-        local contentType = ns.GetCurrentContentType()
-        cc.contentStatus:SetText("Currently in: " .. ns.GetContentDisplayName(contentType) ..
-            "   \194\187   profile \"" .. ns.GetProfileDisplayName(ns.GetProfileForContent(contentType)) .. "\"")
+        local contentType = ns.GetContentDisplayName(ns.GetCurrentContentType())
+
+        -- With switching off the mapping does not apply, so saying which
+        -- profile it points at would be misleading.
+        if db.autoSwitchProfiles then
+            cc.contentStatus:SetText("You are in " .. contentType ..
+                ", so profile \"" .. ns.GetProfileDisplayName(profileKey) .. "\" is active.")
+        else
+            cc.contentStatus:SetText("You are in " .. contentType ..
+                ". Automatic switching is off, so \"" .. ns.GetProfileDisplayName(profileKey) ..
+                "\" stays active until you pick another one.")
+        end
     end
     if cc.profileList then cc.profileList:Refresh() end
 
@@ -331,9 +353,33 @@ function ns.CreateConfigPanel()
         ns.ApplyVoidAccentToCheckButton(configControls.minimapEnabled)
         configControls.minimapEnabled:SetPoint("TOPLEFT", configControls.reminderEnabled, "BOTTOMLEFT", 0, -10)
 
+        -- ── Raid note ─────────────────────────────────────────────────────────
+        local secNote = SectionHeader(p, "Raid Note", configControls.minimapEnabled, -22)
+
+        configControls.useNoteAssignment = UI.CreateCheckButton(p,
+            "Take the Power Infusion target from the raid note",
+            function(checked)
+                ns.GetDB().useNoteAssignment = checked and true or false
+
+                if checked then
+                    -- force: report right away instead of waiting for a change.
+                    ns.CheckNoteAssignment(true)
+                end
+
+                ns.RefreshConfigPanel()
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.useNoteAssignment)
+        configControls.useNoteAssignment:SetPoint("TOPLEFT", secNote, "BOTTOMLEFT", 0, -14)
+
+        configControls.noteStatus = UI.CreateFontString(p, "", "textDim", "FONT_SMALL")
+        configControls.noteStatus:SetPoint("TOPLEFT", configControls.useNoteAssignment, "BOTTOMLEFT", 0, -8)
+        configControls.noteStatus:SetWidth(CONTENT_W)
+        configControls.noteStatus:SetJustifyH("LEFT")
+        configControls.noteStatus:SetSpacing(3)
+
         -- Global on purpose: there are exactly two macros, they cannot change
         -- tab per zone without losing their action bar placement.
-        local secMacros = SectionHeader(p, "Macros", configControls.minimapEnabled, -22)
+        local secMacros = SectionHeader(p, "Macros", configControls.noteStatus, -22)
 
         configControls.macroScope = UI.CreateDropdown(p, CONTENT_W, 4)
         ns.ApplyVoidAccentToDropdown(configControls.macroScope)
@@ -596,7 +642,8 @@ function ns.CreateConfigPanel()
             for _, row in ipairs(rows) do
                 local isActive = (row.profileKey == activeKey)
                 row.label:SetColor(isActive and accent or "text")
-                row.marker:SetText(isActive and "\226\151\143 active" or "")
+                -- No bullet glyph: the game font renders it as a box.
+                row.marker:SetText(isActive and "active" or "")
             end
         end
 

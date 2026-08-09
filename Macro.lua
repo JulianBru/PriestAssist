@@ -196,13 +196,202 @@ function ns.CheckContentProfile()
 
     state.lastContentType = contentType
 
-    if not db.autoSwitchProfiles then
-        ns.RefreshConfigPanel()
+    local switched = false
+
+    if db.autoSwitchProfiles then
+        switched = ns.SetActiveProfile(ns.GetProfileForContent(contentType),
+            ns.GetContentDisplayName(contentType))
+    end
+
+    -- Always refresh, even when the profile stayed the same: the content type
+    -- changed, so the "Currently in" line on the Profiles tab is now stale.
+    ns.RefreshConfigPanel()
+
+    return switched
+end
+
+-- ─── Raid note assignments ───────────────────────────────────────────────────
+-- There are two independent places a raid keeps its note, and PriestAssist
+-- reads both so it does not matter which one the group uses:
+--
+--   MRT   VMRT.Note.Text1 / .SelfText   -- the classic note
+--   NSRT  NSRT.StoredSharedReminder     -- what the raid lead broadcasts on
+--                                          ready check, works without MRT
+--
+-- NSRT itself only treats the MRT note as an optional extra source, so without
+-- MRT its own reminder is the only thing the group has.
+--
+-- Expected shape, one assignment per line:
+--   Power Infusion
+--   PI: Julsanity Julamplifier
+--   PI: Anderpriest Anderziel
+
+local function AppendNotePart(parts, value)
+    if type(value) == "string" and value ~= "" then
+        parts[#parts + 1] = value
+    end
+end
+
+function ns.GetRaidNote()
+    local parts = {}
+
+    if C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("MRT") then
+        local note = _G.VMRT and _G.VMRT.Note
+
+        if type(note) == "table" then
+            AppendNotePart(parts, note.Text1)
+            -- The personal note can carry the assignment too.
+            AppendNotePart(parts, note.SelfText)
+        end
+    end
+
+    if type(_G.NSRT) == "table" then
+        AppendNotePart(parts, _G.NSRT.StoredSharedReminder)
+    end
+
+    if #parts == 0 then
+        return nil
+    end
+
+    return table.concat(parts, "\n")
+end
+
+-- Which sources are actually available, for the status line in the options.
+function ns.GetRaidNoteSources()
+    local sources = {}
+
+    if C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("MRT") then
+        sources[#sources + 1] = "MRT"
+    end
+
+    if type(_G.NSRT) == "table" then
+        sources[#sources + 1] = "NSRT"
+    end
+
+    return sources
+end
+
+-- Notes carry colour escapes and {icon} tokens that would break name matching.
+local function StripNoteMarkup(line)
+    line = line:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+    line = line:gsub("|T.-|t", "")
+    line = line:gsub("{.-}", " ")
+    return line
+end
+
+-- Realm suffixes are stripped so "Julsanity-Thrall" matches "Julsanity".
+local function NormalizeNoteName(name)
+    if type(name) ~= "string" then
+        return ""
+    end
+
+    return (name:match("^([^%-]+)") or name):lower()
+end
+
+-- Returns targetName, sawAnyAssignment, ambiguous.
+--
+-- A note commonly opens with a header like
+--   EncounterID:3176;Name:New Note;Difficulty:Mythic
+-- which says which boss the note belongs to. That is the normal case and not
+-- worth a warning. What is worth warning about is the note naming more than one
+-- different target for us, because then there is no way to know which applies.
+function ns.ParsePowerInfusionAssignment(note, playerName)
+    local wanted = NormalizeNoteName(playerName)
+    local matches = {}
+    local sawAnyAssignment = false
+
+    for rawLine in ((note or "") .. "\n"):gmatch("([^\n]*)\n") do
+        local line = StripNoteMarkup(rawLine)
+        local rest = line:match("^%s*[Pp][Ii]%s*:%s*(.*)$")
+
+        if rest then
+            local words = {}
+            for word in rest:gmatch("(%S+)") do
+                words[#words + 1] = word
+            end
+
+            if words[1] and words[2] then
+                sawAnyAssignment = true
+
+                if NormalizeNoteName(words[1]) == wanted then
+                    matches[#matches + 1] = words[2]:match("^([^%-]+)") or words[2]
+                end
+            end
+        end
+    end
+
+    local ambiguous = false
+
+    for index = 2, #matches do
+        if matches[index] ~= matches[1] then
+            ambiguous = true
+            break
+        end
+    end
+
+    return matches[1], sawAnyAssignment, ambiguous
+end
+
+-- Applies the assignment from the note. Raid content only, and silent towards
+-- the group: the raid already has the note, no need to announce it back.
+function ns.CheckNoteAssignment(force)
+    local db = ns.GetDB()
+
+    if not db.useNoteAssignment then
         return false
     end
 
-    return ns.SetActiveProfile(ns.GetProfileForContent(contentType),
-        ns.GetContentDisplayName(contentType))
+    if ns.GetCurrentContentType() ~= "raid" then
+        return false
+    end
+
+    local note = ns.GetRaidNote()
+
+    if not note then
+        if force then
+            if #ns.GetRaidNoteSources() == 0 then
+                ns.Print("Raid note assignments need MRT or NorthernSkyRaidTools installed and enabled.", "F82C00")
+            else
+                ns.Print("No raid note found yet. It usually arrives with the next ready check.", "F8C300")
+            end
+        end
+        return false
+    end
+
+    -- Only react to an actual change, so a manual /pa keeps its target until
+    -- the note is edited.
+    if not force and note == state.lastNoteText then
+        return false
+    end
+
+    state.lastNoteText = note
+
+    local target, sawAnyAssignment, ambiguous =
+        ns.ParsePowerInfusionAssignment(note, UnitName("player"))
+
+    if ambiguous then
+        ns.Print("The note assigns you more than one Power Infusion target. Using the first one.", "F8C300")
+    end
+
+    if not target then
+        if sawAnyAssignment then
+            ns.Print("The raid note has Power Infusion assignments, but none for you. " ..
+                "Set a target yourself with /pa.", "F8C300")
+        else
+            ns.Print("No Power Infusion assignment found in the raid note. " ..
+                "Set a target yourself with /pa.", "F8C300")
+        end
+        return false
+    end
+
+    if target == ns.GetAssignedTarget() then
+        return false
+    end
+
+    ns.SetAssignedTarget(target)
+    ns.Print("Power Infusion target from the raid note: " .. target, "90EE90")
+    ns.RequestMacroUpdate()
+    return true
 end
 
 -- GetInstanceInfo can still report the previous zone right after a loading

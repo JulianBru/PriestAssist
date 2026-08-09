@@ -62,6 +62,11 @@ eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_DIFFICULTY_CHANGED")
+-- MRT offers no "note changed" event, so re-read on the moments where a raid
+-- lead would have just edited it. The text is compared before anything happens.
+eventFrame:RegisterEvent("READY_CHECK")
+eventFrame:RegisterEvent("ENCOUNTER_START")
+eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 eventFrame:SetScript("OnEvent", function(_, event, arg1)
     if event == "PLAYER_LOGIN" then
         ns.InitializeDatabase()
@@ -104,6 +109,15 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
 
     if event == "ADDON_LOADED" and arg1 == "Blizzard_EditMode" then
         ns.HookEditMode()
+        return
+    end
+
+    if event == "READY_CHECK" or event == "ENCOUNTER_START" or event == "GROUP_ROSTER_UPDATE" then
+        -- A ready check is usually the moment the note was just updated, and
+        -- MRT needs a moment to have received it.
+        C_Timer.After(1, function()
+            ns.CheckNoteAssignment()
+        end)
         return
     end
 

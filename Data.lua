@@ -196,6 +196,8 @@ ns.DEFAULTS = {
         pvp     = "pvp",
     },
     autoSwitchProfiles = false,
+    -- Reads the Power Infusion assignment out of the MRT raid note. Raid only.
+    useNoteAssignment = false,
     -- One selected profile: it is both what the panel edits and what the macros
     -- are built from. Auto-switching simply changes this on a content change.
     activeProfile = "world",
