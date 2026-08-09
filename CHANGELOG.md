@@ -10,6 +10,7 @@ Not a release build. Profiles are new and largely untested in the field — plea
 - **Automatic switching by content.** Off by default. Turn it on in the new Profiles tab and map each kind of content to a profile — Open World, Delves, Dungeon, Raid and PvP. Detection is state based, so it covers every way in and out, including hearthing out of a raid mid-run.
 - **Profiles tab** showing the profile list, the content mapping and a live readout of what the addon currently detects.
 - **Power Infusion assignments from the raid note.** Off by default, switch it on in the General tab. Reads `PI: YourName TargetName` lines out of the raid note on ready check, pull and roster changes, and sets your target from it. `/pa` still overrides until the note is edited again. If no assignment for you is found, you get a note in your own chat instead of silence.
+- **Target check on ready check.** On by default, switch it off in the General tab. When a ready check goes out in a raid, PriestAssist verifies that the player you assigned is actually there and shows the result in the reminder frame: not in the raid at all, in the group but not in the instance, offline, or nothing assigned. The zone comparison comes straight from the roster, so no range check is involved.
 - **`/pa note`** reports what the note parser sees — which sources are available, whether any `PI:` lines exist, which one matches you — and works anywhere, so the chain can be checked without a raid around you.
 
 ### Changed

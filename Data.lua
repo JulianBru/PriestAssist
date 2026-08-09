@@ -166,6 +166,10 @@ ns.CONTENT_NAMES = {
     pvp     = "PvP",
 }
 
+-- Raid indices have holes, so the roster is scanned to the maximum rather than
+-- to GetNumGroupMembers().
+ns.MAX_RAID_MEMBERS = 40
+
 -- Delves report as a scenario, so this difficulty has to be checked first.
 ns.DELVE_DIFFICULTY_ID = 208
 
@@ -204,6 +208,8 @@ ns.DEFAULTS = {
     autoSwitchProfiles = false,
     -- Reads the Power Infusion assignment out of the MRT raid note. Raid only.
     useNoteAssignment = false,
+    -- Checks on ready check whether the assigned player is actually there.
+    validateTargetOnReadyCheck = true,
     -- One selected profile: it is both what the panel edits and what the macros
     -- are built from. Auto-switching simply changes this on a content change.
     activeProfile = "world",

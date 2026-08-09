@@ -75,6 +75,7 @@ function ns.RefreshConfigPanel()
     if cc.reminderEnabled     then cc.reminderEnabled:SetChecked(db.reminderEnabled and true or false) end
     if cc.minimapEnabled      then cc.minimapEnabled:SetChecked(not (db.minimap and db.minimap.hidden)) end
     if cc.useNoteAssignment   then cc.useNoteAssignment:SetChecked(db.useNoteAssignment and true or false) end
+    if cc.validateTarget      then cc.validateTarget:SetChecked(db.validateTargetOnReadyCheck and true or false) end
     if cc.noteStatus then
         local sources = ns.GetRaidNoteSources()
 
@@ -343,6 +344,14 @@ function ns.CreateConfigPanel()
         ns.ApplyVoidAccentToCheckButton(configControls.reminderEnabled)
         configControls.reminderEnabled:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -14)
 
+        configControls.validateTarget = UI.CreateCheckButton(p,
+            "Warn on ready check if your target is missing",
+            function(checked)
+                ns.GetDB().validateTargetOnReadyCheck = checked and true or false
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.validateTarget)
+        configControls.validateTarget:SetPoint("TOPLEFT", configControls.reminderEnabled, "BOTTOMLEFT", 0, -10)
+
         configControls.minimapEnabled = UI.CreateCheckButton(p,
             "Show minimap button",
             function(checked)
@@ -351,7 +360,7 @@ function ns.CreateConfigPanel()
                 ns.UpdateMinimapButtonVisibility()
             end)
         ns.ApplyVoidAccentToCheckButton(configControls.minimapEnabled)
-        configControls.minimapEnabled:SetPoint("TOPLEFT", configControls.reminderEnabled, "BOTTOMLEFT", 0, -10)
+        configControls.minimapEnabled:SetPoint("TOPLEFT", configControls.validateTarget, "BOTTOMLEFT", 0, -10)
 
         -- ── Raid note ─────────────────────────────────────────────────────────
         local secNote = SectionHeader(p, "Raid Note", configControls.minimapEnabled, -22)

@@ -118,10 +118,17 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
     end
 
     if event == "READY_CHECK" or event == "ENCOUNTER_START" or event == "GROUP_ROSTER_UPDATE" then
+        local isReadyCheck = (event == "READY_CHECK")
+
         -- A ready check is usually the moment the note was just updated, and
         -- MRT needs a moment to have received it.
         C_Timer.After(1, function()
             ns.CheckNoteAssignment()
+
+            -- After the note, so a target it just set is validated too.
+            if isReadyCheck then
+                ns.CheckAssignedTargetPresence()
+            end
         end)
         return
     end

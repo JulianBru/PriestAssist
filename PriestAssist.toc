@@ -1,7 +1,7 @@
 ## Interface: 120000, 120001, 120005, 120007, 120100
-## Version: 1.2-alpha2
+## Version: 1.2-alpha5
 ## Title: Priest Assist
-## Author: CheersItsJulian
+## Author: Julsanity (CheersItsJulian)
 ## SavedVariables: PriestAssistDB
 ## IconTexture: Interface\AddOns\PriestAssist\Media\icon.tga
 ## OptionalDeps: LibSharedMedia-3.0

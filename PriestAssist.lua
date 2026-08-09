@@ -16,6 +16,7 @@ ns.state = ns.state or {
     lastContentType = nil,
     contentCheckToken = 0,
     lastNoteText = nil,
+    reminderMessage = nil,
     reminderWasDragged = false,
 }
 

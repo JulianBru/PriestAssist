@@ -33,6 +33,11 @@ function ns.ApplyReminderFont(fontPath, fontSize, outlineStyle)
 end
 
 function ns.GetReminderPreviewText()
+    -- A warning takes over the frame, except while positioning it in Edit Mode.
+    if state.reminderMessage and not ns.IsEditModeActive() then
+        return state.reminderMessage
+    end
+
     local preview = ns.DEFAULT_REMINDER_TEXT .. "\n" .. ns.POWER_INFUSION_ICON .. " Set a target and use /pa " .. ns.POWER_INFUSION_ICON
 
     if ns.IsEditModeActive() then
@@ -111,13 +116,16 @@ function ns.ApplyReminderSettings()
     ns.UpdateReminderVisibility()
 end
 
-function ns.ShowReminder(forceText)
+-- message is optional. When given, it replaces the usual text for one showing;
+-- warnings use it and pass force, since they have their own opt-in.
+function ns.ShowReminder(forceText, message)
     local db = ns.GetDB()
 
     if not db.reminderEnabled and not forceText then
         return
     end
 
+    state.reminderMessage = message
     state.reminderActive = true
     state.reminderToken = state.reminderToken + 1
     ns.UpdateReminderVisibility()
@@ -129,6 +137,7 @@ function ns.ShowReminder(forceText)
         end
 
         state.reminderActive = false
+        state.reminderMessage = nil
         ns.UpdateReminderVisibility()
     end)
 end

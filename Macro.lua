@@ -415,6 +415,101 @@ function ns.CheckNoteAssignment(force)
     return true
 end
 
+-- ─── Target validation ───────────────────────────────────────────────────────
+-- Checks on ready check whether the player you assigned is actually there.
+-- No range check is involved: GetRaidRosterInfo hands out each member's zone,
+-- which is the same string as your own GetRealZoneText, so "in the group but
+-- not in the instance" is a plain comparison.
+
+-- Returns name, zone, online, isDead for a roster entry, or nil.
+function ns.FindRaidMember(targetName)
+    local wanted = NormalizeNoteName(targetName)
+
+    if wanted == "" then
+        return nil
+    end
+
+    for index = 1, ns.MAX_RAID_MEMBERS do
+        local name, _, _, _, _, _, zone, online, isDead = GetRaidRosterInfo(index)
+
+        if name and NormalizeNoteName(name) == wanted then
+            return name, zone, online, isDead
+        end
+    end
+
+    return nil
+end
+
+-- Returns one of: "ok", "none", "missing", "offline", "elsewhere".
+function ns.GetAssignedTargetStatus()
+    local targetName = ns.GetAssignedTarget()
+
+    if targetName == "" then
+        return "none"
+    end
+
+    local name, zone, online = ns.FindRaidMember(targetName)
+
+    if not name then
+        return "missing", targetName
+    end
+
+    if not online then
+        return "offline", targetName
+    end
+
+    -- Compare against our own zone rather than the instance name: same source,
+    -- same formatting, no locale surprises.
+    local ownZone = GetRealZoneText and GetRealZoneText()
+
+    if ownZone and ownZone ~= "" and zone and zone ~= "" and zone ~= ownZone then
+        return "elsewhere", targetName
+    end
+
+    return "ok", targetName
+end
+
+local STATUS_MESSAGES = {
+    none     = "No Power Infusion target set",
+    missing  = "%s is not in the raid",
+    offline  = "%s is offline",
+    elsewhere = "%s is not in the instance",
+}
+
+function ns.CheckAssignedTargetPresence()
+    if not ns.GetDB().validateTargetOnReadyCheck then
+        return false
+    end
+
+    -- GetRaidRosterInfo only returns anything in a raid group.
+    if not (IsInRaid and IsInRaid()) then
+        return false
+    end
+
+    local status, targetName = ns.GetAssignedTargetStatus()
+
+    if status == "ok" then
+        return false
+    end
+
+    local headline = STATUS_MESSAGES[status]
+
+    if not headline then
+        return false
+    end
+
+    if status ~= "none" then
+        headline = headline:format(targetName)
+    end
+
+    local icon = ns.POWER_INFUSION_ICON
+    ns.ShowReminder(true, ns.ADDON_DISPLAY_NAME .. "\n" .. icon .. " " .. headline ..
+        ", use /pa " .. icon)
+    ns.Print(headline .. ". Assign someone with /pa.", "F8C300")
+
+    return true
+end
+
 -- Diagnostic for /pa note. Reports what the parser sees without the raid gate,
 -- so the whole chain can be checked solo at a training dummy.
 function ns.ReportNoteAssignment()
