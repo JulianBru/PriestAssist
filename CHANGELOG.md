@@ -1,5 +1,13 @@
 # Priest Assist
 
+## [1.2.1](https://github.com/JulianBru/PriestAssist/tree/1.2.1) (2026-08-09)
+
+### Fixed
+
+- **Void Volley could not be pressed.** The `known:` conditional in the Voidform macro was changed to use the spell ID in 1.2. It turns out to misfire in game, leaving the macro stuck on Voidform. It now uses the spell name again, as it did before 1.2. Spell names are still read from the client, so the macro stays in your language.
+
+  The trade-off is length: the name costs ten characters more than the ID. With Voidform as your primary macro, a combat potion and both trinket slots, a German client lands at 252 of 255, which leaves no room for custom lines. Making Power Infusion your primary macro brings the same setup down to 174.
+
 ## [1.2](https://github.com/JulianBru/PriestAssist/tree/1.2) (2026-08-09)
 
 ### Added
@@ -13,7 +21,7 @@
 
 ### Changed
 
-- **The macros are built in the client's language.** Spell names are read from their IDs at runtime instead of being written out in English, so a German client gets `Seele der Macht` and `Leerengestalt` without any translation table — and so does every other locale. The `known:` conditional now uses the spell ID rather than the name, which is language-independent and ten characters shorter than spelling it out, in English too.
+- **The macros are built in the client's language.** Spell names are read from their IDs at runtime instead of being written out in English, so a German client gets `Seele der Macht` and `Leerengestalt` without any translation table — and so does every other locale. The `known:` conditional was switched from the spell name to the spell ID, which is language-independent and ten characters shorter.
 - The Macro tab is now entirely profile-bound. `Macro Tab` moved to the General tab, because two macros cannot change tab per zone without losing their action bar spot; `Announce target in party or raid chat` moved here from General, because announcing in a raid but not in the open world is exactly what profiles are for.
 - The config window grew from 490 to 560 pixels tall to fit the profile selector without shrinking the macro text field.
 - `/pa mode` now sets the primary macro of the selected profile.

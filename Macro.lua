@@ -61,14 +61,14 @@ function ns.GetPowerInfusionName()
     return ns.GetSpellName(ns.POWER_INFUSION_SPELL_ID, "Power Infusion")
 end
 
--- #showtooltip and /cast need the localised name, the conditional does not.
+-- known: takes the spell name, not the ID. The ID would be shorter and locale
+-- independent, but in practice it misfires and leaves Void Volley unpressable.
 function ns.BuildVoidformLines()
     local voidVolley = ns.GetSpellName(ns.VOID_VOLLEY_SPELL_ID, "Void Volley")
     local voidform = ns.GetSpellName(ns.VOIDFORM_SPELL_ID, "Voidform")
-    local spells = " " .. voidVolley .. "; " .. voidform .. ";"
-    local known = "[known:" .. ns.VOID_VOLLEY_SPELL_ID .. "]"
+    local body = "[known: " .. voidVolley .. "] " .. voidVolley .. "; " .. voidform .. ";"
 
-    return "#showtooltip " .. known .. spells, "/cast " .. known .. spells
+    return "#showtooltip " .. body, "/cast " .. body
 end
 
 function ns.BuildPowerInfusionLines(targetName)
