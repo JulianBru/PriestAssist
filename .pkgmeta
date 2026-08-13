@@ -12,9 +12,10 @@ enable-nolib-creation: yes
 # Pulled fresh by the packager instead of relying on the checked-in copies.
 externals:
   Libs/LibStub: https://repos.curseforge.com/wow/libstub/trunk
-  Libs/LibSpecialization:
-    url: https://github.com/funkydude/LibSpecialization
-    tag: latest
+  # Same form BigWigs uses: the repository with a .git suffix, then the folder
+  # inside it that actually holds the library. Without the subpath the packager
+  # would copy the whole repository, and without .git it asks for credentials.
+  Libs/LibSpecialization: https://github.com/BigWigsMods/LibSpecialization.git/LibSpecialization
 
 # Shown as a relation on the CurseForge project page.
 optional-dependencies:
@@ -30,3 +31,5 @@ ignore:
   - CURSEFORGE.md
   - docs
   - tools
+  # Shipped by LibStub's own repository, of no use in the addon.
+  - Libs/LibStub/tests
