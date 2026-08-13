@@ -54,7 +54,7 @@ def main() -> int:
         changes = Path(args.summary).read_text(encoding="utf-8").strip()
 
     entry = (
-        f"## [{new}](https://github.com/JulianBru/PriestAssist/tree/{new})\n\n"
+        f"## [{new}](https://github.com/JulianBru/PriestAssist/tree/v{new})\n\n"
         "### Changed\n\n"
         f"- **Power Infusion sim data updated to {args.date}.** Regenerated from Ulria's "
         "sheet; no code changes.\n"

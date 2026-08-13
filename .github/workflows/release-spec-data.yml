@@ -1,20 +1,19 @@
 name: Release a sim data update
 
-# Fires when SpecPriority.lua lands on main, which in practice means the data
-# pull request was merged. Your merge is the release decision -- nothing is
-# tagged on the schedule alone.
+# Fires only when the automatic data pull request is merged, identified by the
+# label the update workflow puts on it.
 #
-# A data refresh is a patch release: 1.3 -> 1.3.1 -> 1.3.2. Deliberately not a
-# commit hash or a calendar week, because CurseForge and the packager take the
+# It deliberately does NOT trigger on "SpecPriority.lua changed on main": that
+# file is edited during ordinary development too, and a normal release commit
+# would then tag a patch release on top of itself.
+#
+# A data refresh is a patch release: v1.3 -> v1.3.1 -> v1.3.2. Deliberately not
+# a commit hash or a calendar week, because CurseForge and the packager take the
 # version from the tag and neither of those sorts against a patch number.
-#
-# The bump commit touches only the .toc and the changelog, so it cannot trigger
-# this workflow again.
 
 on:
-  push:
-    branches: [main]
-    paths: ["SpecPriority.lua"]
+  pull_request:
+    types: [closed]
   workflow_dispatch:
 
 permissions:
@@ -22,6 +21,11 @@ permissions:
 
 jobs:
   release:
+    # Merged, not just closed, and carrying the label the data pull request gets.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.merged == true &&
+       contains(github.event.pull_request.labels.*.name, 'spec-data'))
     runs-on: ubuntu-latest
 
     steps:
@@ -58,8 +62,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add PriestAssist.toc CHANGELOG.md
-          git commit -m "Release ${{ steps.bump.outputs.version }}"
-          git tag -a "${{ steps.bump.outputs.version }}" \
+          git commit -m "Release v${{ steps.bump.outputs.version }}"
+          # The repository tags with a leading v; release.yml packages on any tag.
+          git tag -a "v${{ steps.bump.outputs.version }}" \
             -m "Power Infusion sim data update"
-          git push origin HEAD
-          git push origin "${{ steps.bump.outputs.version }}"
+          git push origin HEAD:main
+          git push origin "v${{ steps.bump.outputs.version }}"

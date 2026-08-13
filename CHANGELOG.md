@@ -1,6 +1,6 @@
 # Priest Assist
 
-## [1.3](https://github.com/JulianBru/PriestAssist/tree/1.3) (2026-08-13)
+## [1.3](https://github.com/JulianBru/PriestAssist/tree/v1.3) (2026-08-13)
 
 ### Added
 
@@ -56,7 +56,7 @@
 - Hero talent decoding reads the client's serialisation version before interpreting a single bit. If Blizzard changes the format, the feature falls back to the conservative value instead of guessing; that version has changed once since Dragonflight.
 - Priests who are not running PriestAssist never appear in the shared assignments. Against those, the raid note is still the only coordination.
 
-## [1.2.1](https://github.com/JulianBru/PriestAssist/tree/1.2.1) (2026-08-09)
+## [1.2.1](https://github.com/JulianBru/PriestAssist/tree/v1.2.1) (2026-08-09)
 
 ### Fixed
 
@@ -64,7 +64,7 @@
 
   The trade-off is length: the name costs ten characters more than the ID. With Voidform as your primary macro, a combat potion and both trinket slots, a German client lands at 252 of 255, which leaves no room for custom lines. Making Power Infusion your primary macro brings the same setup down to 174.
 
-## [1.2](https://github.com/JulianBru/PriestAssist/tree/1.2) (2026-08-09)
+## [1.2](https://github.com/JulianBru/PriestAssist/tree/v1.2) (2026-08-09)
 
 ### Added
 
@@ -89,7 +89,7 @@
 - Your 1.1 settings are copied into **all five** profiles on first login, so nothing changes until you edit one or enable automatic switching.
 - Raid note assignments read from **both** MRT (`VMRT.Note`) and NorthernSkyRaidTools (`NSRT.StoredSharedReminder`, what the raid lead broadcasts on ready check). Either addon is enough; without MRT, NSRT's own reminder is the only note the group has. A note that names more than one different target for you uses the first and warns; a leading `EncounterID:...` header is the normal per-boss note and passes without comment.
 
-## [1.1](https://github.com/JulianBru/PriestAssist/tree/1.1) (2026-08-08)
+## [1.1](https://github.com/JulianBru/PriestAssist/tree/v1.1) (2026-08-08)
 
 ### Changed
 
@@ -120,7 +120,7 @@
 - Editing the generated lines in the text field could silently swallow one of your own lines. The generated block is now subtracted by content instead of by line count, and restored with a note in your local chat.
 - The chat message after an update showed the currently targeted player instead of the assigned one.
 
-## [1.0](https://github.com/JulianBru/PriestAssist/tree/1.0) (2026-08-01)
+## [1.0](https://github.com/JulianBru/PriestAssist/tree/v1.0) (2026-08-01)
 
 Initial release.
 
