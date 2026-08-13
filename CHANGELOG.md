@@ -1,5 +1,11 @@
 # Priest Assist
 
+## [1.3.1](https://github.com/JulianBru/PriestAssist/tree/1.3.1)
+
+### Changed
+
+- **Power Infusion sim data updated to 06/05/2026.** Regenerated from Ulria's sheet; no code changes.
+
 ## [1.3](https://github.com/JulianBru/PriestAssist/tree/1.3) (2026-08-13)
 
 ### Added
