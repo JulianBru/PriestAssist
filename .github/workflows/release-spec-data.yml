@@ -1,0 +1,65 @@
+name: Release a sim data update
+
+# Fires when SpecPriority.lua lands on main, which in practice means the data
+# pull request was merged. Your merge is the release decision -- nothing is
+# tagged on the schedule alone.
+#
+# A data refresh is a patch release: 1.3 -> 1.3.1 -> 1.3.2. Deliberately not a
+# commit hash or a calendar week, because CurseForge and the packager take the
+# version from the tag and neither of those sorts against a patch number.
+#
+# The bump commit touches only the .toc and the changelog, so it cannot trigger
+# this workflow again.
+
+on:
+  push:
+    branches: [main]
+    paths: ["SpecPriority.lua"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --quiet lupa
+
+      # Belt and braces: the data pull request already ran this, but a hand
+      # edit to SpecPriority.lua would land here too.
+      - name: Validate the data
+        run: python3 tools/check_spec_priority.py --file SpecPriority.lua
+
+      - name: Bump the patch version
+        id: bump
+        run: |
+          DATE=$(sed -n 's/^ns\.SPEC_PRIORITY_UPDATED = "\(.*\)"$/\1/p' SpecPriority.lua)
+          if [ -z "$DATE" ]; then
+            echo "::error::No SPEC_PRIORITY_UPDATED found in SpecPriority.lua"
+            exit 1
+          fi
+          VERSION=$(python3 tools/bump_patch_version.py --date "$DATE" | tail -1)
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing $VERSION with data from $DATE"
+
+      - name: Commit and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add PriestAssist.toc CHANGELOG.md
+          git commit -m "Release ${{ steps.bump.outputs.version }}"
+          git tag -a "${{ steps.bump.outputs.version }}" \
+            -m "Power Infusion sim data update"
+          git push origin HEAD
+          git push origin "${{ steps.bump.outputs.version }}"

@@ -65,8 +65,51 @@ end
 
 -- ─── RefreshConfigPanel ───────────────────────────────────────────────────────
 
+-- Spec reports arrive one per player, so a raid pull can fire twenty of them in
+-- a moment and a roster change fires more. Nothing here is time critical, so
+-- they are coalesced into a single refresh.
+--
+-- In combat nothing is refreshed at all. The macro cannot be rebuilt under
+-- lockdown either, so a fresher panel would buy nothing, and the pending
+-- refresh runs once the fight is over.
+local REFRESH_DELAY = 0.5
+local refreshScheduled = false
+local refreshAfterCombat = false
+
+function ns.RequestConfigRefresh()
+    if InCombatLockdown and InCombatLockdown() then
+        refreshAfterCombat = true
+        return
+    end
+
+    if refreshScheduled then return end
+    refreshScheduled = true
+
+    C_Timer.After(REFRESH_DELAY, function()
+        refreshScheduled = false
+
+        -- Combat may have started while this was waiting.
+        if InCombatLockdown and InCombatLockdown() then
+            refreshAfterCombat = true
+            return
+        end
+
+        ns.RefreshConfigPanel()
+    end)
+end
+
+function ns.FlushPendingConfigRefresh()
+    if not refreshAfterCombat then return end
+
+    refreshAfterCombat = false
+    ns.RequestConfigRefresh()
+end
+
 function ns.RefreshConfigPanel()
-    if not frames.configPanel then return end
+    -- A closed panel has nothing to update, and the show path refreshes before
+    -- anyone sees it. This is what keeps the Damage Gain sorting off the hot
+    -- path while people are reporting their specs.
+    if not frames.configPanel or not frames.configPanel:IsShown() then return end
     local db = ns.GetDB()
     local cc = configControls
     local profile = ns.GetActiveProfile()
@@ -105,9 +148,32 @@ function ns.RefreshConfigPanel()
     if cc.combatPotion        then cc.combatPotion:SetSelectedValue(profile.combatPotion or ns.PROFILE_DEFAULTS.combatPotion) end
     if cc.combatPotionQuality then cc.combatPotionQuality:SetSelectedValue(profile.combatPotionQuality or ns.PROFILE_DEFAULTS.combatPotionQuality) end
     if cc.trinketSlot         then cc.trinketSlot:SetSelectedValue(profile.trinketSlot or ns.PROFILE_DEFAULTS.trinketSlot) end
-    if cc.voidformPotionWarning then
-        cc.voidformPotionWarning:SetText(ns.GetVoidformPotionWarningText())
-        cc.voidformPotionWarning:SetShown(ns.ShouldShowVoidformPotionWarning(profile))
+    if cc.macroNotice then
+        local entries = {}
+
+        if ns.ShouldShowVoidformMadnessWarning(profile) then
+            entries[#entries + 1] = { text = ns.GetVoidformMadnessWarningText(), color = "danger" }
+        end
+
+        if ns.ShouldShowVoidformPotionWarning(profile) then
+            entries[#entries + 1] = { text = ns.GetVoidformPotionWarningText(), color = "gold" }
+        end
+
+        cc.macroNotice:SetLines(entries)
+        cc.macroNotice:SetShown(#entries > 0)
+
+        -- Without a notice the macro text section moves up and the field grows.
+        if cc.macroTextSection and cc.macroTab then
+            cc.macroTextSection:ClearAllPoints()
+
+            if #entries > 0 then
+                cc.macroTextSection:SetPoint("TOPLEFT", cc.macroNotice, "BOTTOMLEFT", 0, -16)
+            else
+                cc.macroTextSection:SetPoint("TOPLEFT", cc.announceTarget, "BOTTOMLEFT", 0, -20)
+            end
+
+            cc.macroTextSection:SetPoint("TOPRIGHT", cc.macroTab, "TOPRIGHT", 0, 0)
+        end
     end
 
     -- Profiles tab
@@ -139,6 +205,73 @@ function ns.RefreshConfigPanel()
     end
     if cc.profileList then cc.profileList:Refresh() end
 
+    -- Damage Gain tab
+    if cc.priorityList then
+        local _, listKind, ownSpecID = ns.GetActivePriorityList()
+        local mode = ns.GetDamageGainMode()
+
+        if cc.priorityFilter then
+            cc.priorityFilter:SetChecked(db.priorityFilterToGroup and true or false)
+        end
+
+        if cc.prioritySubtitle then
+            cc.prioritySubtitle:SetText((ns.PRIEST_SPEC_NAMES[ownSpecID] or "Priest") ..
+                " Power Infusion, 4-piece values" ..
+                (ns.SPEC_PRIORITY_UPDATED and (", updated " .. ns.SPEC_PRIORITY_UPDATED) or "") ..
+                (mode == "players" and " - your group" or ""))
+        end
+
+        cc.priorityList:Refresh()
+
+        if cc.priorityHint then
+            -- The timing note explains what the numbers assume and is always
+            -- true, so it is the default. An unreadable hero talent is
+            -- something you can act on right now, so it takes the line while it
+            -- applies.
+            local hint = ns.PRIORITY_TIMING_NOTE[listKind]
+
+            if mode == "players" then
+                local unknown = 0
+
+                for _, row in ipairs(ns.GetPlayerRows()) do
+                    if not row.exact then
+                        unknown = unknown + 1
+                    end
+                end
+
+                if unknown > 0 then
+                    hint = "Hero talent unknown for " .. unknown ..
+                        (unknown == 1 and " player" or " players") .. " - the lower value is used"
+                end
+            end
+
+            cc.priorityHint:SetText(hint or "")
+        end
+
+        local bestName, bestEntry, bestGain, _, bestHero = ns.PickBestTarget()
+        local _, unknown = ns.GetGroupSpecOverview()
+
+        if cc.priorityBest then
+            if bestName then
+                local heroName = ns.GetHeroDisplayName(bestHero, bestEntry)
+
+                cc.priorityBest:SetTextSafe("Best in your raid: " .. bestName ..
+                    string.format("  (%.2f%%", bestGain) ..
+                    (heroName and (", " .. heroName) or "") .. ")")
+            elseif IsInGroup and IsInGroup() then
+                cc.priorityBest:SetText("No one present matches the list.")
+            else
+                cc.priorityBest:SetText("Join a group to see who matches.")
+            end
+        end
+
+        if cc.priorityUnknown then
+            cc.priorityUnknown:SetText(unknown > 0
+                and (unknown .. " member(s) report no specialisation")
+                or "")
+        end
+    end
+
     -- Never overwrite the field while the user is typing in it.
     if cc.macroText and not cc.macroText:IsFocused() then
         local variant = profile.macroVariant or ns.PROFILE_DEFAULTS.macroVariant
@@ -151,7 +284,8 @@ function ns.RefreshConfigPanel()
         cc.macroText._variant = variant
         cc.macroText._profile = profileKey
         cc.macroText._generated = generatedBody
-        cc.macroText:SetText(macroBody)
+        -- The macro body carries the assigned target's name.
+        cc.macroText:SetText(UI.ApplyGlyphFallback(cc.macroText, macroBody))
         UpdateMacroTextCounter(macroBody)
     end
 end
@@ -275,11 +409,12 @@ function ns.CreateConfigPanel()
     local tabReminder = MakeTab()
     local tabMacro    = MakeTab()
     local tabProfiles = MakeTab()
+    local tabPriority = MakeTab()
     local tabAbout    = MakeTab()
-    local tabFrames   = { tabGeneral, tabReminder, tabMacro, tabProfiles, tabAbout }
+    local tabFrames   = { tabGeneral, tabReminder, tabMacro, tabProfiles, tabPriority, tabAbout }
 
     -- ── Tab button system ─────────────────────────────────────────────────────
-    local tabDefs    = { "General", "Reminder", "Macro", "Profiles", "About" }
+    local tabDefs    = { "General", "Reminder", "Macro", "Profiles", "Damage Gain", "About" }
     local tabButtons = {}
     local activeTab  = 0
 
@@ -299,12 +434,15 @@ function ns.CreateConfigPanel()
         end
     end
 
+    -- Six tabs no longer fit at 90 px, so the width follows the count.
+    local TAB_W = math.floor(math.min(90, (W - 16) / #tabDefs))
     local tabX = 8
+
     for i, name in ipairs(tabDefs) do
         local tabBtn = CreateFrame("Button", nil, tabBar)
-        tabBtn:SetSize(90, TAB_H)
+        tabBtn:SetSize(TAB_W, TAB_H)
         tabBtn:SetPoint("LEFT", tabBar, "LEFT", tabX, 0)
-        tabX = tabX + 90
+        tabX = tabX + TAB_W
 
         local lbl = UI.CreateFontString(tabBtn, name, "textDim", "FONT_SMALL")
         lbl:SetPoint("CENTER", 0, 0)
@@ -560,18 +698,18 @@ function ns.CreateConfigPanel()
         ns.ApplyVoidAccentToCheckButton(configControls.announceTarget)
         configControls.announceTarget:SetPoint("TOPLEFT", configControls.combatPotion, "BOTTOMLEFT", 0, -14)
 
-        -- Voidform warning (shown only when relevant)
-        configControls.voidformPotionWarning = UI.CreateFontString(p, "", "gold")
-        configControls.voidformPotionWarning:SetPoint("TOPLEFT",  configControls.announceTarget, "BOTTOMLEFT",  0, -12)
-        configControls.voidformPotionWarning:SetPoint("TOPRIGHT", p, "TOPRIGHT", 0, 0)
-        configControls.voidformPotionWarning:SetJustifyH("LEFT")
-        configControls.voidformPotionWarning:SetJustifyV("TOP")
-        configControls.voidformPotionWarning:Hide()
+        -- Warnings (shown only when relevant, height follows the content)
+        configControls.macroNotice = UI.CreateNotice(p, CONTENT_W, ns.WARNING_ICON_PATH)
+        configControls.macroNotice:SetPoint("TOPLEFT", configControls.announceTarget, "BOTTOMLEFT", 0, -14)
+        configControls.macroNotice:Hide()
 
         -- ── Editable macro text ───────────────────────────────────────────────
         -- Shows the complete macro. The generated lines are rebuilt on every
         -- update; anything below them is kept as the user's own addition.
-        local secText = SectionHeader(p, "Macro Text", configControls.voidformPotionWarning, -16)
+        -- Re-anchored in RefreshConfigPanel so a hidden notice costs no space.
+        local secText = SectionHeader(p, "Macro Text", configControls.macroNotice, -16)
+        configControls.macroTextSection = secText
+        configControls.macroTab = p
 
         configControls.macroText = UI.CreateEditBox(p, CONTENT_W, 120)
         configControls.macroText:SetAccent(accent)
@@ -705,7 +843,268 @@ function ns.CreateConfigPanel()
         configControls.contentStatus:SetPoint("BOTTOMLEFT", p, "BOTTOMLEFT", 0, 4)
     end
 
-    -- ── TAB 5: About ──────────────────────────────────────────────────────────
+    -- ── TAB 5: Priority ───────────────────────────────────────────────────────
+    do
+        local p   = tabPriority
+        local sec = SectionHeader(p, "List")
+
+        configControls.prioritySubtitle = UI.CreateFontString(p, "", "textDim", "FONT_SMALL")
+        configControls.prioritySubtitle:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -10)
+
+        local ROW_H = 20
+        local ROWS = 11
+        local BAR_W = 8
+        -- Four fixed columns -- specialisation, gain, hero talent, player --
+        -- used by both views, so switching between them moves no headings and
+        -- shifts no values. Only the set of rows differs.
+        local COL_GAIN = 108
+        local W_GAIN = 38
+        local W_HERO = 120
+        local OFF_HERO = W_GAIN + 3
+        local COL_MATCH = COL_GAIN + OFF_HERO + W_HERO + 10
+        local W_MATCH = (CONTENT_W - 5 - (5 + BAR_W + 3)) - COL_MATCH - 2
+
+        -- Column headings sit above the box, so they do not scroll away.
+        local header = CreateFrame("Frame", nil, p)
+        header:SetPoint("TOPLEFT", configControls.prioritySubtitle, "BOTTOMLEFT", 0, -10)
+        header:SetSize(CONTENT_W, 14)
+
+        local headSpec = UI.CreateFontString(header, "Specialisation", "textDim", "FONT_SMALL")
+        headSpec:SetPoint("LEFT", header, "LEFT", 5, 0)
+
+        local headGain = UI.CreateFontString(header, "Gain", "textDim", "FONT_SMALL")
+        headGain:SetPoint("LEFT", header, "LEFT", 5 + COL_GAIN, 0)
+        headGain:SetWidth(W_GAIN)
+        headGain:SetJustifyH("RIGHT")
+        headGain:SetWordWrap(false)
+
+        local headHero = UI.CreateFontString(header, "Hero talent", "textDim", "FONT_SMALL")
+        headHero:SetPoint("LEFT", header, "LEFT", 5 + COL_GAIN + OFF_HERO, 0)
+        headHero:SetWidth(W_HERO)
+        headHero:SetJustifyH("LEFT")
+        headHero:SetWordWrap(false)
+
+        local headMatch = UI.CreateFontString(header, "In your group", "textDim", "FONT_SMALL")
+        headMatch:SetPoint("RIGHT", header, "RIGHT", -(5 + BAR_W + 3), 0)
+        headMatch:SetJustifyH("RIGHT")
+        headMatch:SetWordWrap(false)
+
+        local listFrame = CreateFrame("Frame", nil, p, BackdropTemplateMixin and "BackdropTemplate" or nil)
+        listFrame:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -4)
+        listFrame:SetSize(CONTENT_W, ROWS * ROW_H + 10)
+        if listFrame.SetBackdrop then
+            listFrame:SetBackdrop({
+                bgFile   = "Interface\\Buttons\\WHITE8x8",
+                edgeFile = "Interface\\Buttons\\WHITE8x8",
+                edgeSize = 1,
+                insets   = { left = 1, right = 1, top = 1, bottom = 1 },
+            })
+            local wr, wg, wb = UI.GetColorRGB("bgWidget")
+            listFrame:SetBackdropColor(wr, wg, wb, 1)
+            listFrame:SetBackdropBorderColor(sr, sg, sb, 1)
+        end
+        listFrame:EnableMouseWheel(true)
+
+        -- Scrollbar: a track with a proportional thumb, draggable and fed by
+        -- the same offset the mouse wheel changes.
+        local track = CreateFrame("Frame", nil, listFrame)
+        track:SetPoint("TOPRIGHT", listFrame, "TOPRIGHT", -3, -3)
+        track:SetPoint("BOTTOMRIGHT", listFrame, "BOTTOMRIGHT", -3, 3)
+        track:SetWidth(BAR_W)
+
+        local trackBg = track:CreateTexture(nil, "BACKGROUND")
+        trackBg:SetAllPoints()
+        trackBg:SetColorTexture(sr, sg, sb, 0.6)
+
+        local thumb = CreateFrame("Frame", nil, track)
+        thumb:SetWidth(BAR_W)
+        thumb:SetHeight(20)
+        thumb:SetPoint("TOP", track, "TOP", 0, 0)
+        thumb:EnableMouse(true)
+
+        local thumbTex = thumb:CreateTexture(nil, "ARTWORK")
+        thumbTex:SetAllPoints()
+        thumbTex:SetColorTexture(ar, ag, ab, 0.55)
+
+        local rows = {}
+        local offset = 0
+
+        for index = 1, ROWS do
+            local row = CreateFrame("Frame", nil, listFrame)
+            row:SetPoint("TOPLEFT", listFrame, "TOPLEFT", 5, -(5 + (index - 1) * ROW_H))
+            row:SetPoint("TOPRIGHT", listFrame, "TOPRIGHT", -(5 + BAR_W + 3), -(5 + (index - 1) * ROW_H))
+            row:SetHeight(ROW_H)
+
+            row.bg = row:CreateTexture(nil, "BACKGROUND")
+            row.bg:SetAllPoints()
+            row.bg:SetColorTexture(ar, ag, ab, 0.10)
+            row.bg:Hide()
+
+            row.icon = row:CreateTexture(nil, "ARTWORK")
+            row.icon:SetSize(14, 14)
+            row.icon:SetPoint("LEFT", 4, 0)
+
+            row.name = UI.CreateFontString(row, "", "text", "FONT_SMALL")
+            row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+
+            local function cell(offset, width, justify, color)
+                local fs = UI.CreateFontString(row, "", color or "textDim", "FONT_SMALL")
+                fs:SetPoint("LEFT", row, "LEFT", COL_GAIN + offset, 0)
+                fs:SetWidth(width)
+                fs:SetJustifyH(justify)
+                fs:SetWordWrap(false)
+                return fs
+            end
+
+            row.gain = cell(0, W_GAIN, "RIGHT")
+            row.hero = cell(OFF_HERO, W_HERO, "LEFT")
+
+            -- Right-aligned so the column reads against the table edge, the
+            -- same way its heading sits.
+            row.match = UI.CreateFontString(row, "", accent, "FONT_SMALL")
+            row.match:SetPoint("RIGHT", row, "RIGHT", -2, 0)
+            row.match:SetWidth(W_MATCH)
+            row.match:SetJustifyH("RIGHT")
+            row.match:SetWordWrap(false)
+
+            rows[index] = row
+        end
+
+        function listFrame:Refresh()
+            -- Two views of the same data. Out of a group the spec list is
+            -- reference material and both hero variants are worth showing. In a
+            -- group we know who is actually there and which hero talent each of
+            -- them picked, so the useful unit is the player, not the spec.
+            -- Two sets of rows through one set of columns. Out of a group the
+            -- reference list covers every spec and hero variant; in a group it
+            -- is your actual group, one row per player.
+            local mode = ns.GetDamageGainMode()
+            local players = (mode == "players")
+            local list = players and ns.GetPlayerRows() or ns.GetPriorityRows()
+            local matches = (not players) and ns.GetReferenceMatches() or nil
+
+            offset = math.max(0, math.min(offset, math.max(0, #list - ROWS)))
+
+            -- Thumb height and position follow how much is off screen.
+            local trackHeight = math.max(1, track:GetHeight())
+
+            if #list > ROWS then
+                local ratio = ROWS / #list
+                local thumbHeight = math.max(16, math.floor(trackHeight * ratio))
+                local travel = trackHeight - thumbHeight
+                local progress = offset / (#list - ROWS)
+
+                track:Show()
+                thumb:SetHeight(thumbHeight)
+                thumb:ClearAllPoints()
+                thumb:SetPoint("TOP", track, "TOP", 0, -math.floor(travel * progress))
+            else
+                track:Hide()
+            end
+
+            for index = 1, ROWS do
+                local entry = list[index + offset]
+                local row = rows[index]
+
+                if not entry then
+                    row:Hide()
+                else
+                    row:Show()
+
+                    row.icon:SetTexture(entry.specIcon)
+                    row.name:SetText(entry.specName)
+                    row.gain:SetText(string.format("%.2f%%", entry.gain))
+
+                    -- Only a player row can have an unreadable hero talent; the
+                    -- reference rows are one per variant by construction.
+                    row.hero:SetText(entry.heroName or (players and "unknown" or ""))
+                    row.hero:SetColor(entry.exact and "text" or "textDim")
+
+                    local names
+
+                    if players then
+                        names = entry.name
+                    else
+                        local found = matches and matches[entry.specID .. ":" .. tostring(entry.hero)]
+                        names = found and (found[1] ..
+                            (#found > 1 and ("  +" .. (#found - 1)) or ""))
+                    end
+
+                    row.match:SetTextSafe(names or "")
+                    row.match:SetColor(accent)
+
+                    -- Dimmed rather than dropped when someone is offline or
+                    -- outside the instance: they are still in the group, and
+                    -- the picker skips them for exactly that reason.
+                    local here = (not players) or entry.present
+                    row.name:SetColor(names and here and "text" or "textDim")
+                    row.bg:SetShown(names ~= nil and here)
+                end
+            end
+        end
+
+        listFrame:SetScript("OnMouseWheel", function(_, delta)
+            offset = offset - delta
+            listFrame:Refresh()
+        end)
+
+        -- Dragging the thumb maps cursor position on the track back to an offset.
+        local dragging = false
+
+        thumb:SetScript("OnMouseDown", function() dragging = true end)
+        thumb:SetScript("OnMouseUp", function() dragging = false end)
+
+        thumb:SetScript("OnUpdate", function()
+            if not dragging then return end
+
+            local list = (ns.GetDamageGainMode() == "players")
+                and ns.GetPlayerRows() or ns.GetPriorityRows()
+            if #list <= ROWS then return end
+
+            local scale = track:GetEffectiveScale()
+            local cursorY = select(2, GetCursorPosition()) / scale
+            local top = track:GetTop()
+            local height = math.max(1, track:GetHeight() - thumb:GetHeight())
+            local progress = math.max(0, math.min(1, (top - cursorY) / height))
+            local wanted = math.floor(progress * (#list - ROWS) + 0.5)
+
+            if wanted ~= offset then
+                offset = wanted
+                listFrame:Refresh()
+            end
+        end)
+
+        configControls.priorityList = listFrame
+
+        -- Replaced on every refresh; this is only what shows before the first.
+        configControls.priorityHint = UI.CreateFontString(p, "", "textDim", "FONT_SMALL")
+        configControls.priorityHint:SetPoint("TOPLEFT", listFrame, "BOTTOMLEFT", 0, -7)
+
+        configControls.priorityFilter = UI.CreateCheckButton(p,
+            "In a group, list your group instead of all specs",
+            function(checked)
+                ns.GetDB().priorityFilterToGroup = checked and true or false
+                offset = 0
+                ns.RefreshConfigPanel()
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.priorityFilter)
+        configControls.priorityFilter:SetPoint("TOPLEFT", configControls.priorityHint, "BOTTOMLEFT", 0, -10)
+
+        configControls.priorityBest = UI.CreateFontString(p, "", "text", "FONT_SMALL")
+        configControls.priorityBest:SetPoint("TOPLEFT", configControls.priorityFilter, "BOTTOMLEFT", 0, -12)
+
+        configControls.priorityAssign = UI.CreateButton(p, "Assign", accent, 110, 24)
+        configControls.priorityAssign:SetPoint("TOPLEFT", configControls.priorityBest, "BOTTOMLEFT", 0, -8)
+        configControls.priorityAssign:SetOnClick(function()
+            ns.AutoAssignBestTarget()
+            ns.RefreshConfigPanel()
+        end)
+
+        configControls.priorityUnknown = UI.CreateFontString(p, "", "textDim", "FONT_SMALL")
+        configControls.priorityUnknown:SetPoint("LEFT", configControls.priorityAssign, "RIGHT", 10, 0)
+    end
+
+    -- ── TAB 6: About ──────────────────────────────────────────────────────────
     do
         local p   = tabAbout
         local sec = SectionHeader(p, "About")
@@ -796,12 +1195,13 @@ end
 
 function ns.OpenConfigPanel()
     ns.CreateConfigPanel()
-    ns.RefreshConfigPanel()
-
     UI.CloseDropdown()
 
     local configPanel = frames.configPanel
     configPanel:Show()
+
+    -- After Show, because a hidden panel refuses to refresh.
+    ns.RefreshConfigPanel()
     configPanel:Raise()
     configPanel:SetFrameStrata("FULLSCREEN_DIALOG")
     configPanel:SetFrameLevel(20)

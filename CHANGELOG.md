@@ -1,5 +1,61 @@
 # Priest Assist
 
+## [1.3](https://github.com/JulianBru/PriestAssist/tree/1.3) (2026-08-13)
+
+### Added
+
+- **Pick the best target by specialisation and hero talent.** A new Damage Gain tab shows how much each player gains from Power Infusion, based on 4-piece sim values, with separate numbers for healer and Shadow priests — which set applies follows from your own spec. `/pa auto` assigns whoever gains the most and is online and actually in the instance.
+
+  Specs come from `LibSpecialization` over addon comms, so no inspecting is involved. Players without an addon that uses the library report nothing; the tab says how many, rather than quietly leaving them out.
+
+  **Hero talents are read too.** The library ships each player's talent loadout string alongside their spec, and PriestAssist decodes it down to the hero tree — no inspecting, no range limit. Two Windwalkers in the same raid are worth 5.31% and 5.03% depending on their choice, and the tab now says which is which instead of guessing.
+
+  The tab has two views through one set of columns — specialisation, gain, hero talent, player — so switching between them moves no headings and shifts no values. Out of a group it lists every spec and hero variant as reference, best first, and marks which rows your group members sit on. In a group it lists your group, one row per player. The switch is underneath the table.
+
+  Anyone whose hero talent cannot be read — no loadout string, or a client whose serialisation format we do not know — keeps the weaker of the two values and is marked `unknown`, so the number is never presented as more certain than it is.
+
+  `/pa auto` sits below the raid note in the precedence order: while a note assignment is in effect it steps aside and tells you who the note names. `/pa` overrides everything, as before.
+
+- **Two priests no longer infuse the same player.** `/pa auto` is deterministic, so two priests running PriestAssist in one group would reliably pick the *same* target. They now tell each other who they have assigned, through a new embedded library, `LibPriestAssist`.
+
+  Who yields is decided the same way on both clients, so no negotiation is needed: a deliberate assignment beats one from the raid note, which beats an automatic pick. At equal footing whoever gains more keeps the target — a Shadow priest and a healer priest are worth different amounts on the same player, so this is a real distinction and it leaves the group better off. Two healer priests with identical numbers fall back to the lower name.
+
+  **Only automatic picks are ever moved for you.** A target you set with `/pa`, or one the raid note gave you, is reported and left exactly where it is.
+
+  `/pa comm` lists who is infusing whom. The same list appears at the ready check when another priest is present, and a shared target is called out in the reminder frame — but only when there is nothing worse to report about your target.
+
+  The library is embedded rather than published for now. It carries the messages and nothing else, so a future release can open it up to other Power Infusion addons without changing the protocol.
+
+### Changed
+
+- **Warning box in the Macro tab.** The Voidform notices moved into a bordered box with a warning icon.
+
+  It now also warns that **entering Voidform from a macro currently leaves Shadow Word: Madness unusable for roughly 1 to 4 seconds**, and that Power Infusion is the safer primary macro until that is fixed. This looks like a Blizzard bug rather than intended behaviour, so it sits behind a flag in the code and can be switched off in one line once a patch resolves it.
+
+  The box only appears when Voidform is your primary macro and shrinks to fit whichever notices apply — with Power Infusion primary it disappears entirely and the macro text field grows from 120 to 150 pixels.
+
+- **The config panel does far less work in the background.** Spec reports arrive one per player, so a raid pull used to trigger a full panel rebuild for every single one — including sorting the Damage Gain table — even with the panel closed.
+
+  A closed panel is now left alone entirely, refreshes are coalesced into one every half second, and in combat nothing is refreshed at all: the macro cannot be rebuilt under lockdown either, so a fresher panel would buy nothing. Whatever arrived during the fight is shown when it ends.
+
+  Resolving an unfamiliar specialisation's talent tree is also deferred out of combat, since it briefly touches the talent UI. Those players keep the conservative value until the fight is over.
+
+- **The sim data says how old it is.** The Damage Gain tab names your actual specialisation and the date the simulations were run — *Shadow Priest Power Infusion, 4-piece values, updated 06/05/2026*. The date comes from the sheet's own changelog, not from whenever the file was last touched.
+
+  Underneath the table is what the sim assumed about timing, which differs by spec: Shadow is simmed on a fixed cadence from the pull, a healer's Power Infusion follows whatever the receiving player has up. That line is read from the sheet too, so a re-sim carries it along.
+
+### Fixed
+
+- **Names in non-Latin alphabets are readable.** A player from a Russian realm used to appear as a row of empty boxes on a Western client, because WoW's default font carries no Cyrillic glyphs and the font API offers no fallback chain. Any text containing characters outside ASCII is now drawn in Arial Narrow, which does cover them and ships with every client. Plain Latin text keeps the panel's own font, so nothing changes if you never group with such a player.
+
+  This applies to the Damage Gain tab, the macro text field and the reminder frame — everywhere a player's name can end up.
+
+### Notes
+
+- The sim values ship as a generated file with no network access at runtime. They are rebuilt from the published sheet by a script that refuses to write anything it cannot fully account for — a renamed column, an unknown hero talent or a value that moved implausibly far stops it, because stale numbers are recoverable and silently wrong ones are not.
+- Hero talent decoding reads the client's serialisation version before interpreting a single bit. If Blizzard changes the format, the feature falls back to the conservative value instead of guessing; that version has changed once since Dragonflight.
+- Priests who are not running PriestAssist never appear in the shared assignments. Against those, the raid note is still the only coordination.
+
 ## [1.2.1](https://github.com/JulianBru/PriestAssist/tree/1.2.1) (2026-08-09)
 
 ### Fixed

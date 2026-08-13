@@ -48,8 +48,20 @@ function ns.HandleSlashCommand(msg)
         return
     end
 
+    if command == "auto" then
+        ns.AutoAssignBestTarget()
+        return
+    end
+
+    if command == "comm" then
+        ns.SyncAssignments(true)
+        -- The answers arrive over the wire, so give them a moment.
+        C_Timer.After(1, function() ns.ReportAssignments() end)
+        return
+    end
+
     if command == "help" then
-        ns.Print("Commands: /pa, /pa add ..., /pa reset, /pa mode powerinfusion|voidform (picks the primary macro), /pa show, /pa note (check the raid note)", "A5AAD9")
+        ns.Print("Commands: /pa, /pa add ..., /pa reset, /pa mode powerinfusion|voidform (picks the primary macro), /pa show, /pa note (check the raid note), /pa auto (pick by specialisation), /pa comm (who else has a Power Infusion target)", "A5AAD9")
         return
     end
 
@@ -91,6 +103,8 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
                 "previous configuration, so nothing has changed until you edit one.", "A5AAD9")
         end
 
+        ns.InitializeSpecTracking()
+        ns.InitializeComm()
         ns.ScheduleInstanceReminder(1)
         ns.ScheduleContentProfileCheck(1)
         return
@@ -109,6 +123,9 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
             ns.CheckInstanceReminder()
         end
 
+        -- Spec reports that arrived during the fight are shown now.
+        ns.FlushPendingConfigRefresh()
+
         return
     end
 
@@ -120,6 +137,17 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
     if event == "READY_CHECK" or event == "ENCOUNTER_START" or event == "GROUP_ROSTER_UPDATE" then
         local isReadyCheck = (event == "READY_CHECK")
 
+        -- The Damage Gain tab lists who is in the group, so it goes stale when
+        -- somebody joins or leaves.
+        if event == "GROUP_ROSTER_UPDATE" then
+            ns.RequestConfigRefresh()
+        end
+
+        -- Ask the other priests where they stand, so the answers are in by the
+        -- time the checks below run. A ready check is worth forcing; a roster
+        -- update is not.
+        ns.SyncAssignments(isReadyCheck)
+
         -- A ready check is usually the moment the note was just updated, and
         -- MRT needs a moment to have received it.
         C_Timer.After(1, function()
@@ -127,7 +155,13 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
 
             -- After the note, so a target it just set is validated too.
             if isReadyCheck then
-                ns.CheckAssignedTargetPresence()
+                -- An absent target is the bigger problem, so a collision only
+                -- takes the frame when there is nothing worse to report.
+                if not ns.CheckAssignedTargetPresence() then
+                    ns.CheckAssignmentCollision()
+                end
+
+                ns.ReportAssignments(true)
             end
         end)
         return

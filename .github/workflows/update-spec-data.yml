@@ -1,0 +1,91 @@
+name: Update Power Infusion sim data
+
+# Pulls Ulria's published sheet and regenerates SpecPriority.lua. Never commits
+# to main: it opens a pull request with a summary of what moved, because wrong
+# damage numbers would be worse than stale ones and a glance at the diff is
+# cheap. Merging that pull request is what triggers a release.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"     # Mondays, 06:00 UTC
+  workflow_dispatch:         # and whenever you want one
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install --quiet lupa
+
+      - name: Keep the current file to compare against
+        run: cp SpecPriority.lua /tmp/previous.lua
+
+      - name: Regenerate from the sheet
+        env:
+          HEALER_URL: ${{ secrets.SPEC_SHEET_HEALER_URL }}
+          SHADOW_URL: ${{ secrets.SPEC_SHEET_SHADOW_URL }}
+        run: |
+          if [ -z "$HEALER_URL" ] || [ -z "$SHADOW_URL" ]; then
+            echo "::error::Set the repository secrets SPEC_SHEET_HEALER_URL and SPEC_SHEET_SHADOW_URL to the sheet's CSV export URLs."
+            exit 1
+          fi
+          python3 tools/generate_spec_priority.py \
+            --healer-url "$HEALER_URL" \
+            --shadow-url "$SHADOW_URL"
+
+      - name: Did anything change?
+        id: diff
+        run: |
+          if git diff --quiet -- SpecPriority.lua; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "The sheet has not changed since the last run."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Runs the generated Lua and checks the invariants the addon relies on.
+      # Also fails on a single value moving absurdly far, which is a broken
+      # parse far more often than it is a re-sim.
+      - name: Validate the result and summarise the changes
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          python3 tools/check_spec_priority.py \
+            --file SpecPriority.lua \
+            --against /tmp/previous.lua \
+            --summary /tmp/changes.md
+
+      - name: Build the pull request body
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          {
+            echo "Regenerated from Ulria's published sim sheet."
+            echo
+            echo "### What moved"
+            echo
+            cat /tmp/changes.md
+            echo
+            echo "Merging this opens a patch release."
+          } > /tmp/body.md
+
+      - name: Open a pull request
+        if: steps.diff.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: spec-data-update
+          delete-branch: true
+          title: Update Power Infusion sim data
+          body-path: /tmp/body.md
+          labels: spec-data
+          commit-message: Update Power Infusion sim data from the sheet
+          add-paths: SpecPriority.lua

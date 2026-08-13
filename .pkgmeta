@@ -5,12 +5,21 @@ manual-changelog:
   filename: CHANGELOG.md
   markup-type: markdown
 
-# No embedded libraries, so skip the extra -nolib zip.
-enable-nolib-creation: no
+# Libraries are embedded, so a -nolib zip makes sense for those who prefer
+# standalone library addons.
+enable-nolib-creation: yes
+
+# Pulled fresh by the packager instead of relying on the checked-in copies.
+externals:
+  Libs/LibStub: https://repos.curseforge.com/wow/libstub/trunk
+  Libs/LibSpecialization:
+    url: https://github.com/funkydude/LibSpecialization
+    tag: latest
 
 # Shown as a relation on the CurseForge project page.
 optional-dependencies:
   - libsharedmedia-3-0
+  - libspecialization
 
 # Development-only files that should not end up in the published zip.
 ignore:
@@ -20,3 +29,4 @@ ignore:
   - .gitignore
   - CURSEFORGE.md
   - docs
+  - tools

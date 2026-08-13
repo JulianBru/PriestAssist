@@ -18,6 +18,7 @@ local C = {
     white     = { 1.000, 1.000, 1.000, 1.00 },
     gray      = { 0.600, 0.608, 0.624, 1.00 },
     gold      = { 1.000, 0.820, 0.000, 1.00 },
+    danger    = { 1.000, 0.350, 0.350, 1.00 },
     accent    = { 0.659, 0.400, 0.961, 1.00 },
     black     = { 0.000, 0.000, 0.000, 1.00 },
 }
@@ -99,6 +100,35 @@ local function GetFont()
     return select(1, GameFontNormal:GetFont())
 end
 
+-- The client's default fonts carry no Cyrillic glyphs, so a player from a
+-- Russian realm draws as a row of empty boxes on a Western client. The font API
+-- has no fallback chain, so the choice has to be made per string: anything
+-- outside ASCII switches to Arial Narrow, which does cover Cyrillic and ships
+-- with every client. Plain Latin text keeps the panel's own font, so nothing
+-- changes for the common case.
+local GLYPH_FALLBACK_FONT = "Fonts\\ARIALN.TTF"
+
+function UI.ApplyGlyphFallback(widget, text)
+    if not (widget and widget.GetFont and widget.SetFont) then
+        return text
+    end
+
+    local font, size, flags = widget:GetFont()
+
+    if type(text) == "string" and text:find("[\128-\255]") then
+        if font ~= GLYPH_FALLBACK_FONT then
+            widget.paBaseFont = font
+            -- EditBox rejects a nil flags argument, unlike FontString.
+            widget:SetFont(GLYPH_FALLBACK_FONT, size, flags or "")
+        end
+    elseif widget.paBaseFont then
+        widget:SetFont(widget.paBaseFont, size, flags or "")
+        widget.paBaseFont = nil
+    end
+
+    return text
+end
+
 local function NewFS(parent, text, color, size, flags, layer)
     local fs = parent:CreateFontString(nil, layer or "OVERLAY")
     fs:SetFont(GetFont(), size or 12, flags)
@@ -108,6 +138,10 @@ local function NewFS(parent, text, color, size, flags, layer)
     function fs:SetColor(n)
         local ct = Resolve(n)
         self:SetTextColor(ct[1], ct[2], ct[3], ct[4] or 1.0)
+    end
+    -- For anything that can contain a player name.
+    function fs:SetTextSafe(value)
+        self:SetText(UI.ApplyGlyphFallback(self, value))
     end
     return fs
 end
@@ -661,6 +695,79 @@ function UI.CreateEditBox(parent, width, height)
     end
 
     return container
+end
+
+-- ─── UI.CreateNotice ──────────────────────────────────────────────────────────
+-- Boxed warning with an icon and one or more coloured lines. The height follows
+-- the lines actually shown, so hiding one shrinks the box instead of leaving a
+-- gap. Callers re-anchor whatever sits below it.
+
+function UI.CreateNotice(parent, width, iconPath)
+    local box = CreateFrame("Frame", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+    box:SetSize(width or 200, 40)
+
+    local PAD = 10
+    local ICON = 16
+    local GAP = 8
+
+    if box.SetBackdrop then
+        box:SetBackdrop(BACKDROP)
+        box:SetBackdropColor(C.gold[1] * 0.12, C.gold[2] * 0.10, 0.04, 0.55)
+        box:SetBackdropBorderColor(C.gold[1], C.gold[2], C.gold[3], 0.55)
+    end
+
+    box.icon = box:CreateTexture(nil, "ARTWORK")
+    box.icon:SetSize(ICON, ICON)
+    box.icon:SetPoint("TOPLEFT", box, "TOPLEFT", PAD, -PAD)
+
+    if iconPath then
+        box.icon:SetTexture(iconPath)
+    end
+
+    box.lines = {}
+
+    -- entries: { { text = "...", color = "gold" }, ... }
+    function box:SetLines(entries)
+        local textLeft = PAD + ICON + GAP
+        local textWidth = math.max(1, self:GetWidth() - textLeft - PAD)
+        local offset = PAD
+        local shown = 0
+
+        for index, entry in ipairs(entries or {}) do
+            local line = self.lines[index]
+
+            if not line then
+                line = NewFS(self, "", "text", 12)
+                line:SetJustifyH("LEFT")
+                line:SetJustifyV("TOP")
+                line:SetSpacing(2)
+                self.lines[index] = line
+            end
+
+            line:SetWidth(textWidth)
+            line:SetText(entry.text or "")
+            line:SetColor(entry.color or "gold")
+            line:ClearAllPoints()
+            line:SetPoint("TOPLEFT", self, "TOPLEFT", textLeft, -offset)
+            line:Show()
+
+            offset = offset + line:GetStringHeight() + GAP
+            shown = index
+        end
+
+        for index = shown + 1, #self.lines do
+            self.lines[index]:Hide()
+        end
+
+        -- Last gap is not needed below the final line.
+        local height = (shown > 0) and (offset - GAP + PAD) or 0
+        self:SetHeight(math.max(ICON + PAD * 2, height))
+        self.icon:SetShown(shown > 0)
+
+        return shown
+    end
+
+    return box
 end
 
 -- ─── UI.CreateCopyBox ─────────────────────────────────────────────────────────

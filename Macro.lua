@@ -409,7 +409,7 @@ function ns.CheckNoteAssignment(force)
         return false
     end
 
-    ns.SetAssignedTarget(target)
+    ns.SetAssignedTarget(target, "note")
     ns.Print("Power Infusion target from the raid note: " .. target, "90EE90")
     ns.RequestMacroUpdate()
     return true
@@ -507,6 +507,382 @@ function ns.CheckAssignedTargetPresence()
         ", use /pa " .. icon)
     ns.Print(headline .. ". Assign someone with /pa.", "F8C300")
 
+    return true
+end
+
+-- ─── Specialisation priority ─────────────────────────────────────────────────
+-- LibSpecialization broadcasts group members' specs over addon comms, so no
+-- inspecting is needed. It only hears from players who run an addon that uses
+-- the library themselves, which is why unknown specs are surfaced rather than
+-- quietly skipped.
+
+local specByName = {}
+local heroByName = {}
+
+-- The library hands out names through Ambiguate(sender, "none"), which never
+-- shortens -- every remote player arrives as "Name-Realm". The roster gives
+-- plain names, so both sides go through the same normalisation or nothing ever
+-- matches, not even players from your own realm.
+function ns.OnSpecializationUpdate(specID, _, _, playerName, talentString)
+    if type(playerName) ~= "string" or type(specID) ~= "number" then
+        return
+    end
+
+    local key = NormalizeNoteName(playerName)
+    specByName[key] = specID
+
+    -- The loadout string rides along with the specialisation, so the hero
+    -- talent costs no extra traffic. It stays nil whenever the sender omits it
+    -- or the client cannot decode the format, and every caller treats that as
+    -- "hero unknown" rather than as an error.
+    heroByName[key] = ns.DecodeHeroTalent(talentString)
+    ns.RequestConfigRefresh()
+end
+
+function ns.InitializeSpecTracking()
+    if not LibStub then
+        return false
+    end
+
+    local lib = LibStub("LibSpecialization", true)
+    if not lib then
+        return false
+    end
+
+    -- Dot, not colon: RegisterGroup takes the addon table as its first
+    -- argument, so a method call would hand it the library itself.
+    lib.RegisterGroup(ns, ns.OnSpecializationUpdate)
+    return true
+end
+
+function ns.GetKnownSpec(playerName)
+    return specByName[NormalizeNoteName(playerName)]
+end
+
+function ns.GetKnownHero(playerName)
+    return heroByName[NormalizeNoteName(playerName)]
+end
+
+-- Which of the two lists applies follows from the priest's own spec.
+function ns.GetActivePriorityList()
+    local spec = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
+        and C_SpecializationInfo.GetSpecialization()
+    local specID = spec and C_SpecializationInfo.GetSpecializationInfo(spec)
+
+    if specID == ns.PRIEST_SPEC_SHADOW then
+        return ns.SPEC_PRIORITY.shadow, "shadow", specID
+    end
+
+    return ns.SPEC_PRIORITY.healer, "healer", specID
+end
+
+-- GetSpecializationInfoByID returns id, name, description, icon. Falling back
+-- to the id keeps the row readable if a spec is unknown to the client.
+function ns.GetSpecDisplay(specID)
+    local lookup = GetSpecializationInfoByID
+        or (C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfoByID)
+
+    if lookup then
+        local _, specName, _, specIcon = lookup(specID)
+
+        if type(specName) == "string" and specName ~= "" then
+            return specName, specIcon or ns.MACRO_ICON_ID
+        end
+    end
+
+    return "Spec " .. tostring(specID), ns.MACRO_ICON_ID
+end
+
+-- "6.11% Sunfury | 5.00% Frostfire", best variant first. Shown as information
+-- only: which tree a player has cannot be read, so nothing is filtered by it.
+function ns.FormatHeroVariants(entry)
+    if not entry.heroes or #entry.heroes == 0 then
+        return string.format("%.2f%%", entry.gain)
+    end
+
+    local parts = {}
+
+    for _, hero in ipairs(entry.heroes) do
+        parts[#parts + 1] = string.format("%.2f%% %s", hero.gain, hero.name)
+    end
+
+    return table.concat(parts, " | ")
+end
+
+function ns.GetPriorityEntry(list, specID)
+    for rank, entry in ipairs(list) do
+        if entry.specID == specID then
+            return entry, rank
+        end
+    end
+end
+
+-- The spec reference list, one row per hero variant, best first. Deliberately
+-- the same shape as GetPlayerRows: both views of the Damage Gain tab then have
+-- identical columns and only differ in which rows they list.
+function ns.GetPriorityRows()
+    local list = ns.GetActivePriorityList()
+    local rows = {}
+
+    for _, entry in ipairs(list) do
+        local specName, specIcon = ns.GetSpecDisplay(entry.specID)
+        local heroes = entry.heroes
+
+        if heroes and #heroes > 0 then
+            for _, hero in ipairs(heroes) do
+                rows[#rows + 1] = {
+                    specID = entry.specID,
+                    specName = specName,
+                    specIcon = specIcon,
+                    entry = entry,
+                    hero = hero.id,
+                    heroName = hero.name,
+                    gain = hero.gain,
+                    exact = true,
+                }
+            end
+        else
+            rows[#rows + 1] = {
+                specID = entry.specID,
+                specName = specName,
+                specIcon = specIcon,
+                entry = entry,
+                gain = entry.gain,
+                exact = true,
+            }
+        end
+    end
+
+    table.sort(rows, function(a, b)
+        if a.gain ~= b.gain then
+            return a.gain > b.gain
+        end
+
+        if a.specName ~= b.specName then
+            return a.specName < b.specName
+        end
+
+        return (a.heroName or "") < (b.heroName or "")
+    end)
+
+    return rows
+end
+
+-- Which reference row each group member belongs on, keyed "specID:heroID". A
+-- player whose hero talent could not be read lands on the weaker variant, which
+-- is the value the picker assumes for them anyway.
+function ns.GetReferenceMatches()
+    local list = ns.GetActivePriorityList()
+    local matches = {}
+
+    for _, member in ipairs(ns.GetGroupSpecOverview()) do
+        if member.specID then
+            local entry = ns.GetPriorityEntry(list, member.specID)
+
+            if entry then
+                local hero = ns.FindHeroEntry(entry, member.hero) and member.hero
+                    or ns.GetFallbackHeroID(entry)
+                local key = member.specID .. ":" .. tostring(hero)
+
+                matches[key] = matches[key] or {}
+                table.insert(matches[key], member.name)
+            end
+        end
+    end
+
+    return matches
+end
+
+-- Everyone in the group, with whatever we know about them. Used by the tab and
+-- by the picker, so both always agree on what is going on. Works in a raid via
+-- the roster and in a party via the unit tokens, which carry no zone -- there
+-- UnitIsVisible stands in for "actually here".
+function ns.GetGroupSpecOverview()
+    local members, unknown = {}, 0
+    local ownName = UnitName("player")
+
+    local function add(name, present, online)
+        local short = (name or ""):match("^([^%-]+)")
+
+        if not short or short == "" or short == ownName then
+            return
+        end
+
+        local specID = ns.GetKnownSpec(short)
+
+        if not specID then
+            unknown = unknown + 1
+        end
+
+        members[#members + 1] = {
+            name = short,
+            specID = specID,
+            hero = ns.GetKnownHero(short),
+            online = online and true or false,
+            present = present and true or false,
+        }
+    end
+
+    if IsInRaid and IsInRaid() then
+        local ownZone = GetRealZoneText and GetRealZoneText()
+
+        for index = 1, ns.MAX_RAID_MEMBERS do
+            local name, _, _, _, _, _, zone, online = GetRaidRosterInfo(index)
+
+            if name then
+                add(name, online and (not ownZone or not zone or zone == ownZone), online)
+            end
+        end
+    elseif IsInGroup and IsInGroup() then
+        for index = 1, 4 do
+            local unit = "party" .. index
+
+            if UnitExists and UnitExists(unit) then
+                local online = not UnitIsConnected or UnitIsConnected(unit)
+                add(UnitName(unit), online and (not UnitIsVisible or UnitIsVisible(unit)), online)
+            end
+        end
+    end
+
+    return members, unknown
+end
+
+-- Which of the two views the Damage Gain tab shows. Kept here so the tab and
+-- anything else asking never disagree about it.
+function ns.GetDamageGainMode()
+    if (IsInGroup and IsInGroup()) and ns.GetDB().priorityFilterToGroup then
+        return "players"
+    end
+
+    return "reference"
+end
+
+-- One row per player, sorted by what that player actually gains. Two players of
+-- the same spec with different hero talents are worth different amounts, so
+-- grouping by spec would hide exactly the distinction this is here to make.
+function ns.GetPlayerRows()
+    local list = ns.GetActivePriorityList()
+    local members, unknown = ns.GetGroupSpecOverview()
+    local rows = {}
+
+    for _, member in ipairs(members) do
+        if member.specID then
+            local entry = ns.GetPriorityEntry(list, member.specID)
+
+            if entry then
+                local gain, exact = ns.GetHeroGain(entry, member.hero)
+
+                local specName, specIcon = ns.GetSpecDisplay(member.specID)
+
+                rows[#rows + 1] = {
+                    name = member.name,
+                    specID = member.specID,
+                    specName = specName,
+                    specIcon = specIcon,
+                    entry = entry,
+                    hero = member.hero,
+                    heroName = ns.GetHeroDisplayName(member.hero, entry),
+                    gain = gain,
+                    exact = exact,
+                    present = member.present,
+                    online = member.online,
+                }
+            end
+        end
+    end
+
+    table.sort(rows, function(a, b)
+        if a.gain ~= b.gain then
+            return a.gain > b.gain
+        end
+
+        return a.name < b.name
+    end)
+
+    return rows, unknown
+end
+
+-- Returns name, entry, gain, tied, hero. Only considers members who are online
+-- and in the same zone, so someone still sitting in the city is never
+-- suggested. Ranking is by gain rather than by position in the list, because a
+-- known hero talent can lift a player above a spec that outranks them on paper.
+-- `tied` counts further players worth exactly the same: the choice between them
+-- is arbitrary and worth mentioning.
+-- `skip` optionally rules out candidates -- used to step around players another
+-- priest has already claimed.
+function ns.PickBestTarget(skip)
+    local bestName, bestEntry, bestGain, bestHero, tied = nil, nil, nil, nil, 0
+
+    for _, row in ipairs(ns.GetPlayerRows()) do
+        if row.present and not (skip and skip(row.name)) then
+            if not bestGain or row.gain > bestGain then
+                bestName, bestEntry, bestGain, bestHero, tied = row.name, row.entry, row.gain, row.hero, 0
+            elseif row.gain == bestGain then
+                tied = tied + 1
+            end
+        end
+    end
+
+    return bestName, bestEntry, bestGain, tied, bestHero
+end
+
+-- /pa auto. Sits below the raid note in the precedence order, so it steps aside
+-- while a note assignment is in effect instead of fighting it.
+function ns.AutoAssignBestTarget()
+    -- Party is enough; the roster scan handles both.
+    if not (IsInGroup and IsInGroup()) then
+        ns.Print("Automatic picking needs a party or raid group.", "F82C00")
+        return false
+    end
+
+    if ns.GetAssignedTargetSource() == "note" then
+        ns.Print("The raid note assigns " .. ns.GetAssignedTarget() ..
+            ", which takes priority. Use /pa to override it yourself.", "F8C300")
+        return false
+    end
+
+    -- Step around anyone another priest has a stronger claim on.
+    local name, entry, gain, tied, hero = ns.PickBestTarget(function(candidate)
+        return ns.GetBlockingClaim(candidate, "auto") ~= nil
+    end)
+
+    if not name then
+        local members, unknown = ns.GetGroupSpecOverview()
+
+        -- Distinguish "nobody suitable" from "everyone suitable is taken".
+        if ns.PickBestTarget() then
+            ns.Print("Every player worth infusing is already claimed by another priest. " ..
+                "Use /pa comm to see who, or /pa to choose one anyway.", "F8C300")
+            return false
+        end
+
+        -- Say which of the three reasons it was, rather than just refusing.
+        if #members == 0 then
+            ns.Print("No one else is in your group.", "F8C300")
+        elseif unknown >= #members then
+            ns.Print("No specialisations known yet. " .. unknown .. " of " .. #members ..
+                " report nothing - they need an addon that uses LibSpecialization, " ..
+                "such as BigWigs or WeakAuras.", "F8C300")
+        else
+            ns.Print("No one present matches the priority list." ..
+                (unknown > 0 and (" " .. unknown .. " member(s) report no specialisation.") or ""), "F8C300")
+        end
+
+        return false
+    end
+
+    local heroName = ns.GetHeroDisplayName(hero, entry)
+
+    ns.SetAssignedTarget(name, "auto")
+    ns.Print("Power Infusion target picked automatically: " .. name ..
+        " (" .. string.format("%.2f", gain) .. "%" ..
+        (heroName and (", " .. heroName) or "") .. ")" ..
+        (tied > 0 and (" - " .. tied .. " other(s) are worth the same, pick one yourself with /pa if you prefer.") or "") ..
+        -- Without a hero talent the figure is the weaker of the two on purpose,
+        -- so say so instead of presenting it as measured.
+        (heroName and "" or (" - hero talent unknown, using the lower value of " ..
+            ns.FormatHeroVariants(entry) .. ".")), "90EE90")
+    ns.RequestMacroUpdate()
     return true
 end
 
@@ -634,7 +1010,22 @@ function ns.ShouldShowVoidformPotionWarning(profile)
 end
 
 function ns.GetVoidformPotionWarningText()
-    return "The Voidform macro uses only one potion quality because WoW macros are limited to 255 characters."
+    return "Only one potion rank fits, because WoW caps macros at 255 characters."
+end
+
+-- Shown whenever Voidform is the primary macro, independently of the potion.
+function ns.ShouldShowVoidformMadnessWarning(profile)
+    if not ns.SHOW_VOIDFORM_MADNESS_WARNING then
+        return false
+    end
+
+    profile = profile or ns.GetActiveProfile()
+    return profile.macroVariant == "voidform"
+end
+
+function ns.GetVoidformMadnessWarningText()
+    return "Entering Voidform from a macro currently leaves Shadow Word: Madness unusable for " ..
+        "roughly 1 to 4 seconds. Until that is fixed, Power Infusion is the safer primary macro."
 end
 
 -- Falls back to the profile's primary macro for anything unexpected.
@@ -678,8 +1069,26 @@ function ns.GetAssignedTarget()
     return ns.GetDB().assignedTarget or ""
 end
 
-function ns.SetAssignedTarget(targetName)
-    ns.GetDB().assignedTarget = targetName or ""
+-- source: "manual" (/pa, minimap, Update Macro), "note" or "auto".
+-- The precedence rule is manual > note > auto, so /pa auto has to know where
+-- the current assignment came from before it may replace it.
+-- Every route to a new target ends here, so this is where the group is told.
+function ns.SetAssignedTarget(targetName, source)
+    local db = ns.GetDB()
+    local previous = db.assignedTarget or ""
+
+    db.assignedTarget = targetName or ""
+    db.assignedTargetSource = (targetName and targetName ~= "") and (source or "manual") or ""
+
+    -- Only on a real change, or a rebuild for an unrelated setting would put a
+    -- message on the wire every time.
+    if db.assignedTarget ~= previous and ns.AnnounceAssignment then
+        ns.AnnounceAssignment()
+    end
+end
+
+function ns.GetAssignedTargetSource()
+    return ns.GetDB().assignedTargetSource or ""
 end
 
 function ns.IsSecretValue(value)
@@ -699,7 +1108,7 @@ function ns.CaptureAssignedTarget()
         return false
     end
 
-    ns.SetAssignedTarget(targetName or "")
+    ns.SetAssignedTarget(targetName or "", "manual")
     return true
 end
 

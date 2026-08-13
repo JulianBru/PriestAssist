@@ -41,6 +41,13 @@ ns.ADDON_DESCRIPTION =
 ns.LINK_GITHUB = "https://github.com/JulianBru/PriestAssist"
 ns.LINK_CURSEFORGE = "https://www.curseforge.com/wow/addons/priestassist"
 
+ns.WARNING_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\warning.tga"
+
+-- Voidform macros currently stop Shadow Word: Madness from being cast. This
+-- looks like a Blizzard bug rather than intended behaviour, so it lives behind
+-- a flag: set it to false once a patch fixes it and the warning disappears.
+ns.SHOW_VOIDFORM_MADNESS_WARNING = true
+
 ns.LINK_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\Links\\"
 ns.LINK_ICON_GITHUB = ns.LINK_ICON_PATH .. "github.tga"
 ns.LINK_ICON_CURSEFORGE = ns.LINK_ICON_PATH .. "curseforge.tga"
@@ -206,6 +213,8 @@ ns.DEFAULTS = {
         pvp     = "pvp",
     },
     autoSwitchProfiles = false,
+    -- Damage Gain tab: in a group, show only specs that are actually there.
+    priorityFilterToGroup = true,
     -- Reads the Power Infusion assignment out of the MRT raid note. Raid only.
     useNoteAssignment = false,
     -- Checks on ready check whether the assigned player is actually there.
@@ -218,6 +227,7 @@ ns.DEFAULTS = {
     -- The player you assigned with /pa. Kept so that changing a setting
     -- rebuilds the macros without silently reassigning them.
     assignedTarget = "",
+    assignedTargetSource = "",
     reminderEnabled = true,
     reminderDuration = 5,
     reminderEnterDelay = 2,

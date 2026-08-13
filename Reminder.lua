@@ -15,6 +15,10 @@ function ns.ApplyReminderFont(fontPath, fontSize, outlineStyle)
         outline = nil
     end
 
+    -- The chosen font becomes the new base, so a glyph fallback that is active
+    -- right now never restores the font this call is replacing.
+    reminderText.paBaseFont = nil
+
     if reminderText:SetFont(fontPath, size, outline) then
         return fontPath
     end
@@ -64,13 +68,13 @@ function ns.UpdateReminderVisibility()
     end
 
     if state.reminderActive then
-        reminderText:SetText(ns.GetReminderPreviewText())
+        reminderText:SetText(UI.ApplyGlyphFallback(reminderText, ns.GetReminderPreviewText()))
         reminderFrame:Show()
         return
     end
 
     if inEditMode then
-        reminderText:SetText(ns.GetReminderPreviewText())
+        reminderText:SetText(UI.ApplyGlyphFallback(reminderText, ns.GetReminderPreviewText()))
         reminderFrame:Show()
         return
     end
@@ -102,7 +106,7 @@ function ns.ApplyReminderSettings()
     ) or fontPath
 
     reminderFrame:SetFrameStrata(db.reminderStrata or ns.DEFAULTS.reminderStrata)
-    reminderText:SetText(ns.GetReminderPreviewText())
+    reminderText:SetText(UI.ApplyGlyphFallback(reminderText, ns.GetReminderPreviewText()))
 
     reminderFrame:ClearAllPoints()
     reminderFrame:SetPoint(
@@ -360,7 +364,7 @@ function ns.CreateReminderFrame()
     reminderText:SetShadowColor(0, 0, 0, 1)
     reminderText:SetShadowOffset(3, -3)
     ns.ApplyReminderFont(ns.DEFAULTS.reminderFontPath, ns.DEFAULTS.reminderFontSize, ns.DEFAULTS.reminderOutline)
-    reminderText:SetText(ns.GetReminderPreviewText())
+    reminderText:SetText(UI.ApplyGlyphFallback(reminderText, ns.GetReminderPreviewText()))
 
     reminderFrame:SetScript("OnDragStart", function(self)
         if not ns.IsEditModeActive() then
