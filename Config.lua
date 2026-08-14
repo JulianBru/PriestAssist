@@ -94,6 +94,11 @@ function ns.RequestConfigRefresh()
             return
         end
 
+        -- The same debounce that keeps the panel cheap is exactly the tick the
+        -- assignment wants: everything that could change the best target lands
+        -- here. Before the panel, so it shows the result rather than the state
+        -- half a second ago.
+        ns.MaintainAssignment()
         ns.RefreshConfigPanel()
     end)
 end
@@ -119,6 +124,15 @@ function ns.RefreshConfigPanel()
     if cc.minimapEnabled      then cc.minimapEnabled:SetChecked(not (db.minimap and db.minimap.hidden)) end
     if cc.useNoteAssignment   then cc.useNoteAssignment:SetChecked(db.useNoteAssignment and true or false) end
     if cc.validateTarget      then cc.validateTarget:SetChecked(db.validateTargetOnReadyCheck and true or false) end
+    if cc.autoAssign          then cc.autoAssign:SetChecked(db.autoAssignTarget and true or false) end
+
+    if cc.autoAssignStatus then
+        cc.autoAssignStatus:SetText(db.autoAssignTarget
+            and "Assigns whoever gains the most from your Power Infusion and keeps it " ..
+                "current as the group changes. /pa, the raid note and another priest's " ..
+                "claim all take precedence."
+            or "Off. See the Damage Gain tab for the ranking, or assign once with /pa auto.")
+    end
     if cc.noteStatus then
         local sources = ns.GetRaidNoteSources()
 
@@ -288,6 +302,130 @@ function ns.RefreshConfigPanel()
         cc.macroText:SetText(UI.ApplyGlyphFallback(cc.macroText, macroBody))
         UpdateMacroTextCounter(macroBody)
     end
+end
+
+-- ─── Info windows ─────────────────────────────────────────────────────────────
+
+local INFO_PAD = 16
+
+-- The shell both info windows share: title bar in the addon's theme colour,
+-- close button, and a cursor that content is stacked beneath.
+local function InfoWindow(key, title, width, height)
+    local frame = frames[key]
+
+    if frame then
+        return frame, nil
+    end
+
+    local accent = ns.GetThemeAccentName()
+
+    frame = UI.CreateHeaderedFrame(UIParent, "PriestAssist" .. key, title,
+        width, height, "FULLSCREEN_DIALOG", 30)
+    frame:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
+
+    -- Without this the title bar keeps the palette's default accent and
+    -- clashes with the main panel, which follows the addon's theme colour.
+    frame:SetTitleColor(accent)
+
+    local close = UI.CreateButton(frame, "Close", accent, 100, 24)
+    close:SetPoint("BOTTOM", frame, "BOTTOM", 0, INFO_PAD)
+    close:SetOnClick(function() frame:Hide() end)
+
+    frames[key] = frame
+
+    local inner = width - INFO_PAD * 2
+    local previous, gap = nil, 0
+
+    -- Stacks a paragraph under the last one. `color` doubles as the heading
+    -- marker: an accent-coloured line reads as a heading without a second font.
+    local function add(text, color, spacing)
+        local fs = UI.CreateFontString(frame, text, color or "textDim", "FONT_SMALL")
+
+        if previous then
+            fs:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -(spacing or gap))
+        else
+            fs:SetPoint("TOPLEFT", frame, "TOPLEFT", INFO_PAD, -48)
+        end
+
+        fs:SetWidth(inner)
+        fs:SetJustifyH("LEFT")
+        fs:SetSpacing(3)
+        previous, gap = fs, 10
+        return fs
+    end
+
+    return frame, { add = add, inner = inner, accent = accent,
+                    anchor = function() return previous end,
+                    setAnchor = function(widget) previous = widget end }
+end
+
+-- The exact shape of the line is the one thing about the note feature that
+-- cannot be guessed, so it is offered as copyable text rather than described.
+local NOTE_EXAMPLE = "Power Infusion\nPI: PriestName TargetName"
+
+function ns.ShowNoteHelp()
+    local frame, build = InfoWindow("noteHelp", "Raid note format", 430, 252)
+
+    if build then
+        build.add("PriestAssist reads Power Infusion assignments out of the raid note in " ..
+            "MRT or NorthernSkyRaidTools. One line per priest:", "text")
+
+        local example = UI.CreateCopyBox(frame, build.inner, 40, true)
+        example:SetPoint("TOPLEFT", build.anchor(), "BOTTOMLEFT", 0, -10)
+        example:SetValue(NOTE_EXAMPLE)
+        build.setAnchor(example)
+
+        build.add("The first name is the priest, the second is the player they infuse. Only " ..
+            "the line naming you is used, the rest of the note is ignored, and realm " ..
+            "suffixes make no difference.\n\n" ..
+            "Use /pa note to see what the parser reads.", "textDim", 12)
+
+        -- A focused edit box would keep swallowing Escape otherwise.
+        frame:SetScript("OnHide", function() example:ClearFocus() end)
+    end
+
+    frame:Show()
+    frame:Raise()
+end
+
+function ns.ShowDamageGainHelp()
+    local frame, build = InfoWindow("damageGainHelp", "Damage Gain", 470, 486)
+
+    if build then
+        build.add("What the list shows", build.accent)
+        build.add("How much your Power Infusion is worth on each specialisation, as a " ..
+            "percentage of that player's damage. Discipline and Holy read different " ..
+            "numbers than Shadow, so the list follows your own specialisation.", "text", 6)
+
+        build.add("Where the numbers come from", build.accent)
+        build.add("Simulation results at 4-piece tier, from Ulria's public sheet. The date " ..
+            "they were run is shown above the table -- if it looks old, it is.", "text", 6)
+
+        build.add("How your group is read", build.accent)
+        build.add("Specialisations and talent loadouts arrive over addon communication from " ..
+            "players running BigWigs, WeakAuras or NorthernSkyRaidTools. Nobody is " ..
+            "inspected and there is no range limit. Where the loadout can be read, the " ..
+            "hero talent is decoded and its exact value used; where it cannot, the weaker " ..
+            "of the two variants is assumed and the row says \"unknown\". Players whose " ..
+            "specialisation never arrives are counted, not hidden.", "text", 6)
+
+        build.add("How a target is picked", build.accent)
+        build.add("/pa auto assigns the best available player once. With the option in the " ..
+            "General tab on, that happens by itself and follows the group. Your own /pa " ..
+            "always wins, the raid note comes next, the automatic pick fills what is left.",
+            "text", 6)
+
+        build.add("Other priests", build.accent)
+        build.add("Priests running PriestAssist tell each other who they have assigned, so " ..
+            "two of you do not infuse the same player. Whoever gains more keeps the " ..
+            "target and the other picks again -- but only automatic picks ever move, what " ..
+            "you set yourself stays. /pa comm lists who is infusing whom. Priests without " ..
+            "the addon are invisible to this; against those the raid note is still the " ..
+            "only coordination.", "text", 6)
+    end
+
+    frame:Show()
+    frame:Raise()
 end
 
 -- ─── CreateConfigPanel ────────────────────────────────────────────────────────
@@ -518,15 +656,55 @@ function ns.CreateConfigPanel()
         ns.ApplyVoidAccentToCheckButton(configControls.useNoteAssignment)
         configControls.useNoteAssignment:SetPoint("TOPLEFT", secNote, "BOTTOMLEFT", 0, -14)
 
+        -- The note format is the one thing about this feature nobody can guess,
+        -- so the example sits one click away rather than in the readme.
+        configControls.noteHelp = UI.CreateButton(p, "Info", accent, 76, 24)
+        configControls.noteHelp:SetIcon(ns.INFO_ICON_PATH, 16)
+        configControls.noteHelp:SetPoint("TOPRIGHT", secNote, "BOTTOMRIGHT", 0, -11)
+        configControls.noteHelp:SetOnClick(function() ns.ShowNoteHelp() end)
+
         configControls.noteStatus = UI.CreateFontString(p, "", "textDim", "FONT_SMALL")
         configControls.noteStatus:SetPoint("TOPLEFT", configControls.useNoteAssignment, "BOTTOMLEFT", 0, -8)
         configControls.noteStatus:SetWidth(CONTENT_W)
         configControls.noteStatus:SetJustifyH("LEFT")
         configControls.noteStatus:SetSpacing(3)
 
+        -- Named after the tab it draws from, the same way the section above is
+        -- named after the raid note: heading says where the target comes from,
+        -- checkbox says what happens. Below the note, because the note outranks
+        -- it -- reading order matches the order they apply in.
+        local secAuto = SectionHeader(p, "Damage Gain", configControls.noteStatus, -22)
+
+        configControls.autoAssign = UI.CreateCheckButton(p,
+            "Take the Power Infusion target from the Damage Gain list",
+            function(checked)
+                ns.GetDB().autoAssignTarget = checked and true or false
+
+                if checked then
+                    ns.MaintainAssignment()
+                end
+
+                ns.RefreshConfigPanel()
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.autoAssign)
+        configControls.autoAssign:SetPoint("TOPLEFT", secAuto, "BOTTOMLEFT", 0, -14)
+
+        -- The most machinery of any feature here -- ranking, hero talents,
+        -- precedence, priest-to-priest comms -- and a status line cannot carry it.
+        configControls.autoAssignHelp = UI.CreateButton(p, "Info", accent, 76, 24)
+        configControls.autoAssignHelp:SetIcon(ns.INFO_ICON_PATH, 16)
+        configControls.autoAssignHelp:SetPoint("TOPRIGHT", secAuto, "BOTTOMRIGHT", 0, -11)
+        configControls.autoAssignHelp:SetOnClick(function() ns.ShowDamageGainHelp() end)
+
+        configControls.autoAssignStatus = UI.CreateFontString(p, "", "textDim", "FONT_SMALL")
+        configControls.autoAssignStatus:SetPoint("TOPLEFT", configControls.autoAssign, "BOTTOMLEFT", 0, -8)
+        configControls.autoAssignStatus:SetWidth(CONTENT_W)
+        configControls.autoAssignStatus:SetJustifyH("LEFT")
+        configControls.autoAssignStatus:SetSpacing(3)
+
         -- Global on purpose: there are exactly two macros, they cannot change
         -- tab per zone without losing their action bar placement.
-        local secMacros = SectionHeader(p, "Macros", configControls.noteStatus, -22)
+        local secMacros = SectionHeader(p, "Macros", configControls.autoAssignStatus, -22)
 
         configControls.macroScope = UI.CreateDropdown(p, CONTENT_W, 4)
         ns.ApplyVoidAccentToDropdown(configControls.macroScope)

@@ -886,6 +886,132 @@ function ns.AutoAssignBestTarget()
     return true
 end
 
+-- ─── Keeping a target assigned ───────────────────────────────────────────────
+--
+-- Deliberately a maintained condition rather than a reaction to one event:
+-- while the option is on and no stronger source has spoken, the target should
+-- be the best available one. A ready check would have been the obvious trigger
+-- and the wrong one -- plenty of content never has one, a world boss being the
+-- clearest case.
+
+-- Specs arrive one player at a time, so the answer is unstable for the first
+-- seconds after a group forms. Waiting avoids three messages where one will do.
+local ASSIGN_SETTLE = 5
+local settleUntil, settleScheduled = 0, false
+
+local function Now()
+    return GetTime and GetTime() or 0
+end
+
+-- Still in our group at all? Deliberately not "present": being offline or
+-- outside the instance is temporary and must not discard a deliberate choice,
+-- whereas leaving the group is final.
+function ns.IsInOurGroup(targetName)
+    if not targetName or targetName == "" then
+        return false
+    end
+
+    local wanted = NormalizeNoteName(targetName)
+
+    if wanted == NormalizeNoteName(UnitName and UnitName("player") or "") then
+        return true
+    end
+
+    for _, member in ipairs(ns.GetGroupSpecOverview()) do
+        if NormalizeNoteName(member.name) == wanted then
+            return true
+        end
+    end
+
+    return false
+end
+
+-- Holds off the next evaluation, and schedules one for when the wait is over --
+-- otherwise a group that goes quiet would never get its first assignment.
+function ns.DelayAssignment(seconds)
+    seconds = seconds or ASSIGN_SETTLE
+    settleUntil = Now() + seconds
+
+    if settleScheduled then
+        return
+    end
+
+    settleScheduled = true
+
+    C_Timer.After(seconds + 0.1, function()
+        settleScheduled = false
+
+        local remaining = settleUntil - Now()
+
+        if remaining > 0 then
+            ns.DelayAssignment(remaining)
+        else
+            ns.MaintainAssignment()
+        end
+    end)
+end
+
+function ns.MaintainAssignment()
+    local db = ns.GetDB()
+
+    if not db.autoAssignTarget then
+        return false
+    end
+
+    if not (IsInGroup and IsInGroup()) then
+        return false
+    end
+
+    -- The macro cannot be rebuilt under lockdown anyway; the caller runs this
+    -- again once the fight is over.
+    if InCombatLockdown and InCombatLockdown() then
+        return false
+    end
+
+    if Now() < settleUntil then
+        return false
+    end
+
+    local current = ns.GetAssignedTarget()
+    local source = ns.GetAssignedTargetSource()
+    local released = nil
+
+    if current ~= "" and (source == "manual" or source == "note") then
+        if ns.IsInOurGroup(current) then
+            return false
+        end
+
+        -- The player this was aimed at is gone, so the intent is void.
+        released = current
+    end
+
+    local name, entry, gain, _, hero = ns.PickBestTarget(function(candidate)
+        return ns.GetBlockingClaim(candidate, "auto") ~= nil
+    end)
+
+    if not name or name == current then
+        return false
+    end
+
+    local heroName = ns.GetHeroDisplayName(hero, entry)
+    local detail = name .. " (" .. string.format("%.2f%%", gain or 0) ..
+        (heroName and (", " .. heroName) or "") .. ")"
+
+    ns.SetAssignedTarget(name, "auto")
+
+    if released then
+        ns.Print(released .. " is no longer in your group - Power Infusion target set to " ..
+            detail .. ".", "F8C300")
+    elseif current == "" then
+        ns.Print("Power Infusion target set automatically: " .. detail .. ".", "90EE90")
+    else
+        ns.Print("Power Infusion target moved to " .. detail .. ".", "90EE90")
+    end
+
+    ns.RequestMacroUpdate()
+    return true
+end
+
 -- Diagnostic for /pa note. Reports what the parser sees without the raid gate,
 -- so the whole chain can be checked solo at a training dummy.
 function ns.ReportNoteAssignment()

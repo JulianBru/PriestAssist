@@ -774,7 +774,10 @@ end
 -- Single-line, read-only text field used to hand out URLs, since WoW addons
 -- cannot open a browser. The player selects the text and copies it.
 
-function UI.CreateCopyBox(parent, width, height)
+--- A read-only box whose contents can be selected and copied.
+--- @param multiline boolean several lines, selected as one block -- for an
+---        example somebody is meant to paste somewhere else in full
+function UI.CreateCopyBox(parent, width, height, multiline)
     local container = CreateFrame("Frame", nil, parent, BackdropTemplateMixin and "BackdropTemplate" or nil)
     container:SetSize(width or 200, height or 24)
     StyleFrame(container, C.bgWidget, C.border)
@@ -785,6 +788,11 @@ function UI.CreateCopyBox(parent, width, height)
     editBox:SetPoint("TOPLEFT",     container, "TOPLEFT",      7, -1)
     editBox:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", -7,  1)
     editBox:SetAutoFocus(false)
+
+    if multiline then
+        editBox:SetMultiLine(true)
+    end
+
     editBox:SetFont(GetFont(), 12, "")
     editBox:SetTextColor(C.text[1], C.text[2], C.text[3], 1.0)
     editBox:SetTextInsets(0, 0, 0, 0)
@@ -792,6 +800,9 @@ function UI.CreateCopyBox(parent, width, height)
     container.editBox = editBox
 
     editBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+    -- On a multi-line box Enter would insert a newline, which the read-only
+    -- guard below would then snap back -- clearing focus is the sane response.
     editBox:SetScript("OnEnterPressed",  function(self) self:ClearFocus() end)
 
     -- Read-only: typing snaps the value straight back.

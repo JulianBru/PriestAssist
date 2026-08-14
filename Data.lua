@@ -42,6 +42,8 @@ ns.LINK_GITHUB = "https://github.com/JulianBru/PriestAssist"
 ns.LINK_CURSEFORGE = "https://www.curseforge.com/wow/addons/priestassist"
 
 ns.WARNING_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\warning.tga"
+ns.HELP_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\help.tga"
+ns.INFO_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\info.tga"
 
 -- Voidform macros currently stop Shadow Word: Madness from being cast. This
 -- looks like a Blizzard bug rather than intended behaviour, so it lives behind
@@ -217,6 +219,7 @@ ns.DEFAULTS = {
     priorityFilterToGroup = true,
     -- Reads the Power Infusion assignment out of the MRT raid note. Raid only.
     useNoteAssignment = false,
+    autoAssignTarget = false,
     -- Checks on ready check whether the assigned player is actually there.
     validateTargetOnReadyCheck = true,
     -- One selected profile: it is both what the panel edits and what the macros

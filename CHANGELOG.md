@@ -1,5 +1,19 @@
 # Priest Assist
 
+## [1.4](https://github.com/JulianBru/PriestAssist/tree/v1.4) (2026-08-14)
+
+### Added
+
+- **Automatic target assignment.** Off by default, switch it on under *Damage Gain* in the General tab. Keeps whoever gains most from your Power Infusion assigned and follows the group as it changes. Deliberately not tied to the ready check, so it works at a world boss too.
+
+  `/pa` and the raid note always win. A target you set yourself is only released once that player has actually left the group — offline or outside the instance is temporary and keeps it. Nothing is assigned in combat, and after a group change it waits a few seconds so the specialisations are all in.
+
+- **Info windows** for the raid note and Damage Gain, opened from the General tab. The note one has a copyable example; the Damage Gain one explains where the numbers come from, how your group is read and how two priests avoid the same target.
+
+### Changed
+
+- **The General tab is split into sections.** *Raid Note* and *Damage Gain* each name where a target can come from, in the order they take precedence, with their own status line underneath.
+
 ## [1.3](https://github.com/JulianBru/PriestAssist/tree/v1.3) (2026-08-13)
 
 ### Added

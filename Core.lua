@@ -140,6 +140,9 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
         -- The Damage Gain tab lists who is in the group, so it goes stale when
         -- somebody joins or leaves.
         if event == "GROUP_ROSTER_UPDATE" then
+            -- Specialisations arrive one at a time after a change, so give them
+            -- a moment before deciding who the best target is.
+            ns.DelayAssignment()
             ns.RequestConfigRefresh()
         end
 
@@ -152,6 +155,9 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
         -- MRT needs a moment to have received it.
         C_Timer.After(1, function()
             ns.CheckNoteAssignment()
+
+            -- After the note, which outranks an automatic pick.
+            ns.MaintainAssignment()
 
             -- After the note, so a target it just set is validated too.
             if isReadyCheck then
@@ -178,6 +184,10 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
             ns.ScheduleInstanceReminder()
         end
 
+        -- A loading screen means the group around us may look different by the
+        -- time everyone has reported in.
+        ns.DelayAssignment()
         ns.ScheduleContentProfileCheck()
+        ns.RequestConfigRefresh()
     end
 end)
