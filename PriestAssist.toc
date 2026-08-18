@@ -20,5 +20,6 @@ Reminder.lua
 Macro.lua
 Comm.lua
 Config.lua
+Options.lua
 Minimap.lua
 Core.lua

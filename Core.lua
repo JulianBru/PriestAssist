@@ -105,6 +105,7 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
 
         ns.InitializeSpecTracking()
         ns.InitializeComm()
+        ns.RegisterOptionsPanel()
         ns.ScheduleInstanceReminder(1)
         ns.ScheduleContentProfileCheck(1)
         return
