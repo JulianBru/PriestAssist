@@ -7,6 +7,20 @@ local UI = ns.UI
 -- language than spelling the name out.
 ns.POWER_INFUSION_SPELL_ID = 10060
 ns.VOID_VOLLEY_SPELL_ID = 1242173
+
+-- On-use racial cooldowns worth firing alongside the rest of the burst. Only
+-- these four: the others are passives, defensives or utility, and putting them
+-- on this macro would either do nothing or waste them.
+--
+-- Which one you have is asked of the client, not derived from your race --
+-- C_SpellBook.IsSpellKnown survives any reshuffling of races and spells, and a
+-- player only ever knows one of them.
+ns.RACIAL_SPELL_IDS = {
+    265221,     -- Fireblood, Dark Iron Dwarf
+    26297,      -- Berserking, Troll
+    33697,      -- Blood Fury, Orc
+    274738,     -- Ancestral Call, Mag'har Orc
+}
 ns.VOIDFORM_SPELL_ID = 228260
 -- One macro per variant. WoW allows 16 characters for a macro name.
 ns.MACRO_NAMES = {
@@ -201,6 +215,7 @@ ns.PROFILE_DEFAULTS = {
     combatPotion = "none",
     combatPotionQuality = 2,
     trinketSlot = "13",
+    includeRacial = false,
     announceTarget = false,
 }
 

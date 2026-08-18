@@ -273,6 +273,12 @@ function UI.CreateCheckButton(parent, label, onCheck)
     lbl:SetJustifyH("LEFT")
     container.label = lbl
 
+    -- For labels that are only known at runtime, such as the name of whichever
+    -- racial this character happens to have.
+    function container:SetLabel(text)
+        self.label:SetText(text or "")
+    end
+
     local hit = CreateFrame("Button", nil, container)
     hit:SetPoint("TOPLEFT",     container, "TOPLEFT",     0, 0)
     hit:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", 0, 0)
@@ -291,8 +297,32 @@ function UI.CreateCheckButton(parent, label, onCheck)
         Apply(s)
         if onCheck then onCheck(s) end
     end)
-    hit:SetScript("OnEnter", function() StyleFrame(box, C.bgHover, C.border) end)
-    hit:SetScript("OnLeave", function() StyleFrame(box, C.bgWidget, C.border) end)
+    hit:SetScript("OnEnter", function()
+        StyleFrame(box, C.bgHover, C.border)
+
+        -- Hooking would mean one more handler per call; the check is cheaper.
+        if container._tooltipSpell and GameTooltip and GameTooltip.SetSpellByID then
+            GameTooltip:SetOwner(container, "ANCHOR_RIGHT")
+
+            if pcall(GameTooltip.SetSpellByID, GameTooltip, container._tooltipSpell) then
+                GameTooltip:Show()
+            else
+                GameTooltip:Hide()
+            end
+        end
+    end)
+    hit:SetScript("OnLeave", function()
+        StyleFrame(box, C.bgWidget, C.border)
+
+        if GameTooltip then
+            GameTooltip:Hide()
+        end
+    end)
+
+    --- Shows the spell's own tooltip while the row is hovered. Pass nil to stop.
+    function container:SetTooltipSpell(spellID)
+        self._tooltipSpell = spellID
+    end
 
     container:HookScript("OnShow", function()
         if container._checked then fill:Show() else fill:Hide() end

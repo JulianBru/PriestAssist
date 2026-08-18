@@ -1118,6 +1118,51 @@ function ns.BuildCombatPotionLines(macroVariant, profile)
     return table.concat(lines, "\n")
 end
 
+-- Returns spellID, name for the on-use racial this character has, or nil.
+-- Asked of the client rather than mapped from the race, so it needs no table to
+-- keep current and covers whatever Blizzard does to races next.
+--
+-- C_SpellBook.IsSpellKnown, not the old global IsPlayerSpell: the spellbook
+-- functions moved into C_SpellBook and the global was deprecated in 11.2.0.
+-- The plain "known" variant is right here -- overrides matter for spells that
+-- get replaced by procs or talents, which a racial never is.
+function ns.GetKnownRacial()
+    local isKnown = C_SpellBook and C_SpellBook.IsSpellKnown
+
+    if type(isKnown) ~= "function" then
+        return nil
+    end
+
+    for _, spellID in ipairs(ns.RACIAL_SPELL_IDS) do
+        local ok, known = pcall(isKnown, spellID)
+
+        if ok and known then
+            local info = C_Spell and C_Spell.GetSpellInfo and C_Spell.GetSpellInfo(spellID)
+            local name = info and info.name
+
+            if type(name) == "string" and name ~= "" then
+                return spellID, name, info.iconID
+            end
+        end
+    end
+
+    return nil
+end
+
+function ns.BuildRacialLines(profile)
+    profile = profile or ns.GetActiveProfile()
+
+    if not profile.includeRacial then
+        return nil
+    end
+
+    local _, name = ns.GetKnownRacial()
+
+    -- The spell name, so the macro reads the same as the spellbook in every
+    -- language. Nothing to build if this character has no on-use racial.
+    return name and ("/cast " .. name) or nil
+end
+
 function ns.BuildTrinketLines(profile)
     profile = profile or ns.GetActiveProfile()
 
@@ -1275,6 +1320,11 @@ function ns.BuildGeneratedMacroBody(variant, profile)
 
         if variant == "voidform" then
             lines[#lines + 1] = ns.BuildPowerInfusionLines(targetName)
+        end
+
+        local racialLine = ns.BuildRacialLines(profile)
+        if racialLine then
+            lines[#lines + 1] = racialLine
         end
 
         local combatPotionLines = ns.BuildCombatPotionLines(variant, profile)

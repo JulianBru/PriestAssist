@@ -177,6 +177,36 @@ function ns.RefreshConfigPanel()
         cc.macroNotice:SetLines(entries)
         cc.macroNotice:SetShown(#entries > 0)
 
+        -- Only characters with one of the four on-use racials see this, and it
+        -- is labelled with the one they actually have. The next control anchors
+        -- to whichever is above it, so hiding leaves no gap.
+        if cc.includeRacial and cc.announceTarget then
+            local racialID, racialName, racialIcon = ns.GetKnownRacial()
+
+            cc.includeRacial:SetShown(racialName ~= nil)
+            cc.includeRacial:SetChecked(profile.includeRacial and true or false)
+
+            if racialName and cc.includeRacial.SetLabel then
+                -- Inline texture rather than a second widget: it flows with the
+                -- text, so nothing has to be re-anchored when the name length
+                -- changes between languages.
+                local icon = racialIcon and ("|T" .. racialIcon .. ":14:14:0:0|t ") or ""
+                cc.includeRacial:SetLabel("Include " .. icon .. racialName)
+            end
+
+            -- Hovering the row shows what the racial actually does. Deliberately
+            -- not a clickable spell link: the checkbox owns the clicks here, and
+            -- a label that reacts differently to a click than the box beside it
+            -- is the kind of surprise nobody thanks you for.
+            if cc.includeRacial.SetTooltipSpell then
+                cc.includeRacial:SetTooltipSpell(racialID)
+            end
+
+            cc.announceTarget:ClearAllPoints()
+            cc.announceTarget:SetPoint("TOPLEFT",
+                racialName and cc.includeRacial or cc.combatPotion, "BOTTOMLEFT", 0, -14)
+        end
+
         -- Without a notice the macro text section moves up and the field grows.
         if cc.macroTextSection and cc.macroTab then
             cc.macroTextSection:ClearAllPoints()
@@ -888,12 +918,30 @@ function ns.CreateConfigPanel()
             ns.RefreshConfigPanel()
         end)
 
+        -- Created for everyone, shown only to characters that have one of the
+        -- four on-use racials. Built unconditionally rather than skipped,
+        -- because this runs at login and the spellbook is not something to bet
+        -- on being ready; the anchoring below decides what is actually visible.
+        configControls.includeRacial = UI.CreateCheckButton(p, "Include racial",
+            function(checked)
+                ns.GetActiveProfile().includeRacial = checked and true or false
+                ns.RequestMacroUpdate()
+                ns.RefreshConfigPanel()
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.includeRacial)
+        configControls.includeRacial:SetPoint("TOPLEFT", configControls.combatPotion, "BOTTOMLEFT", 0, -14)
+
         configControls.announceTarget = UI.CreateCheckButton(p,
             "Announce target in party or raid chat",
             function(checked)
                 ns.GetActiveProfile().announceTarget = checked and true or false
             end)
         ns.ApplyVoidAccentToCheckButton(configControls.announceTarget)
+
+        -- The position for a character without a racial. The refresh moves it
+        -- below the racial checkbox when there is one -- but it needs an anchor
+        -- from the start, because macroNotice hangs off it and the refresh does
+        -- not run while the panel is closed.
         configControls.announceTarget:SetPoint("TOPLEFT", configControls.combatPotion, "BOTTOMLEFT", 0, -14)
 
         -- Warnings (shown only when relevant, height follows the content)
