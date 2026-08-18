@@ -88,9 +88,8 @@ HEADER = '''local _, ns = ...
 -- The weakest value stays the fallback for anyone whose hero talent cannot be
 -- read: better to understate than to recommend a poor target.
 
--- DD/MM/YYYY, shown in the Damage Gain tab. Taken from the sheet's own
--- changelog, not from the day the file was generated -- what matters is how old
--- the simulations are, not when someone last pressed a button.
+-- DD/MM/YYYY, shown in the Damage Gain tab.
+{date_note}
 ns.SPEC_PRIORITY_UPDATED = "{updated}"
 
 ns.SPEC_PRIORITY = {{
@@ -249,8 +248,22 @@ def parse(text: str, label: str) -> tuple[dict[int, list], list[dt.date], dict[i
     return specs, dates, names, timings
 
 
-def render(healer, shadow, names, updated: str, shadow_timing: str) -> str:
-    out = [HEADER.format(updated=updated)]
+# The comment has to match how the date was actually obtained -- a header that
+# claims the sheet's changelog when the value is really "today" is worse than no
+# comment at all, because it invites trust the data cannot carry.
+DATE_NOTES = {
+    "changelog": "-- Taken from the sheet's own changelog: what matters is how old the\n"
+                 "-- simulations are, not when someone last pressed a button.",
+    "given": "-- Supplied by hand when the file was generated, because the sheet carries\n"
+             "-- no date of its own.",
+    "today": "-- WARNING: the sheet had no date, so this is the day the file was\n"
+             "-- generated. It says nothing about how old the simulations are.\n"
+             "-- Replace it once the sheet has a changelog.",
+}
+
+
+def render(healer, shadow, names, updated: str, shadow_timing: str, date_source: str) -> str:
+    out = [HEADER.format(updated=updated, date_note=DATE_NOTES[date_source])]
 
     for key, specs in (("healer", healer), ("shadow", shadow)):
         out.append(f"    {key} = {{\n")
@@ -313,10 +326,11 @@ def main() -> int:
         if not re.fullmatch(r"\d{2}/\d{2}/\d{4}", args.date):
             print(f"error: --date {args.date!r} is not DD/MM/YYYY", file=sys.stderr)
             return 2
-        updated = args.date
+        updated, date_source = args.date, "given"
     elif dates:
-        updated = max(dates).strftime("%d/%m/%Y")
+        updated, date_source = max(dates).strftime("%d/%m/%Y"), "changelog"
     else:
+        date_source = "today"
         updated = dt.date.today().strftime("%d/%m/%Y")
         print(f"warning: neither sheet has a changelog date, falling back to today "
               f"({updated}). That is when this file was generated, not when the "
@@ -333,14 +347,24 @@ def main() -> int:
               f"({distinct}); PRIORITY_TIMING_NOTE can only state one", file=sys.stderr)
         return 2
 
-    generated = render(healer, shadow, names, updated, distinct[0])
+    generated = render(healer, shadow, names, updated, distinct[0], date_source)
 
     target = Path(args.output)
     current = target.read_text(encoding="utf-8") if target.exists() else None
 
-    if current == generated:
+    def without_date(text):
+        if text is None:
+            return None
+        return re.sub(r'ns\.SPEC_PRIORITY_UPDATED = "[^"]*"', "", text)
+
+    # Falling back to today means the date moves on every run. Rewriting the
+    # file for that alone would open a pull request every week saying nothing --
+    # so a difference that is only the date counts as no difference.
+    if current == generated or (date_source == "today" and
+                                without_date(current) == without_date(generated)):
         print(f"unchanged: {len(healer)} targets rated for a healer priest, "
-              f"{len(shadow)} for a Shadow priest, data from {updated}")
+              f"{len(shadow)} for a Shadow priest, data from "
+              f"{'today, but no value moved' if current != generated else updated}")
         return 0
 
     if args.check:
