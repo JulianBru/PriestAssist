@@ -219,6 +219,7 @@ ns.DEFAULTS = {
     priorityFilterToGroup = true,
     -- Reads the Power Infusion assignment out of the MRT raid note. Raid only.
     useNoteAssignment = false,
+    muteChat = false,
     autoAssignTarget = false,
     -- Checks on ready check whether the assigned player is actually there.
     validateTargetOnReadyCheck = true,

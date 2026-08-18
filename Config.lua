@@ -125,6 +125,7 @@ function ns.RefreshConfigPanel()
     if cc.useNoteAssignment   then cc.useNoteAssignment:SetChecked(db.useNoteAssignment and true or false) end
     if cc.validateTarget      then cc.validateTarget:SetChecked(db.validateTargetOnReadyCheck and true or false) end
     if cc.autoAssign          then cc.autoAssign:SetChecked(db.autoAssignTarget and true or false) end
+    if cc.muteChat            then cc.muteChat:SetChecked(db.muteChat and true or false) end
 
     if cc.autoAssignStatus then
         cc.autoAssignStatus:SetText(db.autoAssignTarget
@@ -638,8 +639,27 @@ function ns.CreateConfigPanel()
         ns.ApplyVoidAccentToCheckButton(configControls.minimapEnabled)
         configControls.minimapEnabled:SetPoint("TOPLEFT", configControls.validateTarget, "BOTTOMLEFT", 0, -10)
 
+        configControls.muteChat = UI.CreateCheckButton(p,
+            "Silence chat messages from PriestAssist",
+            function(checked)
+                -- Said before the flag takes effect, or the confirmation would
+                -- be the first thing swallowed.
+                if checked then
+                    ns.Print("Chat messages are now silenced. The reminder frame and this " ..
+                        "panel still show everything.", "A5AAD9")
+                end
+
+                ns.GetDB().muteChat = checked and true or false
+
+                if not checked then
+                    ns.Print("Chat messages are back on.", "A5AAD9")
+                end
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.muteChat)
+        configControls.muteChat:SetPoint("TOPLEFT", configControls.minimapEnabled, "BOTTOMLEFT", 0, -10)
+
         -- ── Raid note ─────────────────────────────────────────────────────────
-        local secNote = SectionHeader(p, "Raid Note", configControls.minimapEnabled, -22)
+        local secNote = SectionHeader(p, "Raid Note", configControls.muteChat, -22)
 
         configControls.useNoteAssignment = UI.CreateCheckButton(p,
             "Take the Power Infusion target from the raid note",
@@ -1036,10 +1056,15 @@ function ns.CreateConfigPanel()
         -- used by both views, so switching between them moves no headings and
         -- shifts no values. Only the set of rows differs.
         local COL_GAIN = 108
-        local W_GAIN = 38
-        local W_HERO = 120
-        local OFF_HERO = W_GAIN + 3
-        local COL_MATCH = COL_GAIN + OFF_HERO + W_HERO + 10
+        local W_GAIN = 42
+        local W_HERO = 130
+
+        -- The three-pixel gap here is left over from when two gain/hero pairs
+        -- shared the row; with one pair the value and the talent name ran into
+        -- each other, headings included. The width comes out of the player
+        -- column, which was far wider than any name needs.
+        local OFF_HERO = W_GAIN + 16
+        local COL_MATCH = COL_GAIN + OFF_HERO + W_HERO + 14
         local W_MATCH = (CONTENT_W - 5 - (5 + BAR_W + 3)) - COL_MATCH - 2
 
         -- Column headings sit above the box, so they do not scroll away.
@@ -1208,14 +1233,30 @@ function ns.CreateConfigPanel()
                             (#found > 1 and ("  +" .. (#found - 1)) or ""))
                     end
 
-                    row.match:SetTextSafe(names or "")
-                    row.match:SetColor(accent)
-
                     -- Dimmed rather than dropped when someone is offline or
                     -- outside the instance: they are still in the group, and
-                    -- the picker skips them for exactly that reason.
+                    -- the picker skips them for exactly that reason. The player
+                    -- is what is unavailable, so the player column carries it.
                     local here = (not players) or entry.present
-                    row.name:SetColor(names and here and "text" or "textDim")
+
+                    row.match:SetTextSafe(names or "")
+                    row.match:SetColor(here and accent or "textDim")
+
+                    -- Always class coloured, never dimmed. Whether a row is
+                    -- relevant is already said twice over -- by the highlighted
+                    -- background and by the player column -- and the reference
+                    -- list has no matches at all, so tying colour to them would
+                    -- leave the longest view entirely grey.
+                    local classColor = entry.specClass and C_ClassColor
+                        and C_ClassColor.GetClassColor
+                        and C_ClassColor.GetClassColor(entry.specClass)
+
+                    if classColor then
+                        row.name:SetTextColor(classColor.r, classColor.g, classColor.b, 1)
+                    else
+                        row.name:SetColor("text")
+                    end
+
                     row.bg:SetShown(names ~= nil and here)
                 end
             end

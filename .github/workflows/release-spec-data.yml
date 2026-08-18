@@ -1,4 +1,4 @@
-name: Release a sim data update
+name: Prepare a sim data release
 
 # Fires only when the automatic data pull request is merged, identified by the
 # label the update workflow puts on it.
@@ -10,6 +10,12 @@ name: Release a sim data update
 # A data refresh is a patch release: v1.3 -> v1.3.1 -> v1.3.2. Deliberately not
 # a commit hash or a calendar week, because CurseForge and the packager take the
 # version from the tag and neither of those sorts against a patch number.
+#
+# The tag is NOT created here, on purpose. Events raised with the GITHUB_TOKEN
+# do not start further workflows -- GitHub's guard against recursion -- so a tag
+# pushed from here would sit there without ever reaching release.yml, and
+# nothing would be uploaded. A tag that looks like a release but is not is worse
+# than no tag at all, so the last step stays in human hands.
 
 on:
   pull_request:
@@ -57,14 +63,27 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Releasing $VERSION with data from $DATE"
 
-      - name: Commit and tag
+      - name: Commit the version bump
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add PriestAssist.toc CHANGELOG.md
-          git commit -m "Release v${{ steps.bump.outputs.version }}"
-          # The repository tags with a leading v; release.yml packages on any tag.
-          git tag -a "v${{ steps.bump.outputs.version }}" \
-            -m "Power Infusion sim data update"
+          git commit -m "Prepare v${{ steps.bump.outputs.version }}"
           git push origin HEAD:main
-          git push origin "v${{ steps.bump.outputs.version }}"
+
+      - name: Say what is left to do
+        run: |
+          VERSION="v${{ steps.bump.outputs.version }}"
+          {
+            echo "### $VERSION is ready to tag"
+            echo
+            echo "The version and changelog are committed. Pushing the tag from your own"
+            echo "machine is what starts the packaging and the CurseForge upload -- a tag"
+            echo "pushed from Actions would not, because of GitHub's recursion guard."
+            echo
+            echo '```'
+            echo "git pull"
+            echo "git tag -a $VERSION -m 'Power Infusion sim data update'"
+            echo "git push origin $VERSION"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

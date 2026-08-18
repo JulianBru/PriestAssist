@@ -578,19 +578,22 @@ end
 
 -- GetSpecializationInfoByID returns id, name, description, icon. Falling back
 -- to the id keeps the row readable if a spec is unknown to the client.
+-- Returns name, icon, classFile. The class comes free: the same call already
+-- hands it back as its sixth value, so colouring a row by class needs no lookup
+-- table and no second API.
 function ns.GetSpecDisplay(specID)
     local lookup = GetSpecializationInfoByID
         or (C_SpecializationInfo and C_SpecializationInfo.GetSpecializationInfoByID)
 
     if lookup then
-        local _, specName, _, specIcon = lookup(specID)
+        local _, specName, _, specIcon, _, classFile = lookup(specID)
 
         if type(specName) == "string" and specName ~= "" then
-            return specName, specIcon or ns.MACRO_ICON_ID
+            return specName, specIcon or ns.MACRO_ICON_ID, classFile
         end
     end
 
-    return "Spec " .. tostring(specID), ns.MACRO_ICON_ID
+    return "Spec " .. tostring(specID), ns.MACRO_ICON_ID, nil
 end
 
 -- "6.11% Sunfury | 5.00% Frostfire", best variant first. Shown as information
@@ -625,7 +628,7 @@ function ns.GetPriorityRows()
     local rows = {}
 
     for _, entry in ipairs(list) do
-        local specName, specIcon = ns.GetSpecDisplay(entry.specID)
+        local specName, specIcon, specClass = ns.GetSpecDisplay(entry.specID)
         local heroes = entry.heroes
 
         if heroes and #heroes > 0 then
@@ -634,6 +637,7 @@ function ns.GetPriorityRows()
                     specID = entry.specID,
                     specName = specName,
                     specIcon = specIcon,
+                    specClass = specClass,
                     entry = entry,
                     hero = hero.id,
                     heroName = hero.name,
@@ -646,6 +650,7 @@ function ns.GetPriorityRows()
                 specID = entry.specID,
                 specName = specName,
                 specIcon = specIcon,
+                specClass = specClass,
                 entry = entry,
                 gain = entry.gain,
                 exact = true,
@@ -772,13 +777,14 @@ function ns.GetPlayerRows()
             if entry then
                 local gain, exact = ns.GetHeroGain(entry, member.hero)
 
-                local specName, specIcon = ns.GetSpecDisplay(member.specID)
+                local specName, specIcon, specClass = ns.GetSpecDisplay(member.specID)
 
                 rows[#rows + 1] = {
                     name = member.name,
                     specID = member.specID,
                     specName = specName,
                     specIcon = specIcon,
+                    specClass = specClass,
                     entry = entry,
                     hero = member.hero,
                     heroName = ns.GetHeroDisplayName(member.hero, entry),
