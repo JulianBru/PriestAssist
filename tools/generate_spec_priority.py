@@ -278,6 +278,8 @@ def main() -> int:
     parser.add_argument("--healer-file")
     parser.add_argument("--shadow-file")
     parser.add_argument("--output", default="SpecPriority.lua")
+    parser.add_argument("--date", help="DD/MM/YYYY, when the sheet's simulations were run; "
+                                       "overrides the sheet's own changelog")
     parser.add_argument("--check", action="store_true",
                         help="do not write; exit 1 if the file would change")
     args = parser.parse_args()
@@ -301,11 +303,25 @@ def main() -> int:
     names = {**healer_names, **shadow_names}
     dates = healer_dates + shadow_dates
 
-    if not dates:
-        print("error: no changelog date found in either sheet", file=sys.stderr)
-        return 2
-
-    updated = max(dates).strftime("%d/%m/%Y")
+    # Three sources, in descending order of honesty: what you were told, what
+    # the sheet says about itself, and -- only if neither exists -- today.
+    #
+    # The last one is a claim the data cannot back up: it says when the file was
+    # written, not when the simulations were run. A work-in-progress sheet has no
+    # changelog yet, so it is allowed, but never silently.
+    if args.date:
+        if not re.fullmatch(r"\d{2}/\d{2}/\d{4}", args.date):
+            print(f"error: --date {args.date!r} is not DD/MM/YYYY", file=sys.stderr)
+            return 2
+        updated = args.date
+    elif dates:
+        updated = max(dates).strftime("%d/%m/%Y")
+    else:
+        updated = dt.date.today().strftime("%d/%m/%Y")
+        print(f"warning: neither sheet has a changelog date, falling back to today "
+              f"({updated}). That is when this file was generated, not when the "
+              f"simulations were run -- pass --date once the sheet has one.",
+              file=sys.stderr)
 
     # The Shadow sheet sims one fixed cadence for every build, so a single
     # distinct value is expected. Several would mean the note cannot describe
