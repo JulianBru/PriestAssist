@@ -1,5 +1,23 @@
 # Priest Assist
 
+## [1.5](https://github.com/JulianBru/PriestAssist/tree/v1.5) (2026-08-19)
+
+### Added
+
+- **Racial abilities in the macro.** A checkbox in the Macro tab, per profile, off by default. Adds Berserking, Blood Fury, Fireblood or Ancestral Call to your Power Infusion macro, whichever your race has. Races without one never see the option, so there is no dead switch to wonder about.
+
+- **PriestAssist is listed under Escape → Options → AddOns.** What the addon does, every slash command, and a button that opens the real panel. Settings are still only edited in one place.
+
+### Changed
+
+- **Power Infusion sim data updated to 19/08/2026.** Regenerated from Ulria's sheet.
+
+- **Specialisation names carry their class colour** in the Damage Gain tab, in both views. Whether someone is actually in your group shows in the player column, as before.
+
+- **The Damage Gain columns are spaced better.** Hero talent and player each get the room they need, so long names stop being cut short.
+
+- **Chat messages can be silenced.** Under *General*, off by default. The reminder frame and the panel are unaffected.
+
 ## [1.4.1](https://github.com/JulianBru/PriestAssist/tree/v1.4.1)
 
 ### Changed
