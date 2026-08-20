@@ -1861,6 +1861,15 @@ function ns.UpdateMacro(reportAssignment)
             else
                 createdCount = createdCount + 1
             end
+        elseif GetMacroBody and GetMacroBody(index) == body then
+            -- Already exactly this text, so writing it again would only cost
+            -- work. Assigning the same target twice is the common case -- a
+            -- ready check, a roster change, /pa on someone already assigned --
+            -- and each rewrite was measured at tens of kilobytes.
+            --
+            -- Compared against the macro itself rather than a remembered value:
+            -- the game holds the truth, and anything editing the macro behind
+            -- our back is then noticed rather than skipped over.
         else
             EditMacro(index, macroName, ns.GetMacroIconForVariant(variant), body)
         end

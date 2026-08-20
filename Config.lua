@@ -475,30 +475,117 @@ local function InfoWindow(key, title, width, height)
 
     frames[key] = frame
 
-    local inner = width - INFO_PAD * 2
+    -- The content scrolls rather than the window growing to fit it. Text this
+    -- long otherwise sets the window height, and the window that explains the
+    -- Damage Gain tab had grown taller than the tab it explains.
+    local BAR_W = 6
+    local inner = width - INFO_PAD * 2 - BAR_W - 4
+
+    local scroll = CreateFrame("ScrollFrame", nil, frame)
+    scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", INFO_PAD, -44)
+    scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT",
+        -(INFO_PAD + BAR_W + 4), INFO_PAD + 24 + 10)
+
+    local child = CreateFrame("Frame", nil, scroll)
+    child:SetSize(inner, 1)
+    scroll:SetScrollChild(child)
+
+    local track = CreateFrame("Frame", nil, frame)
+    track:SetPoint("TOPRIGHT", scroll, "TOPRIGHT", BAR_W + 4, 0)
+    track:SetPoint("BOTTOMRIGHT", scroll, "BOTTOMRIGHT", BAR_W + 4, 0)
+    track:SetWidth(BAR_W)
+
+    local tr, tg, tb = UI.GetColorRGB("separator")
+    local trackTex = track:CreateTexture(nil, "BACKGROUND")
+    trackTex:SetAllPoints()
+    trackTex:SetColorTexture(tr, tg, tb, 0.35)
+
+    local thumb = track:CreateTexture(nil, "ARTWORK")
+    local acr, acg, acb = UI.GetColorRGB(accent)
+    thumb:SetColorTexture(acr, acg, acb, 0.65)
+    thumb:SetPoint("TOPRIGHT", track, "TOPRIGHT", 0, 0)
+    thumb:SetWidth(BAR_W)
+
+    local contentHeight = 0
+
+    local function UpdateScroll()
+        local visible = scroll:GetHeight()
+        local overflow = math.max(0, contentHeight - visible)
+
+        track:SetShown(overflow > 0)
+
+        if overflow <= 0 then
+            scroll:SetVerticalScroll(0)
+            return
+        end
+
+        local current = math.min(scroll:GetVerticalScroll(), overflow)
+        scroll:SetVerticalScroll(current)
+
+        local ratio = visible / contentHeight
+        local thumbHeight = math.max(20, visible * ratio)
+        thumb:SetHeight(thumbHeight)
+        thumb:SetPoint("TOPRIGHT", track, "TOPRIGHT", 0,
+            -((visible - thumbHeight) * (current / overflow)))
+    end
+
+    scroll:EnableMouseWheel(true)
+    scroll:SetScript("OnMouseWheel", function(_, delta)
+        local overflow = math.max(0, contentHeight - scroll:GetHeight())
+        scroll:SetVerticalScroll(
+            math.max(0, math.min(overflow, scroll:GetVerticalScroll() - delta * 28)))
+        UpdateScroll()
+    end)
+
+    -- Sizes are only real once the frame has been laid out, so the first
+    -- measurement happens on show rather than while building.
+    frame:HookScript("OnShow", function()
+        scroll:SetVerticalScroll(0)
+        UpdateScroll()
+    end)
+
     local previous, gap = nil, 0
 
     -- Stacks a paragraph under the last one. `color` doubles as the heading
     -- marker: an accent-coloured line reads as a heading without a second font.
     local function add(text, color, spacing)
-        local fs = UI.CreateFontString(frame, text, color or "textDim", "FONT_SMALL")
+        local fs = UI.CreateFontString(child, text, color or "textDim", "FONT_SMALL")
 
         if previous then
             fs:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -(spacing or gap))
         else
-            fs:SetPoint("TOPLEFT", frame, "TOPLEFT", INFO_PAD, -48)
+            fs:SetPoint("TOPLEFT", child, "TOPLEFT", 0, 0)
         end
 
         fs:SetWidth(inner)
         fs:SetJustifyH("LEFT")
-        fs:SetSpacing(3)
-        previous, gap = fs, 10
+        -- Line spacing is the single biggest lever on how readable a block of
+        -- text this narrow is. 3px read as one grey slab.
+        fs:SetSpacing(5)
+        previous, gap = fs, 9
+
+        contentHeight = contentHeight + (spacing or gap) + fs:GetStringHeight()
+        child:SetHeight(contentHeight)
         return fs
     end
 
-    return frame, { add = add, inner = inner, accent = accent,
+    -- More space above a heading than below it, so it belongs to the paragraph
+    -- that follows rather than floating between two. Uppercase because at this
+    -- size a colour change alone does not read as a level change.
+    local function heading(text)
+        local fs = add((text or ""):upper(), accent, previous and 20 or 0)
+        fs:SetSpacing(2)
+        return fs
+    end
+
+    return frame, { add = add, heading = heading,
+                    inner = inner, accent = accent, parent = child,
                     anchor = function() return previous end,
-                    setAnchor = function(widget) previous = widget end }
+                    setAnchor = function(widget, extraHeight)
+                        previous = widget
+                        contentHeight = contentHeight + (extraHeight or widget:GetHeight() or 0) + 9
+                        child:SetHeight(contentHeight)
+                    end }
 end
 
 -- The exact shape of the line is the one thing about the note feature that
@@ -506,21 +593,21 @@ end
 local NOTE_EXAMPLE = "Power Infusion\nPI: PriestName TargetName"
 
 function ns.ShowNoteHelp()
-    local frame, build = InfoWindow("noteHelp", "Raid note format", 430, 252)
+    local frame, build = InfoWindow("noteHelp", "Raid note format", 450, 300)
 
     if build then
         build.add("PriestAssist reads Power Infusion assignments out of the raid note in " ..
             "MRT or NorthernSkyRaidTools. One line per priest:", "text")
 
-        local example = UI.CreateCopyBox(frame, build.inner, 40, true)
-        example:SetPoint("TOPLEFT", build.anchor(), "BOTTOMLEFT", 0, -10)
+        local example = UI.CreateCopyBox(build.parent, build.inner, 40, true)
+        example:SetPoint("TOPLEFT", build.anchor(), "BOTTOMLEFT", 0, -12)
         example:SetValue(NOTE_EXAMPLE)
-        build.setAnchor(example)
+        build.setAnchor(example, 52)
 
-        build.add("The first name is the priest, the second is the player they infuse. Only " ..
-            "the line naming you is used, the rest of the note is ignored, and realm " ..
-            "suffixes make no difference.\n\n" ..
-            "Use /pa note to see what the parser reads.", "textDim", 12)
+        build.add("The first name is the priest, the second is the player they infuse.", "text", 4)
+        build.add("Only the line naming you is used, the rest of the note is ignored, and " ..
+            "realm suffixes make no difference.")
+        build.add("Use /pa note to see what the parser reads.")
 
         -- A focused edit box would keep swallowing Escape otherwise.
         frame:SetScript("OnHide", function() example:ClearFocus() end)
@@ -531,55 +618,58 @@ function ns.ShowNoteHelp()
 end
 
 function ns.ShowDamageGainHelp()
-    -- Taller and wider since 1.6: the section on which number to rank by is the
-    -- longest in here, and it is the one people open this window for.
-    local frame, build = InfoWindow("damageGainHelp", "Damage Gain", 500, 660)
+    -- The content scrolls, so this is a comfortable reading size rather than
+    -- whatever the text happens to need.
+    local frame, build = InfoWindow("damageGainHelp", "Damage Gain", 500, 480)
 
     if build then
-        build.add("What the list shows", build.accent)
-        build.add("How much your Power Infusion is worth on each specialisation, as a " ..
-            "percentage of that player's damage and as the damage itself. Discipline " ..
-            "and Holy read different numbers than Shadow, so the list follows your own " ..
-            "specialisation.", "text", 6)
+        build.heading("What the list shows")
+        build.add("How much your Power Infusion is worth on each specialisation, both as a " ..
+            "percentage of that player's damage and as the damage itself.", "text", 7)
+        build.add("Discipline and Holy read different numbers than Shadow, so the list " ..
+            "follows your own specialisation.")
 
-        build.add("Percentage or damage", build.accent)
-        build.add("The two rank differently for most rows, and neither is simply right. " ..
-            "Power Infusion adds that player's damage times the percentage, so the " ..
-            "absolute figure is what decides how much your raid actually gains -- a " ..
-            "specialisation that hits harder can gain more from a smaller percentage.\n\n" ..
-            "But those numbers come from the sheet's own gear. The percentage is " ..
+        build.heading("Percentage or damage")
+        build.add("The two rank differently for most rows, and neither is simply right.", "text", 7)
+        build.add("Power Infusion adds that player's damage times the percentage. The " ..
+            "absolute figure is therefore what decides how much your raid actually " ..
+            "gains, and a specialisation that hits harder can gain more from a smaller " ..
+            "percentage.")
+        build.add("But those numbers come from the sheet's own gear. The percentage is " ..
             "normalised per specialisation and survives the trip to a group geared " ..
-            "differently, which is why it stays the default.\n\n" ..
-            "The checkbox under the table switches which one is used, for the order " ..
-            "and for /pa auto. Whichever it is shows bright, the other dimmed.", "text", 6)
+            "differently, which is why it stays the default.")
+        build.add("The checkbox under the table switches which one counts, both for the " ..
+            "order and for /pa auto. Whichever it is shows bright, the other dimmed.")
 
-        build.add("Where the numbers come from", build.accent)
+        build.heading("Where the numbers come from")
         build.add("Simulation results at 4-piece tier, from Ulria's public sheet. The date " ..
-            "they were run is shown above the table -- if it looks old, it is.", "text", 6)
+            "they were run is shown above the table. If it looks old, it is.", "text", 7)
 
-        build.add("How your group is read", build.accent)
+        build.heading("How your group is read")
         build.add("Specialisations and talent loadouts arrive over addon communication from " ..
             "players running BigWigs, WeakAuras or NorthernSkyRaidTools. Nobody is " ..
-            "inspected and there is no range limit. Where the loadout can be read, the " ..
-            "hero talent is decoded and its exact value used; where it cannot, the weaker " ..
-            "of the two variants is assumed and the row says \"unknown\". Players whose " ..
-            "specialisation never arrives are counted, not hidden.", "text", 6)
+            "inspected and there is no range limit.", "text", 7)
+        build.add("Where the loadout can be read, the hero talent is decoded and its exact " ..
+            "value used. Where it cannot, the weaker of the two variants is assumed and " ..
+            "the row says \"unknown\".")
+        build.add("Players whose specialisation never arrives are counted, not hidden.")
 
-        build.add("How a target is picked", build.accent)
+        build.heading("How a target is picked")
         build.add("/pa auto assigns the best available player once. With the option in the " ..
-            "General tab on, that happens by itself and follows the group. Your own /pa " ..
-            "always wins, the raid note comes next, the automatic pick fills what is left.\n\n" ..
-            "A target does not carry into the next session -- a fresh login clears it, " ..
-            "while /reload and reconnects keep it.",
-            "text", 6)
+            "General tab on, that happens by itself and follows the group.", "text", 7)
+        build.add("Your own /pa always wins, the raid note comes next, and the automatic " ..
+            "pick fills what is left.")
+        build.add("A target does not carry into the next session. A fresh login clears it, " ..
+            "while /reload and reconnects keep it.")
 
-        build.add("Other priests", build.accent)
+        build.heading("Other priests")
         build.add("Priests running PriestAssist tell each other who they have assigned, so " ..
-            "two of you do not infuse the same player. Whoever gains more keeps the " ..
-            "target and the other picks again -- but only automatic picks ever move, what " ..
-            "you set yourself stays. /pa comm lists who is infusing whom. Priests without " ..
-            "the addon are invisible to this; against those the raid note is still the " ..
-            "only coordination.", "text", 6)
+            "two of you do not infuse the same player.", "text", 7)
+        build.add("Whoever gains more keeps the target and the other picks again, but only " ..
+            "automatic picks ever move. What you set yourself stays. /pa comm lists who " ..
+            "is infusing whom.")
+        build.add("Priests without the addon are invisible to this. Against those, the raid " ..
+            "note is still the only coordination there is.")
     end
 
     frame:Show()
