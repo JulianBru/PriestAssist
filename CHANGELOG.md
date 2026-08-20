@@ -12,6 +12,8 @@
 
 ### Changed
 
+- **The macro is only rewritten when its text actually changes.** Assigning the same target again — a ready check, a roster change, `/pa` on whoever is already assigned — used to rebuild both macros regardless, at a measured cost of tens of kilobytes each time.
+
 - **The options window is wider and better packed.** The General tab's checkboxes sit in two columns, the macro text field no longer grows to swallow whatever height another tab needed, and dropdown labels stopped colliding with the headings above them.
 
 ### Fixed
