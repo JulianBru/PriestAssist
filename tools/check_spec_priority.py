@@ -47,7 +47,8 @@ def load(path: Path) -> dict:
         specs = {}
         for i in range(1, len(table) + 1):
             entry = table[i]
-            heroes = [(entry.heroes[j].name, int(entry.heroes[j].id), float(entry.heroes[j].gain))
+            heroes = [(entry.heroes[j].name, int(entry.heroes[j].id), float(entry.heroes[j].gain),
+                       entry.heroes[j].dps and float(entry.heroes[j].dps) or None)
                       for j in range(1, len(entry.heroes) + 1)]
             specs[int(entry.specID)] = (float(entry.gain), heroes)
         out[key] = specs
@@ -80,14 +81,14 @@ def validate(data: dict) -> list[str]:
                 problems.append(f"{key}/{spec_id}: no hero variants")
                 continue
 
-            if any(hero_id is None for _, hero_id, _ in heroes):
+            if any(hero_id is None for _, hero_id, _, _ in heroes):
                 problems.append(f"{key}/{spec_id}: a hero variant has no subTreeID")
 
-            ids = [hero_id for _, hero_id, _ in heroes]
+            ids = [hero_id for _, hero_id, _, _ in heroes]
             if len(set(ids)) != len(ids):
                 problems.append(f"{key}/{spec_id}: the same subTreeID twice")
 
-            gains = [g for _, _, g in heroes]
+            gains = [g for _, _, g, _ in heroes]
 
             if any(not 0.0 < g < MAX_PLAUSIBLE_GAIN for g in gains):
                 problems.append(f"{key}/{spec_id}: a gain is outside 0-{MAX_PLAUSIBLE_GAIN}")
@@ -99,8 +100,18 @@ def validate(data: dict) -> list[str]:
             if abs(min(gains) - gain) > 0.001:
                 problems.append(f"{key}/{spec_id}: gain {gain} is not the weakest variant {min(gains)}")
 
+            absolutes = [d for _, _, _, d in heroes]
+
+            if any(d is not None and d <= 0 for d in absolutes):
+                problems.append(f"{key}/{spec_id}: an absolute gain is zero or negative")
+
+            # Half a column is worse than none: the tab would show a number for
+            # one hero variant and a blank for the next, which reads as a bug.
+            if any(d is None for d in absolutes) and any(d is not None for d in absolutes):
+                problems.append(f"{key}/{spec_id}: some hero variants have an absolute gain, some do not")
+
         # Rows are rendered in descending order, which the tab relies on.
-        order = [min(g for _, _, g in heroes) for _, heroes in specs.values()]
+        order = [min(g for _, _, g, _ in heroes) for _, heroes in specs.values()]
         if order != sorted(order, reverse=True):
             problems.append(f"{key}: specialisations are not in descending order")
 
@@ -125,7 +136,7 @@ def compare(old: dict, new: dict) -> tuple[list[str], list[str]]:
                 lines.append(f"{key}: spec {spec_id} added")
                 continue
 
-            for (name, _, new_gain), (_, _, old_gain) in zip(after[spec_id][1], before[spec_id][1]):
+            for (name, _, new_gain, _), (_, _, old_gain, _) in zip(after[spec_id][1], before[spec_id][1]):
                 delta = new_gain - old_gain
                 if abs(delta) > 0.001:
                     lines.append(f"{key}: spec {spec_id} {name} {old_gain:.2f} -> {new_gain:.2f} ({delta:+.2f})")

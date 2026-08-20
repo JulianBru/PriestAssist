@@ -180,6 +180,14 @@ Only your own lines below them stick. The generated part belongs to the addon an
 
 You get a warning in chat and WoW truncates the rest. Shorten your custom lines, drop a trinket slot, or make Power Infusion the primary macro — the Voidform one carries considerably more text.
 
+**Why is a specialisation above another one that gains more damage?**
+
+The list is sorted by percentage by default, and the two do not agree: Power Infusion adds damage times percentage, so a specialisation that hits harder can gain more from a smaller percentage. The number being sorted by is shown bright, the other dimmed. A checkbox under the table swaps them, for the order and for `/pa auto`.
+
+**Does my target survive logging out?**
+
+A `/reload` and a reconnect keep it. A fresh login clears it, so you never start an evening still aimed at somebody from the last raid.
+
 **Does changing a setting announce my target again in raid chat?**
 
 No. Only a deliberate assignment does that: `/pa`, the minimap button or the Update Macro button. Setting changes and profile switches rebuild silently.

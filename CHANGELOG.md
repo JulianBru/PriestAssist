@@ -1,5 +1,27 @@
 # Priest Assist
 
+## [1.6](https://github.com/JulianBru/PriestAssist/tree/v1.6) (2026-08-20)
+
+### Added
+
+- **The General tab opens with your current target.** Name in class colour, specialisation and hero talent, both gain values, and — the part that was missing — where the assignment came from. A stripe down the left edge carries the class colour, or turns red when that player is not in your group, so an absent target is visible before you read anything.
+
+- **Damage Gain lists the absolute gain beside the percentage.** How much damage the sim actually gained, not just by how much. A checkbox under the table ranks by it instead, which also changes what `/pa auto` picks.
+
+  The two disagree more often than not: the percentage is relative to that specialisation's own damage, so a specialisation that hits harder can gain more damage from a smaller percentage. Whichever one the list is sorted by is shown bright and the other dimmed. Read the absolute figures as what the simulation gained on its own gear, not as a prediction for your raid — the percentage travels better to a group whose gear does not match the sheet.
+
+### Changed
+
+- **The options window is wider and better packed.** The General tab's checkboxes sit in two columns, the macro text field no longer grows to swallow whatever height another tab needed, and dropdown labels stopped colliding with the headings above them.
+
+### Fixed
+
+- **A raid note could block every automatic assignment, for good.** Where an assignment came from is stored alongside it, and once that said *note*, nothing set it back — not deleting the note, not unloading the addon holding it, and not turning the option off, because that disables the only code that could have corrected it. Both `/pa auto` and the automatic assignment stand aside for a note, so the block outlived reloads and sessions and there was no way out except assigning someone by hand.
+
+  A note now holds the assignment only while it still names you. When it stops, your target stays and the claim is dropped. `/pa auto` checks the note before refusing instead of trusting the stored flag.
+
+- **Your target no longer follows you into the next session.** It used to be kept indefinitely, so you could log in days later still aimed at somebody from the last raid. It is now cleared when a session starts fresh, while `/reload` and reconnects keep it — the gap between sessions is measured, and anything under an hour counts as coming straight back. With automatic assignment on, a new target is picked as soon as your group is known.
+
 ## [1.5.1](https://github.com/JulianBru/PriestAssist/tree/v1.5.1)
 
 ### Changed

@@ -353,22 +353,58 @@ function ns.ParsePowerInfusionAssignment(note, playerName)
     return matches[1], sawAnyAssignment, ambiguous
 end
 
+-- The note's claim on the assignment lasts exactly as long as the note backs
+-- it. Without this the source stays "note" forever: it lives in the saved
+-- variables, so it survives reloads, and every route that could correct it is
+-- shut by the time it is wrong -- the note is gone, and turning the option off
+-- disables the only function that ever writes the flag. Both /pa auto and
+-- MaintainAssignment stand aside for "note", so a stale flag locks out every
+-- automatic assignment there is, permanently.
+--
+-- Demoted rather than cleared. ENCOUNTER_START is one of the triggers that
+-- lands here, and MaintainAssignment will not run under lockdown, so dropping
+-- the target would leave the player mid-fight with nothing at all.
+local function ReleaseStaleNoteClaim()
+    local db = ns.GetDB()
+
+    if db.assignedTargetSource ~= "note" then
+        return false
+    end
+
+    db.assignedTargetSource = "manual"
+
+    -- So an identical note coming back is treated as new rather than skipped by
+    -- the unchanged-text shortcut, and can claim the assignment again.
+    state.lastNoteText = nil
+
+    ns.Print("The raid note no longer assigns you a Power Infusion target. Keeping " ..
+        (db.assignedTarget or "") .. " - /pa auto can take over now.", "F8C300")
+
+    return true
+end
+
 -- Applies the assignment from the note. Raid content only, and silent towards
 -- the group: the raid already has the note, no need to announce it back.
 function ns.CheckNoteAssignment(force)
     local db = ns.GetDB()
 
     if not db.useNoteAssignment then
+        ReleaseStaleNoteClaim()
         return false
     end
 
+    -- Outside a raid a note claim cannot be renewed, so holding on to one would
+    -- block /pa auto for the rest of the evening in a dungeon.
     if ns.GetCurrentContentType() ~= "raid" then
+        ReleaseStaleNoteClaim()
         return false
     end
 
     local note = ns.GetRaidNote()
 
     if not note then
+        ReleaseStaleNoteClaim()
+
         if force then
             if #ns.GetRaidNoteSources() == 0 then
                 ns.Print("Raid note assignments need MRT or NorthernSkyRaidTools installed and enabled.", "F82C00")
@@ -395,6 +431,9 @@ function ns.CheckNoteAssignment(force)
     end
 
     if not target then
+        -- The note was edited and your line is gone: the claim goes with it.
+        ReleaseStaleNoteClaim()
+
         if sawAnyAssignment then
             ns.Print("The raid note has Power Infusion assignments, but none for you. " ..
                 "Set a target yourself with /pa.", "F8C300")
@@ -612,6 +651,49 @@ function ns.FormatHeroVariants(entry)
     return table.concat(parts, " | ")
 end
 
+-- ─── Which number the tab ranks by ───────────────────────────────────────────
+-- Power Infusion adds `that player's damage x gain`, so the absolute number is
+-- what actually decides how much the raid gains. The percentage is normalised
+-- per specialisation and therefore travels better to a raid whose gear does not
+-- match the sheet's. They disagree for most rows, so the choice is offered
+-- rather than made.
+--
+-- Only the display and the ranking follow this. What goes out to other priests
+-- stays the percentage in every case -- see ns.GetOwnGainOn.
+function ns.RanksByAbsolute()
+    return ns.GetDB().gainMetric == "absolute"
+end
+
+function ns.SetGainMetric(absolute)
+    ns.GetDB().gainMetric = absolute and "absolute" or "percent"
+end
+
+-- The value a row is ranked by. Falls back to the percentage whenever the
+-- absolute is missing, so a sheet without the column ranks exactly as before
+-- instead of collapsing every row to zero.
+-- "11.4k". Abbreviated because the column is narrow and the precision is
+-- imaginary anyway: these are simulated numbers on somebody else's gear, and
+-- writing 11,409 invites a confidence they cannot carry.
+function ns.FormatAbsoluteGain(dps)
+    if not dps or dps <= 0 then
+        return ""
+    end
+
+    if dps >= 1000 then
+        return string.format("%.1fk", dps / 1000)
+    end
+
+    return tostring(math.floor(dps))
+end
+
+function ns.RankValue(gain, dps)
+    if ns.RanksByAbsolute() and dps then
+        return dps
+    end
+
+    return gain or 0
+end
+
 function ns.GetPriorityEntry(list, specID)
     for rank, entry in ipairs(list) do
         if entry.specID == specID then
@@ -642,6 +724,8 @@ function ns.GetPriorityRows()
                     hero = hero.id,
                     heroName = hero.name,
                     gain = hero.gain,
+                    dps = hero.dps,
+                    rank = ns.RankValue(hero.gain, hero.dps),
                     exact = true,
                 }
             end
@@ -653,14 +737,15 @@ function ns.GetPriorityRows()
                 specClass = specClass,
                 entry = entry,
                 gain = entry.gain,
+                rank = ns.RankValue(entry.gain, nil),
                 exact = true,
             }
         end
     end
 
     table.sort(rows, function(a, b)
-        if a.gain ~= b.gain then
-            return a.gain > b.gain
+        if a.rank ~= b.rank then
+            return a.rank > b.rank
         end
 
         if a.specName ~= b.specName then
@@ -775,7 +860,7 @@ function ns.GetPlayerRows()
             local entry = ns.GetPriorityEntry(list, member.specID)
 
             if entry then
-                local gain, exact = ns.GetHeroGain(entry, member.hero)
+                local gain, exact, dps = ns.GetHeroGain(entry, member.hero)
 
                 local specName, specIcon, specClass = ns.GetSpecDisplay(member.specID)
 
@@ -789,6 +874,8 @@ function ns.GetPlayerRows()
                     hero = member.hero,
                     heroName = ns.GetHeroDisplayName(member.hero, entry),
                     gain = gain,
+                    dps = dps,
+                    rank = ns.RankValue(gain, dps),
                     exact = exact,
                     present = member.present,
                     online = member.online,
@@ -798,8 +885,8 @@ function ns.GetPlayerRows()
     end
 
     table.sort(rows, function(a, b)
-        if a.gain ~= b.gain then
-            return a.gain > b.gain
+        if a.rank ~= b.rank then
+            return a.rank > b.rank
         end
 
         return a.name < b.name
@@ -816,14 +903,19 @@ end
 -- is arbitrary and worth mentioning.
 -- `skip` optionally rules out candidates -- used to step around players another
 -- priest has already claimed.
+-- Ranked by whichever number the tab is set to, but the gain handed back stays
+-- the percentage: it is what the messages quote and what other priests compare
+-- against, and switching its unit halfway would make both meaningless.
 function ns.PickBestTarget(skip)
     local bestName, bestEntry, bestGain, bestHero, tied = nil, nil, nil, nil, 0
+    local bestRank = nil
 
     for _, row in ipairs(ns.GetPlayerRows()) do
         if row.present and not (skip and skip(row.name)) then
-            if not bestGain or row.gain > bestGain then
+            if not bestRank or row.rank > bestRank then
                 bestName, bestEntry, bestGain, bestHero, tied = row.name, row.entry, row.gain, row.hero, 0
-            elseif row.gain == bestGain then
+                bestRank = row.rank
+            elseif row.rank == bestRank then
                 tied = tied + 1
             end
         end
@@ -840,6 +932,11 @@ function ns.AutoAssignBestTarget()
         ns.Print("Automatic picking needs a party or raid group.", "F82C00")
         return false
     end
+
+    -- Re-check before trusting the flag. Otherwise /pa auto refuses on the word
+    -- of a note that may have been deleted three bosses ago -- the message below
+    -- reads the stored source, not the note.
+    ns.CheckNoteAssignment()
 
     if ns.GetAssignedTargetSource() == "note" then
         ns.Print("The raid note assigns " .. ns.GetAssignedTarget() ..
@@ -1266,6 +1363,170 @@ end
 
 function ns.GetAssignedTargetSource()
     return ns.GetDB().assignedTargetSource or ""
+end
+
+-- ─── What the General tab shows about the current assignment ─────────────────
+-- Where a target came from was the one thing the addon never said out loud, and
+-- a stale note claim could therefore sit there for weeks without anybody being
+-- able to see it. This is that missing sentence.
+
+local SOURCE_LABEL = {
+    manual = "set by you",
+    note   = "from the raid note",
+    auto   = "picked automatically",
+}
+
+-- The unit token for a group member, so their class can be read without them
+-- running any addon. Nil when they are not in the group, or for a name that
+-- only exists in the saved variables.
+local function UnitForName(targetName)
+    local wanted = NormalizeNoteName(targetName)
+
+    if wanted == "" then
+        return nil
+    end
+
+    if UnitName and wanted == NormalizeNoteName(UnitName("player")) then
+        return "player"
+    end
+
+    local prefix, count = "party", (GetNumGroupMembers and GetNumGroupMembers() or 0)
+
+    if IsInRaid and IsInRaid() then
+        prefix = "raid"
+    else
+        count = count - 1
+    end
+
+    for index = 1, count do
+        local unit = prefix .. index
+
+        if UnitExists and UnitExists(unit) and UnitName
+            and NormalizeNoteName(UnitName(unit)) == wanted then
+            return unit
+        end
+    end
+
+    return nil
+end
+
+--- Everything the preview needs, in one call. `name` is "" when nothing is set.
+function ns.GetAssignmentOverview()
+    local name = ns.GetAssignedTarget()
+    local overview = {
+        name = name,
+        source = ns.GetAssignedTargetSource(),
+        sourceLabel = SOURCE_LABEL[ns.GetAssignedTargetSource()],
+        present = false,
+        online = true,
+    }
+
+    if name == "" then
+        return overview
+    end
+
+    overview.present = ns.IsInOurGroup(name)
+
+    -- Two routes to the class, deliberately: the specialisation is the better
+    -- answer because it brings an icon with it, but it only exists for players
+    -- broadcasting one. The unit works for anybody standing in the group.
+    local specID = ns.GetKnownSpec(name)
+
+    if specID then
+        local specName, specIcon, specClass = ns.GetSpecDisplay(specID)
+        overview.specName, overview.icon, overview.classFile = specName, specIcon, specClass
+
+        local entry = ns.GetPriorityEntry(ns.GetActivePriorityList(), specID)
+
+        if entry then
+            overview.gain, overview.exact, overview.dps =
+                ns.GetHeroGain(entry, ns.GetKnownHero(name))
+            overview.heroName = ns.GetHeroDisplayName(ns.GetKnownHero(name), entry)
+        end
+    end
+
+    local unit = UnitForName(name)
+
+    if unit then
+        overview.online = not UnitIsConnected or UnitIsConnected(unit)
+
+        if not overview.classFile and UnitClass then
+            local _, classFile = UnitClass(unit)
+            overview.classFile = classFile
+        end
+    end
+
+    return overview
+end
+
+-- ─── Session handling ────────────────────────────────────────────────────────
+-- A target should not outlive the evening it was set in. The client cannot tell
+-- a fresh login from a reconnect on its own -- PLAYER_ENTERING_WORLD reports
+-- isInitialLogin for both -- so we measure the gap instead. A reconnect is over
+-- in seconds; a new session starts hours later. /reload needs no guessing, it
+-- has its own flag.
+--
+-- The heartbeat survives a disconnect because the client writes saved variables
+-- then. It does not survive a crash, where nothing is written at all and the
+-- stored value stays as old as the last clean write -- so a crash clears the
+-- target. That is the safe direction: an empty assignment is the state the
+-- addon recovers from on its own.
+local SESSION_GAP = 60 * 60
+
+function ns.TouchSession()
+    local db = ns.GetDB()
+
+    if db and GetServerTime then
+        db.lastSeen = GetServerTime()
+    end
+end
+
+function ns.ClearAssignmentForNewSession(isInitialLogin, isReloadingUi)
+    local db = ns.GetDB()
+
+    if not db then
+        return false
+    end
+
+    if isReloadingUi or not isInitialLogin then
+        ns.TouchSession()
+        return false
+    end
+
+    local now = GetServerTime and GetServerTime() or 0
+    local since = db.lastSeen or 0
+
+    ns.TouchSession()
+
+    -- Every uncertain case keeps the target. Clearing one that should have
+    -- stayed costs a pull; keeping one that should have gone costs a /pa.
+    -- `since == 0` covers the first run after an update, where there is no
+    -- heartbeat to compare against yet.
+    if now == 0 or since == 0 or (now - since) < SESSION_GAP then
+        return false
+    end
+
+    local previous = db.assignedTarget or ""
+
+    if previous == "" then
+        return false
+    end
+
+    -- Clearing only ever removes a gate. Both /pa auto and MaintainAssignment
+    -- treat an empty assignment as free to fill, so this cannot leave the addon
+    -- with nothing it is willing to do.
+    ns.SetAssignedTarget("", nil)
+    ns.RequestMacroUpdate()
+
+    if db.autoAssignTarget then
+        ns.Print("New session - cleared the Power Infusion target (" .. previous ..
+            "). A new one is picked automatically once your group is known.", "A5AAD9")
+    else
+        ns.Print("New session - cleared the Power Infusion target (" .. previous ..
+            "). Set one with /pa, or /pa auto to pick the best.", "A5AAD9")
+    end
+
+    return true
 end
 
 function ns.IsSecretValue(value)

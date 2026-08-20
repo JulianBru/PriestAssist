@@ -39,6 +39,10 @@ end
 
 -- What our Power Infusion is worth on a player, from our own list -- a Shadow
 -- priest reads different numbers than a healer.
+-- Always the percentage, never the absolute, whatever the tab is set to. Two
+-- priests settling a collision compare these numbers directly, so one sending
+-- 5.46 while the other sends 11278 would hand the target to whoever happened to
+-- pick the larger unit.
 function ns.GetOwnGainOn(targetName)
     if not targetName or targetName == "" then
         return 0

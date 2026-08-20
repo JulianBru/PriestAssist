@@ -247,6 +247,11 @@ ns.DEFAULTS = {
     -- rebuilds the macros without silently reassigning them.
     assignedTarget = "",
     assignedTargetSource = "",
+    -- "percent" or "absolute", which number the Damage Gain tab ranks by.
+    gainMetric = "percent",
+    -- Heartbeat, so a fresh login can be told from a reconnect. See
+    -- ns.ClearAssignmentForNewSession.
+    lastSeen = 0,
     reminderEnabled = true,
     reminderDuration = 5,
     reminderEnterDelay = 2,

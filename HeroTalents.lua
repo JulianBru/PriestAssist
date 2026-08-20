@@ -270,13 +270,30 @@ function ns.GetHeroDisplayName(subTreeID, entry)
 end
 
 -- The gain for a known hero talent, or the conservative value when the hero is
--- unknown. Second return says whether it is the real one.
+-- unknown. Second return says whether it is the real one, third is the same
+-- gain in absolute damage where the sheet supplied it.
+--
+-- For an unknown hero the conservative percentage has no matching absolute of
+-- its own, so the weakest variant's is used -- the same choice, expressed in the
+-- other unit.
 function ns.GetHeroGain(entry, subTreeID)
     local hero = ns.FindHeroEntry(entry, subTreeID)
 
     if hero then
-        return hero.gain, true
+        return hero.gain, true, hero.dps
     end
 
-    return entry and entry.gain or 0, false
+    if not entry then
+        return 0, false, nil
+    end
+
+    local weakest = nil
+
+    for _, variant in ipairs(entry.heroes or {}) do
+        if variant.dps and (not weakest or variant.gain < weakest.gain) then
+            weakest = variant
+        end
+    end
+
+    return entry.gain or 0, false, weakest and weakest.dps or nil
 end

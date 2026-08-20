@@ -1,0 +1,7 @@
+# Only check_spec_priority.py needs this: it runs the generated SpecPriority.lua
+# as real Lua, so a syntax error fails here instead of in someone's client.
+# The generator itself is pure standard library.
+#
+#   python -m pip install -r tools/requirements.txt
+
+lupa>=2.0

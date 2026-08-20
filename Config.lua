@@ -8,10 +8,15 @@ local configControls = frames.configControls
 -- These mirror the measurements in UI.lua's CreateHeaderedFrame (TITLE_H=34).
 -- Accent line (2px) + title bar (34px) + separator (1px) = content starts at y=-37.
 
-local W          = 520
+-- Widened in 1.6 so the General tab's checkboxes fit in two columns without
+-- shortening their labels. The Damage Gain table gets the difference too, which
+-- gives the player column back the width the absolute-gain column cost it.
+local W          = 600
 -- Raised in 1.2: the Macro tab gained the profile selector and the announce
 -- checkbox, which left the text field without usable height at 490.
-local H          = 560
+-- Raised again in 1.6 for the current-target preview, then brought back down
+-- once the General tab's checkboxes moved into two columns.
+local H          = 640
 local HEADER_END = 37   -- y-offset where header ends (px from panel top)
 local TAB_H      = 28
 local FOOTER_H   = 46
@@ -22,6 +27,35 @@ local CONTENT_W  = W - 2 - PAD * 2   -- 488px
 local CONTENT_Y = -(HEADER_END + TAB_H + 1 + PAD)   -- -80
 
 -- ─── Helpers ─────────────────────────────────────────────────────────────────
+
+-- Spell icons have a border baked in; without this one sits inside ours.
+local SPELL_ICON_TRIM = { 0.07, 0.93, 0.07, 0.93 }
+
+-- Three answers in descending order of how much they say about the player:
+-- their specialisation, their class, and -- when neither is known -- Power
+-- Infusion itself, which at least says what the row is about.
+--
+-- The class icons live in one sheet addressed by texture coordinates, so this
+-- has to set both the texture and the coords every time, or a class icon would
+-- keep the trim from a spell icon shown a moment earlier.
+local function SetPreviewIcon(texture, specIcon, classFile)
+    if specIcon then
+        texture:SetTexture(specIcon)
+        texture:SetTexCoord(unpack(SPELL_ICON_TRIM))
+        return
+    end
+
+    local coords = classFile and CLASS_ICON_TCOORDS and CLASS_ICON_TCOORDS[classFile]
+
+    if coords then
+        texture:SetTexture("Interface\\TargetingFrame\\UI-Classes-Circles")
+        texture:SetTexCoord(unpack(coords))
+        return
+    end
+
+    texture:SetTexture(ns.MACRO_ICON_ID)
+    texture:SetTexCoord(unpack(SPELL_ICON_TRIM))
+end
 
 local function SectionHeader(parent, text, anchorTo, offsetY)
     local f = CreateFrame("Frame", nil, parent)
@@ -123,6 +157,79 @@ function ns.RefreshConfigPanel()
     if cc.reminderEnabled     then cc.reminderEnabled:SetChecked(db.reminderEnabled and true or false) end
     if cc.minimapEnabled      then cc.minimapEnabled:SetChecked(not (db.minimap and db.minimap.hidden)) end
     if cc.useNoteAssignment   then cc.useNoteAssignment:SetChecked(db.useNoteAssignment and true or false) end
+    if cc.previewName then
+        local view = ns.GetAssignmentOverview()
+
+        -- Fetched here, not borrowed from CreateConfigPanel: those are locals
+        -- in that function, and `db` up there is a colour while `db` in here is
+        -- the database.
+        local accentR, accentG, accentB = UI.GetColorRGB(ns.GetThemeAccentName())
+        local dimR, dimG, dimB = UI.GetColorRGB("textDim")
+        local dangerR, dangerG, dangerB = UI.GetColorRGB("danger")
+
+        if view.name == "" then
+            SetPreviewIcon(cc.previewIcon, nil, nil)
+            cc.previewIcon:SetDesaturated(true)
+            cc.previewStripe:SetColorTexture(dimR, dimG, dimB, 0.5)
+            cc.previewName:SetTextSafe("No target")
+            cc.previewName:SetColor("textDim")
+            cc.previewDetail:SetTextSafe("Target somebody and press /pa, or let the Damage Gain tab choose.")
+            cc.previewSource:SetText("")
+        else
+            SetPreviewIcon(cc.previewIcon, view.icon, view.classFile)
+            -- Greyed out while they are not here, so an absent target reads as
+            -- a problem at a glance rather than after reading the line below.
+            cc.previewIcon:SetDesaturated(not view.present)
+
+            cc.previewName:SetTextSafe(view.name)
+
+            local classColor = view.classFile and C_ClassColor and C_ClassColor.GetClassColor
+                and C_ClassColor.GetClassColor(view.classFile)
+
+            if classColor and view.present then
+                cc.previewName:SetTextColor(classColor.r, classColor.g, classColor.b, 1)
+                cc.previewStripe:SetColorTexture(classColor.r, classColor.g, classColor.b, 1)
+            else
+                cc.previewName:SetColor(view.present and "text" or "textDim")
+
+                -- Red rather than the class colour while they are missing: the
+                -- stripe is the fastest thing to read on the row, so it should
+                -- carry the problem, not the decoration.
+                if view.present then
+                    cc.previewStripe:SetColorTexture(accentR, accentG, accentB, 1)
+                else
+                    cc.previewStripe:SetColorTexture(dangerR, dangerG, dangerB, 1)
+                end
+            end
+
+            local detail = {}
+
+            if view.specName then
+                detail[#detail + 1] = view.specName ..
+                    (view.heroName and (", " .. view.heroName) or "")
+            end
+
+            if view.gain then
+                local absolute = ns.FormatAbsoluteGain(view.dps)
+                detail[#detail + 1] = string.format("%.2f%%", view.gain) ..
+                    (absolute ~= "" and (" / " .. absolute) or "") ..
+                    (view.exact and "" or " (hero talent unknown)")
+            end
+
+            if not view.present then
+                detail[#detail + 1] = "not in your group"
+            elseif not view.online then
+                detail[#detail + 1] = "offline"
+            elseif #detail == 0 then
+                detail[#detail + 1] = "specialisation not known yet"
+            end
+
+            cc.previewDetail:SetTextSafe(table.concat(detail, "  -  "))
+            cc.previewDetail:SetColor(view.present and "textDim" or "danger")
+            cc.previewSource:SetText(view.sourceLabel or "")
+        end
+    end
+
     if cc.validateTarget      then cc.validateTarget:SetChecked(db.validateTargetOnReadyCheck and true or false) end
     if cc.autoAssign          then cc.autoAssign:SetChecked(db.autoAssignTarget and true or false) end
     if cc.muteChat            then cc.muteChat:SetChecked(db.muteChat and true or false) end
@@ -257,6 +364,10 @@ function ns.RefreshConfigPanel()
 
         if cc.priorityFilter then
             cc.priorityFilter:SetChecked(db.priorityFilterToGroup and true or false)
+        end
+
+        if cc.priorityMetric then
+            cc.priorityMetric:SetChecked(ns.RanksByAbsolute())
         end
 
         if cc.prioritySubtitle then
@@ -420,13 +531,27 @@ function ns.ShowNoteHelp()
 end
 
 function ns.ShowDamageGainHelp()
-    local frame, build = InfoWindow("damageGainHelp", "Damage Gain", 470, 486)
+    -- Taller and wider since 1.6: the section on which number to rank by is the
+    -- longest in here, and it is the one people open this window for.
+    local frame, build = InfoWindow("damageGainHelp", "Damage Gain", 500, 660)
 
     if build then
         build.add("What the list shows", build.accent)
         build.add("How much your Power Infusion is worth on each specialisation, as a " ..
-            "percentage of that player's damage. Discipline and Holy read different " ..
-            "numbers than Shadow, so the list follows your own specialisation.", "text", 6)
+            "percentage of that player's damage and as the damage itself. Discipline " ..
+            "and Holy read different numbers than Shadow, so the list follows your own " ..
+            "specialisation.", "text", 6)
+
+        build.add("Percentage or damage", build.accent)
+        build.add("The two rank differently for most rows, and neither is simply right. " ..
+            "Power Infusion adds that player's damage times the percentage, so the " ..
+            "absolute figure is what decides how much your raid actually gains -- a " ..
+            "specialisation that hits harder can gain more from a smaller percentage.\n\n" ..
+            "But those numbers come from the sheet's own gear. The percentage is " ..
+            "normalised per specialisation and survives the trip to a group geared " ..
+            "differently, which is why it stays the default.\n\n" ..
+            "The checkbox under the table switches which one is used, for the order " ..
+            "and for /pa auto. Whichever it is shows bright, the other dimmed.", "text", 6)
 
         build.add("Where the numbers come from", build.accent)
         build.add("Simulation results at 4-piece tier, from Ulria's public sheet. The date " ..
@@ -443,7 +568,9 @@ function ns.ShowDamageGainHelp()
         build.add("How a target is picked", build.accent)
         build.add("/pa auto assigns the best available player once. With the option in the " ..
             "General tab on, that happens by itself and follows the group. Your own /pa " ..
-            "always wins, the raid note comes next, the automatic pick fills what is left.",
+            "always wins, the raid note comes next, the automatic pick fills what is left.\n\n" ..
+            "A target does not carry into the next session -- a fresh login clears it, " ..
+            "while /reload and reconnects keep it.",
             "text", 6)
 
         build.add("Other priests", build.accent)
@@ -640,7 +767,70 @@ function ns.CreateConfigPanel()
     -- ── TAB 1: General ────────────────────────────────────────────────────────
     do
         local p   = tabGeneral
-        local sec = SectionHeader(p, "General")
+        local sec = SectionHeader(p, "Current Target")
+
+        -- Above the settings rather than below them: it is the answer to the
+        -- question people open this panel with.
+        local preview = CreateFrame("Frame", nil, p,
+            BackdropTemplateMixin and "BackdropTemplate" or nil)
+        preview:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -10)
+        preview:SetSize(CONTENT_W, 52)
+
+        if preview.SetBackdrop then
+            preview:SetBackdrop({
+                bgFile   = "Interface\\Buttons\\WHITE8x8",
+                edgeFile = "Interface\\Buttons\\WHITE8x8",
+                edgeSize = 1,
+                insets   = { left = 1, right = 1, top = 1, bottom = 1 },
+            })
+            local wr, wg, wb = UI.GetColorRGB("bgWidget")
+            preview:SetBackdropColor(wr, wg, wb, 1)
+            preview:SetBackdropBorderColor(sr, sg, sb, 1)
+        end
+
+        configControls.previewFrame = preview
+
+        -- A stripe down the left edge, carrying the class colour. The row is
+        -- otherwise a grey box with grey text in a panel full of grey boxes,
+        -- and this is the one line that should be findable without reading.
+        configControls.previewStripe = preview:CreateTexture(nil, "ARTWORK")
+        configControls.previewStripe:SetPoint("TOPLEFT", preview, "TOPLEFT", 1, -1)
+        configControls.previewStripe:SetPoint("BOTTOMLEFT", preview, "BOTTOMLEFT", 1, 1)
+        configControls.previewStripe:SetWidth(3)
+
+        local iconHolder = CreateFrame("Frame", nil, preview,
+            BackdropTemplateMixin and "BackdropTemplate" or nil)
+        iconHolder:SetSize(32, 32)
+        iconHolder:SetPoint("LEFT", preview, "LEFT", 12, 0)
+
+        if iconHolder.SetBackdrop then
+            iconHolder:SetBackdrop({
+                edgeFile = "Interface\\Buttons\\WHITE8x8",
+                edgeSize = 1,
+            })
+            iconHolder:SetBackdropBorderColor(sr, sg, sb, 1)
+        end
+
+        configControls.previewIcon = iconHolder:CreateTexture(nil, "ARTWORK")
+        configControls.previewIcon:SetPoint("TOPLEFT", 1, -1)
+        configControls.previewIcon:SetPoint("BOTTOMRIGHT", -1, 1)
+
+        configControls.previewName = UI.CreateFontString(preview, "", "text", "FONT_HEADER")
+        configControls.previewName:SetPoint("BOTTOMLEFT", iconHolder, "RIGHT", 10, 2)
+        configControls.previewName:SetWordWrap(false)
+
+        configControls.previewDetail = UI.CreateFontString(preview, "", "textDim", "FONT_SMALL")
+        configControls.previewDetail:SetPoint("TOPLEFT", iconHolder, "RIGHT", 10, -4)
+        configControls.previewDetail:SetWordWrap(false)
+
+        -- Top right, on the name's line: a quiet label on the row rather than
+        -- something competing with the detail line underneath.
+        configControls.previewSource = UI.CreateFontString(preview, "", "textDim", "FONT_SMALL")
+        configControls.previewSource:SetPoint("RIGHT", preview, "RIGHT", -12, 9)
+        configControls.previewSource:SetJustifyH("RIGHT")
+        configControls.previewSource:SetWordWrap(false)
+
+        sec = SectionHeader(p, "General", preview, -22)
 
         configControls.reminderEnabled = UI.CreateCheckButton(p,
             "Show raid and dungeon reminder",
@@ -648,6 +838,12 @@ function ns.CreateConfigPanel()
                 ns.GetDB().reminderEnabled = checked and true or false
                 ns.UpdateReminderVisibility()
             end)
+        -- Two columns, sized to their contents rather than split evenly: the
+        -- left pair's labels are short and the right pair's are long, and equal
+        -- halves would clip "Warn on ready check if your target is missing" by
+        -- a few pixels at any panel width worth having.
+        local COL_R = 274
+
         ns.ApplyVoidAccentToCheckButton(configControls.reminderEnabled)
         configControls.reminderEnabled:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -14)
 
@@ -657,7 +853,7 @@ function ns.CreateConfigPanel()
                 ns.GetDB().validateTargetOnReadyCheck = checked and true or false
             end)
         ns.ApplyVoidAccentToCheckButton(configControls.validateTarget)
-        configControls.validateTarget:SetPoint("TOPLEFT", configControls.reminderEnabled, "BOTTOMLEFT", 0, -10)
+        configControls.validateTarget:SetPoint("TOPLEFT", configControls.reminderEnabled, "TOPLEFT", COL_R, 0)
 
         configControls.minimapEnabled = UI.CreateCheckButton(p,
             "Show minimap button",
@@ -667,7 +863,7 @@ function ns.CreateConfigPanel()
                 ns.UpdateMinimapButtonVisibility()
             end)
         ns.ApplyVoidAccentToCheckButton(configControls.minimapEnabled)
-        configControls.minimapEnabled:SetPoint("TOPLEFT", configControls.validateTarget, "BOTTOMLEFT", 0, -10)
+        configControls.minimapEnabled:SetPoint("TOPLEFT", configControls.reminderEnabled, "BOTTOMLEFT", 0, -12)
 
         configControls.muteChat = UI.CreateCheckButton(p,
             "Silence chat messages from PriestAssist",
@@ -686,10 +882,13 @@ function ns.CreateConfigPanel()
                 end
             end)
         ns.ApplyVoidAccentToCheckButton(configControls.muteChat)
-        configControls.muteChat:SetPoint("TOPLEFT", configControls.minimapEnabled, "BOTTOMLEFT", 0, -10)
+        configControls.muteChat:SetPoint("TOPLEFT", configControls.minimapEnabled, "TOPLEFT", COL_R, 0)
 
         -- ── Raid note ─────────────────────────────────────────────────────────
-        local secNote = SectionHeader(p, "Raid Note", configControls.muteChat, -22)
+        -- Anchored to the left column: the right one ends at the same height,
+        -- and using it would tie the section below to whichever pair happens to
+        -- be listed last.
+        local secNote = SectionHeader(p, "Raid Note", configControls.minimapEnabled, -22)
 
         configControls.useNoteAssignment = UI.CreateCheckButton(p,
             "Take the Power Infusion target from the raid note",
@@ -754,11 +953,13 @@ function ns.CreateConfigPanel()
 
         -- Global on purpose: there are exactly two macros, they cannot change
         -- tab per zone without losing their action bar placement.
-        local secMacros = SectionHeader(p, "Macros", configControls.autoAssignStatus, -22)
+        local secMacros = SectionHeader(p, "Macros", configControls.autoAssignStatus, -26)
 
         configControls.macroScope = UI.CreateDropdown(p, CONTENT_W, 4)
         ns.ApplyVoidAccentToDropdown(configControls.macroScope)
-        configControls.macroScope:SetPoint("TOPLEFT", secMacros, "BOTTOMLEFT", 0, -20)
+        -- The dropdown's own label is drawn 6px above it, so anchoring at -20
+        -- put "Macro Tab" straight through the "MACROS" heading. This clears it.
+        configControls.macroScope:SetPoint("TOPLEFT", secMacros, "BOTTOMLEFT", 0, -32)
         configControls.macroScope:SetLabel("Macro Tab", accent)
         configControls.macroScope:SetItems(ns.MACRO_SCOPE_OPTIONS)
         configControls.macroScope:SetOnSelect(function(value)
@@ -784,7 +985,7 @@ function ns.CreateConfigPanel()
 
         configControls.fontDropdown = UI.CreateDropdown(p, FONT_W, 8)
         ns.ApplyVoidAccentToDropdown(configControls.fontDropdown)
-        configControls.fontDropdown:SetPoint("TOPLEFT", secApp, "BOTTOMLEFT", 0, -20)
+        configControls.fontDropdown:SetPoint("TOPLEFT", secApp, "BOTTOMLEFT", 0, -32)
         configControls.fontDropdown:SetLabel("Font", accent)
         configControls.fontDropdown:SetItems(ns.GetFontDropdownItems())
         configControls.fontDropdown:SetOnSelect(function(value)
@@ -821,7 +1022,7 @@ function ns.CreateConfigPanel()
 
         configControls.reminderStrata = UI.CreateDropdown(p, CONTENT_W, 6)
         ns.ApplyVoidAccentToDropdown(configControls.reminderStrata)
-        configControls.reminderStrata:SetPoint("TOPLEFT", secDisplay, "BOTTOMLEFT", 0, -20)
+        configControls.reminderStrata:SetPoint("TOPLEFT", secDisplay, "BOTTOMLEFT", 0, -32)
         configControls.reminderStrata:SetLabel("Frame Strata", accent)
         configControls.reminderStrata:SetItems(ns.STRATA_OPTIONS)
         configControls.reminderStrata:SetOnSelect(function(value)
@@ -852,7 +1053,7 @@ function ns.CreateConfigPanel()
 
         configControls.profileSelect = UI.CreateDropdown(p, CONTENT_W, 4)
         ns.ApplyVoidAccentToDropdown(configControls.profileSelect)
-        configControls.profileSelect:SetPoint("TOPLEFT", secProf, "BOTTOMLEFT", 0, -20)
+        configControls.profileSelect:SetPoint("TOPLEFT", secProf, "BOTTOMLEFT", 0, -32)
         configControls.profileSelect:SetLabel("Editing", accent)
         configControls.profileSelect:SetItems(ns.PROFILE_OPTIONS)
         configControls.profileSelect:SetOnSelect(function(value)
@@ -869,7 +1070,7 @@ function ns.CreateConfigPanel()
 
         configControls.macroVariant = UI.CreateDropdown(p, VARIANT_W, 4)
         ns.ApplyVoidAccentToDropdown(configControls.macroVariant)
-        configControls.macroVariant:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -20)
+        configControls.macroVariant:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -32)
         -- The primary macro carries the shared cooldowns (trinket, Power
         -- Infusion, potion) and is the one shown in the text field below.
         configControls.macroVariant:SetLabel("Primary Macro", accent)
@@ -960,8 +1161,13 @@ function ns.CreateConfigPanel()
         configControls.macroText = UI.CreateEditBox(p, CONTENT_W, 120)
         configControls.macroText:SetAccent(accent)
         configControls.macroText:SetMaxLetters(ns.MACRO_MAX_LENGTH)
-        configControls.macroText:SetPoint("TOPLEFT",     secText, "BOTTOMLEFT",  0, -10)
-        configControls.macroText:SetPoint("BOTTOMRIGHT", p,       "BOTTOMRIGHT", 0, 20)
+        -- Fixed height rather than anchored to the panel's bottom edge. It used
+        -- to stretch, which meant every pixel another tab needed was handed to
+        -- this box: raising the panel for the General tab turned a four-line
+        -- macro into a field twice the size of the settings above it.
+        configControls.macroText:SetPoint("TOPLEFT",  secText, "BOTTOMLEFT",  0, -10)
+        configControls.macroText:SetPoint("TOPRIGHT", secText, "BOTTOMRIGHT",  0, -10)
+        configControls.macroText:SetHeight(170)
 
         configControls.macroTextHint = UI.CreateFontString(p,
             "Click away to apply. Generated lines are rebuilt automatically.",
@@ -1071,8 +1277,11 @@ function ns.CreateConfigPanel()
 
             local dropdown = UI.CreateDropdown(p, MAP_W, 4)
             ns.ApplyVoidAccentToDropdown(dropdown)
+            -- -32 for the first row, same as every other dropdown under a
+            -- heading: the label is drawn 6px above the box and at -20 it ran
+            -- into the checkbox above.
             dropdown:SetPoint("TOPLEFT", configControls.autoSwitchProfiles, "BOTTOMLEFT",
-                column * (MAP_W + 12), -(20 + rowIdx * 46))
+                column * (MAP_W + 12), -(32 + rowIdx * 46))
             dropdown:SetLabel(ns.GetContentDisplayName(contentType), accent)
             dropdown:SetItems(ns.PROFILE_OPTIONS)
             dropdown:SetOnSelect(function(value)
@@ -1107,11 +1316,21 @@ function ns.CreateConfigPanel()
         local W_GAIN = 42
         local W_HERO = 130
 
+        -- The absolute gain sits directly beside the percentage rather than in
+        -- a column of its own: the two are the same fact in different units, and
+        -- whichever one the list is sorted by is shown bright while the other is
+        -- dimmed. Sorting by the smaller-looking number is confusing only while
+        -- you cannot see which one is being sorted.
+        -- Wide enough for the "Damage" heading, which is longer than any value
+        -- underneath it and was being truncated to "Dama...".
+        local W_DPS = 54
+        local OFF_DPS = W_GAIN + 8
+
         -- The three-pixel gap here is left over from when two gain/hero pairs
         -- shared the row; with one pair the value and the talent name ran into
         -- each other, headings included. The width comes out of the player
         -- column, which was far wider than any name needs.
-        local OFF_HERO = W_GAIN + 16
+        local OFF_HERO = OFF_DPS + W_DPS + 10
         local COL_MATCH = COL_GAIN + OFF_HERO + W_HERO + 14
         local W_MATCH = (CONTENT_W - 5 - (5 + BAR_W + 3)) - COL_MATCH - 2
 
@@ -1128,6 +1347,13 @@ function ns.CreateConfigPanel()
         headGain:SetWidth(W_GAIN)
         headGain:SetJustifyH("RIGHT")
         headGain:SetWordWrap(false)
+
+        local headDps = UI.CreateFontString(header, "Damage", "textDim", "FONT_SMALL")
+        headDps:SetPoint("LEFT", header, "LEFT", 5 + COL_GAIN + OFF_DPS, 0)
+        headDps:SetWidth(W_DPS)
+        headDps:SetJustifyH("RIGHT")
+        headDps:SetWordWrap(false)
+        configControls.priorityHeadDps = headDps
 
         local headHero = UI.CreateFontString(header, "Hero talent", "textDim", "FONT_SMALL")
         headHero:SetPoint("LEFT", header, "LEFT", 5 + COL_GAIN + OFF_HERO, 0)
@@ -1208,6 +1434,7 @@ function ns.CreateConfigPanel()
             end
 
             row.gain = cell(0, W_GAIN, "RIGHT")
+            row.dps = cell(OFF_DPS, W_DPS, "RIGHT")
             row.hero = cell(OFF_HERO, W_HERO, "LEFT")
 
             -- Right-aligned so the column reads against the table edge, the
@@ -1265,6 +1492,14 @@ function ns.CreateConfigPanel()
                     row.icon:SetTexture(entry.specIcon)
                     row.name:SetText(entry.specName)
                     row.gain:SetText(string.format("%.2f%%", entry.gain))
+                    row.dps:SetText(ns.FormatAbsoluteGain(entry.dps))
+
+                    -- The sorted-by number bright, the other one dimmed. Without
+                    -- this the list looks mis-sorted whenever the two disagree,
+                    -- which for the current data is most of it.
+                    local byAbsolute = ns.RanksByAbsolute() and entry.dps
+                    row.gain:SetColor(byAbsolute and "textDim" or "text")
+                    row.dps:SetColor(byAbsolute and "text" or "textDim")
 
                     -- Only a player row can have an unreadable hero talent; the
                     -- reference rows are one per variant by construction.
@@ -1357,8 +1592,21 @@ function ns.CreateConfigPanel()
         ns.ApplyVoidAccentToCheckButton(configControls.priorityFilter)
         configControls.priorityFilter:SetPoint("TOPLEFT", configControls.priorityHint, "BOTTOMLEFT", 0, -10)
 
+        -- Changes what /pa auto picks, not just what the table shows, which is
+        -- why it sits with the table rather than in the General tab: the effect
+        -- is easiest to understand while looking at the rows it reorders.
+        configControls.priorityMetric = UI.CreateCheckButton(p,
+            "Rank by damage gained instead of percentage",
+            function(checked)
+                ns.SetGainMetric(checked)
+                offset = 0
+                ns.RefreshConfigPanel()
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.priorityMetric)
+        configControls.priorityMetric:SetPoint("TOPLEFT", configControls.priorityFilter, "BOTTOMLEFT", 0, -8)
+
         configControls.priorityBest = UI.CreateFontString(p, "", "text", "FONT_SMALL")
-        configControls.priorityBest:SetPoint("TOPLEFT", configControls.priorityFilter, "BOTTOMLEFT", 0, -12)
+        configControls.priorityBest:SetPoint("TOPLEFT", configControls.priorityMetric, "BOTTOMLEFT", 0, -12)
 
         configControls.priorityAssign = UI.CreateButton(p, "Assign", accent, 110, 24)
         configControls.priorityAssign:SetPoint("TOPLEFT", configControls.priorityBest, "BOTTOMLEFT", 0, -8)

@@ -84,7 +84,12 @@ eventFrame:RegisterEvent("PLAYER_DIFFICULTY_CHANGED")
 eventFrame:RegisterEvent("READY_CHECK")
 eventFrame:RegisterEvent("ENCOUNTER_START")
 eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
-eventFrame:SetScript("OnEvent", function(_, event, arg1)
+-- Fires on logout and on /reload, and is the last chance to write the heartbeat
+-- precisely. A disconnect does not fire it, but the client still saves, so the
+-- ticker's value is what survives there.
+eventFrame:RegisterEvent("PLAYER_LOGOUT")
+-- arg2 carries isReloadingUi for PLAYER_ENTERING_WORLD.
+eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
     if event == "PLAYER_LOGIN" then
         ns.InitializeDatabase()
         ns.ApplyVoidTheme()
@@ -108,6 +113,22 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
         ns.RegisterOptionsPanel()
         ns.ScheduleInstanceReminder(1)
         ns.ScheduleContentProfileCheck(1)
+
+        -- Keeps the heartbeat current while playing, so a disconnect leaves a
+        -- recent value behind rather than the one from the last reload.
+        -- Deliberately not touched here: PLAYER_LOGIN runs before
+        -- PLAYER_ENTERING_WORLD, so writing the heartbeat now would close the
+        -- very gap the session check is about to measure. The first tick is a
+        -- minute away, long after that comparison.
+        if C_Timer and C_Timer.NewTicker then
+            C_Timer.NewTicker(60, ns.TouchSession)
+        end
+
+        return
+    end
+
+    if event == "PLAYER_LOGOUT" then
+        ns.TouchSession()
         return
     end
 
@@ -172,6 +193,12 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1)
             end
         end)
         return
+    end
+
+    -- Before the shared block below, which covers several events for which
+    -- arg1 and arg2 mean nothing.
+    if event == "PLAYER_ENTERING_WORLD" then
+        ns.ClearAssignmentForNewSession(arg1, arg2)
     end
 
     -- PLAYER_ENTERING_WORLD fires after every loading screen, so hearthing out

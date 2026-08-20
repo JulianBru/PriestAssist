@@ -87,6 +87,12 @@ HEADER = '''local _, ns = ...
 --
 -- The weakest value stays the fallback for anyone whose hero talent cannot be
 -- read: better to understate than to recommend a poor target.
+--
+-- `dps` is the same gain as an absolute number, from the sheet's "4p no PI"
+-- column. It is optional: the addon ranks by the percentage and shows this
+-- beside it, so a sheet that renames or drops the column costs the extra
+-- display, not the update. Read it as what the sim gained on the sheet's own
+-- gear, not as a prediction for your raid.
 
 -- DD/MM/YYYY, shown in the Damage Gain tab.
 {date_note}
@@ -146,9 +152,24 @@ def find_gain_column(header: list[str]) -> int:
 
     for index in range(start, len(header)):
         if header[index].strip() == GAIN_HEADER:
-            return index
+            # `start` is the damage without Power Infusion, which is what turns
+            # the percentage into an absolute number.
+            return index, start
 
     raise SheetError(f"no {GAIN_HEADER!r} column after {TIER_4P_HEADER!r}")
+
+
+def parse_number(raw: str) -> float | None:
+    """Sim output carries thousands separators and the odd stray space."""
+    cleaned = raw.strip().replace(",", "").replace(" ", "").replace(" ", "")
+
+    if not cleaned:
+        return None
+
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
 
 
 def split_build(build: str) -> tuple[str, str]:
@@ -169,7 +190,7 @@ def parse(text: str, label: str) -> tuple[dict[int, list], list[dt.date], dict[i
         raise SheetError(f"{label}: no {HEADER_CELL!r} header row -- is the URL still a CSV export?")
 
     header = rows[head]
-    gain_column = find_gain_column(header)
+    gain_column, base_column = find_gain_column(header)
     build_column = [c.strip() for c in header].index(HEADER_CELL)
 
     specs: dict[int, list] = {}
@@ -232,9 +253,17 @@ def parse(text: str, label: str) -> tuple[dict[int, list], list[dt.date], dict[i
                 "Sweep the IDs in game and add it to HERO_IDS -- see docs/HERO_TALENTS.md."
             )
 
+        # Optional on purpose: the percentage is the number the addon ranks by,
+        # and a sheet that drops or renames this column should not stop a data
+        # update. Missing means the tab shows percentages only.
+        base = parse_number(row[base_column]) if len(row) > base_column else None
+        absolute = round(base * gain / 100.0) if base else None
+
         spec_id = SPEC_IDS[spec]
         names[spec_id] = spec
-        specs.setdefault(spec_id, []).append({"name": hero, "id": HERO_IDS[hero], "gain": gain})
+        specs.setdefault(spec_id, []).append({
+            "name": hero, "id": HERO_IDS[hero], "gain": gain, "dps": absolute,
+        })
 
     if len(specs) < MIN_SPECS:
         raise SheetError(f"{label}: only {len(specs)} specialisations parsed, expected at least {MIN_SPECS}")
@@ -271,7 +300,10 @@ def render(healer, shadow, names, updated: str, shadow_timing: str, date_source:
         for spec_id, heroes in sorted(specs.items(), key=lambda kv: -min(h["gain"] for h in kv[1])):
             weakest = min(h["gain"] for h in heroes)
             rendered = ", ".join(
-                '{{ name = "{name}", id = {id}, gain = {gain:.2f} }}'.format(**h) for h in heroes
+                '{{ name = "{}", id = {}, gain = {:.2f}{} }}'.format(
+                    h["name"], h["id"], h["gain"],
+                    f', dps = {h["dps"]}' if h.get("dps") else "")
+                for h in heroes
             )
             out.append(
                 f'        {{ specID = {spec_id:4d}, gain = {weakest:.2f}, '
