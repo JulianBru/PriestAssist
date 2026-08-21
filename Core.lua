@@ -25,9 +25,28 @@ function ns.HandleSlashCommand(msg)
         return
     end
 
+    -- Bare /pa reset clears the target, which is what people reach for after a
+    -- pull went to the wrong player. The old meaning -- dropping your own macro
+    -- lines -- moved to /pa reset macro.
+    --
+    -- Both explicit forms exist so the bare one is a shorthand rather than
+    -- implicitly one of two destructive things. Redefining a command is worth
+    -- doing carefully: somebody with the old /pa reset in a macro now clears a
+    -- target instead of their custom lines, which is recoverable -- their lines
+    -- are untouched -- but they should not have to guess what happened.
     if command == "reset" then
-        ns.SetAdditionalMacroText("")
-        ns.RequestMacroUpdate()
+        local what = rest:lower()
+
+        if what == "macro" or what == "macros" then
+            ns.SetAdditionalMacroText("")
+            ns.RequestMacroUpdate()
+        elseif what == "" or what == "target" then
+            ns.ClearAssignedTarget()
+        else
+            ns.Print("Usage: /pa reset (clears the target) or /pa reset macro " ..
+                "(drops your own macro lines)", "F82C00")
+        end
+
         return
     end
 
@@ -61,7 +80,7 @@ function ns.HandleSlashCommand(msg)
     end
 
     if command == "help" then
-        ns.Print("Commands: /pa, /pa add ..., /pa reset, /pa mode powerinfusion|voidform (picks the primary macro), /pa show, /pa note (check the raid note), /pa auto (pick by specialisation), /pa comm (who else has a Power Infusion target)", "A5AAD9")
+        ns.Print("Commands: /pa, /pa auto (pick by specialisation), /pa reset (clear the target), /pa add ..., /pa reset macro (drop your own macro lines), /pa mode powerinfusion|voidform (picks the primary macro), /pa show, /pa note (check the raid note), /pa comm (who else has a Power Infusion target)", "A5AAD9")
         return
     end
 

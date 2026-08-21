@@ -370,8 +370,20 @@ function ns.RefreshConfigPanel()
             cc.priorityMetric:SetChecked(ns.RanksByAbsolute())
         end
 
+        if cc.prioritySegments then
+            cc.prioritySegments:SetActive(listKind)
+        end
+
         if cc.prioritySubtitle then
-            cc.prioritySubtitle:SetText((ns.PRIEST_SPEC_NAMES[ownSpecID] or "Priest") ..
+            -- Derived from the list actually on screen, not from the stored
+            -- preference: a priest's override lives in ns.state, so reading the
+            -- database here made the heading say plain "Priest" while healer
+            -- numbers were showing. `ownSpecID` is only handed back when it
+            -- matches the list, so this covers every case in one line.
+            local who = ns.PRIEST_SPEC_NAMES[ownSpecID]
+                or ((listKind == "shadow" and "Shadow" or "Healer") .. " priest")
+
+            cc.prioritySubtitle:SetText(who ..
                 " Power Infusion, 4-piece values" ..
                 (ns.SPEC_PRIORITY_UPDATED and (", updated " .. ns.SPEC_PRIORITY_UPDATED) or "") ..
                 (mode == "players" and " - your group" or ""))
@@ -1396,6 +1408,122 @@ function ns.CreateConfigPanel()
         configControls.prioritySubtitle = UI.CreateFontString(p, "", "textDim", "FONT_SMALL")
         configControls.prioritySubtitle:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -10)
 
+        -- Which of the two lists is on screen, as two segments rather than a
+        -- slider: a slider promises a range, and this is a choice between two
+        -- named things.
+        --
+        -- The healer segment carries both Discipline and Holy, because that is
+        -- what the data says -- one list covering two specialisations. A single
+        -- icon there would claim the numbers belong to one of them.
+        --
+        -- One padding value for both segments, and each width follows from how
+        -- many icons it holds. Setting the widths by hand is what left the icons
+        -- sitting off-centre.
+        local SEG_H, ICON, SEG_PAD, ICON_GAP, SEG_TOP = 26, 18, 7, 3, 4
+
+        local HEALER_SPECS, SHADOW_SPECS = { 256, 257 }, { 258 }
+
+        local function SegmentWidth(specs)
+            return #specs * ICON + (#specs - 1) * ICON_GAP + SEG_PAD * 2
+        end
+
+        local SEG_W = SegmentWidth(HEALER_SPECS) + 6 + SegmentWidth(SHADOW_SPECS)
+
+        -- Anchored to the section header, not to the subtitle, and the subtitle
+        -- is given the width that is left over. Sharing a line with a
+        -- full-width font string only looks fine until the text is long enough
+        -- to run underneath the buttons.
+        configControls.prioritySubtitle:SetWidth(CONTENT_W - SEG_W - 12)
+        configControls.prioritySubtitle:SetJustifyH("LEFT")
+        configControls.prioritySubtitle:SetWordWrap(false)
+
+        local segments = CreateFrame("Frame", nil, p)
+        segments:SetPoint("TOPRIGHT", sec, "BOTTOMRIGHT", 0, -SEG_TOP)
+        segments:SetSize(SEG_W, SEG_H)
+        configControls.prioritySegments = segments
+
+        local function Segment(kind, specs)
+            local btn = CreateFrame("Button", nil, segments,
+                BackdropTemplateMixin and "BackdropTemplate" or nil)
+            btn:SetSize(SegmentWidth(specs), SEG_H)
+
+            if btn.SetBackdrop then
+                btn:SetBackdrop({
+                    bgFile   = "Interface\\Buttons\\WHITE8x8",
+                    edgeFile = "Interface\\Buttons\\WHITE8x8",
+                    edgeSize = 1,
+                })
+            end
+
+            local previous
+            btn.icons, btn.specs = {}, specs
+
+            for index = 1, #specs do
+                local tex = btn:CreateTexture(nil, "ARTWORK")
+                tex:SetSize(ICON, ICON)
+                tex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+
+                if previous then
+                    tex:SetPoint("LEFT", previous, "RIGHT", ICON_GAP, 0)
+                else
+                    tex:SetPoint("LEFT", btn, "LEFT", SEG_PAD, 0)
+                end
+
+                previous = tex
+                btn.icons[index] = tex
+            end
+
+            btn:SetScript("OnClick", function()
+                ns.SetPriorityListKind(kind)
+                offset = 0
+                ns.RefreshConfigPanel()
+            end)
+
+            btn.kind = kind
+            return btn
+        end
+
+        local shadowSeg = Segment("shadow", SHADOW_SPECS)
+        shadowSeg:SetPoint("RIGHT", segments, "RIGHT", 0, 0)
+
+        local healerSeg = Segment("healer", HEALER_SPECS)
+        healerSeg:SetPoint("RIGHT", shadowSeg, "LEFT", -6, 0)
+
+        --- Highlights whichever list the table is actually showing.
+        function segments:SetActive(kind)
+            for _, seg in ipairs({ healerSeg, shadowSeg }) do
+                local on = seg.kind == kind
+
+                -- Textures resolved here rather than once at creation. The
+                -- panel is built at login, and GetSpecDisplay falls back to a
+                -- placeholder icon while the client has not loaded
+                -- specialisation data yet -- set once, that placeholder would
+                -- stay for the rest of the session.
+                for index, specID in ipairs(seg.specs) do
+                    local _, icon = ns.GetSpecDisplay(specID)
+                    seg.icons[index]:SetTexture(icon)
+                end
+
+                if seg.SetBackdropColor then
+                    if on then
+                        seg:SetBackdropColor(ar, ag, ab, 0.25)
+                        seg:SetBackdropBorderColor(ar, ag, ab, 1)
+                    else
+                        local wr, wg, wb = UI.GetColorRGB("bgWidget")
+                        seg:SetBackdropColor(wr, wg, wb, 1)
+                        seg:SetBackdropBorderColor(sr, sg, sb, 1)
+                    end
+                end
+
+                -- Desaturated rather than hidden, so both stay readable as
+                -- "these are your two choices".
+                for _, tex in ipairs(seg.icons) do
+                    tex:SetDesaturated(not on)
+                    tex:SetAlpha(on and 1 or 0.5)
+                end
+            end
+        end
+
         local ROW_H = 20
         local ROWS = 11
         local BAR_W = 8
@@ -1426,7 +1554,11 @@ function ns.CreateConfigPanel()
 
         -- Column headings sit above the box, so they do not scroll away.
         local header = CreateFrame("Frame", nil, p)
-        header:SetPoint("TOPLEFT", configControls.prioritySubtitle, "BOTTOMLEFT", 0, -10)
+        -- Cleared against the section header rather than the subtitle: the
+        -- segments share that line and are the taller of the two, so anchoring
+        -- to the text would run the column headings into them. Built from the
+        -- segments' own offset and height so the two cannot drift apart.
+        header:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -(SEG_TOP + SEG_H + 8))
         header:SetSize(CONTENT_W, 14)
 
         local headSpec = UI.CreateFontString(header, "Specialisation", "textDim", "FONT_SMALL")

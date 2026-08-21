@@ -34,8 +34,14 @@ function ns.GetTargetDisplayName(targetName)
         return targetName
     end
 
+    -- Checked on its own rather than trusting the name check above. Both APIs
+    -- carry SecretWhenUnitIdentityRestricted today, so a secret class implies a
+    -- secret name -- but that is two APIs agreeing, not a guarantee, and
+    -- UnitClass only joined the list in 12.1.0. Handing a secret to
+    -- GetClassColor would be an immediate error rather than a bad colour.
     local _, classFile = UnitClass("target")
-    if classFile then
+
+    if classFile and not ns.IsSecretValue(classFile) then
         local classColor = C_ClassColor.GetClassColor(classFile)
         if classColor then
             return classColor:GenerateHexColorMarkup() .. targetName .. "\124r"
@@ -367,7 +373,9 @@ end
 local function ReleaseStaleNoteClaim()
     local db = ns.GetDB()
 
-    if db.assignedTargetSource ~= "note" then
+    -- Same reason as SetAssignedTarget: this writes the shared assignment, and
+    -- a character without one has no business changing it.
+    if not ns.IsPriest() or db.assignedTargetSource ~= "note" then
         return false
     end
 
@@ -387,6 +395,12 @@ end
 -- the group: the raid already has the note, no need to announce it back.
 function ns.CheckNoteAssignment(force)
     local db = ns.GetDB()
+
+    -- Before the option check, so a non-priest neither reads the note nor
+    -- releases a claim it never held.
+    if not ns.IsPriest() then
+        return false
+    end
 
     if not db.useNoteAssignment then
         ReleaseStaleNoteClaim()
@@ -603,12 +617,78 @@ function ns.GetKnownHero(playerName)
 end
 
 -- Which of the two lists applies follows from the priest's own spec.
-function ns.GetActivePriorityList()
+-- Your own specialisation, or nil where there is none to read.
+function ns.GetOwnPriestSpec()
+    if not ns.IsPriest() then
+        return nil
+    end
+
     local spec = C_SpecializationInfo and C_SpecializationInfo.GetSpecialization
         and C_SpecializationInfo.GetSpecialization()
-    local specID = spec and C_SpecializationInfo.GetSpecializationInfo(spec)
 
+    return spec and C_SpecializationInfo.GetSpecializationInfo(spec) or nil
+end
+
+-- Which of the two lists the tab shows, and where that decision came from.
+--
+-- A priest's own specialisation is the truth, so an override there is
+-- session-only: it lets a Shadow priest look up what the healer should take,
+-- and a reload or a respec puts it back. Storing it would mean one click could
+-- quietly leave you reading the wrong list weeks later, and the addon does not
+-- listen for specialisation changes to correct that.
+--
+-- On any other character there is no truth to fall back to, so the choice is
+-- kept in the database instead.
+function ns.GetPriorityListKind()
+    local ownSpec = ns.GetOwnPriestSpec()
+    local chosen
+
+    if ownSpec then
+        chosen = state.recommendFor
+    else
+        chosen = ns.GetDB().recommendFor
+    end
+
+    if chosen == "shadow" or chosen == "healer" then
+        return chosen
+    end
+
+    return ns.SpecListKind(ownSpec) or "healer"
+end
+
+-- Which list a specialisation reads. Discipline and Holy share one.
+function ns.SpecListKind(specID)
     if specID == ns.PRIEST_SPEC_SHADOW then
+        return "shadow"
+    end
+
+    if specID == ns.PRIEST_SPEC_DISCIPLINE or specID == ns.PRIEST_SPEC_HOLY then
+        return "healer"
+    end
+
+    return nil
+end
+
+function ns.SetPriorityListKind(kind)
+    if ns.GetOwnPriestSpec() then
+        state.recommendFor = kind
+    else
+        ns.GetDB().recommendFor = kind
+    end
+end
+
+function ns.GetActivePriorityList()
+    local kind = ns.GetPriorityListKind()
+    local ownSpec = ns.GetOwnPriestSpec()
+
+    -- The specialisation is only handed back when it actually reads the list
+    -- being shown, so the heading never names a spec whose numbers are not on
+    -- screen. Comparing the two kinds rather than tracking an "overridden"
+    -- flag: without an own specialisation there is nothing to override, and a
+    -- flag saying otherwise is a trap for whoever reads it next.
+    local specID = (ns.SpecListKind(ownSpec) == kind) and ownSpec or nil
+
+    if kind == "shadow" then
         return ns.SPEC_PRIORITY.shadow, "shadow", specID
     end
 
@@ -927,6 +1007,12 @@ end
 -- /pa auto. Sits below the raid note in the precedence order, so it steps aside
 -- while a note assignment is in effect instead of fighting it.
 function ns.AutoAssignBestTarget()
+    if not ns.IsPriest() then
+        ns.Print("This character is not a priest. The Damage Gain tab still shows who is " ..
+            "worth infusing, but nothing is assigned from here.", "F8C300")
+        return false
+    end
+
     -- Party is enough; the roster scan handles both.
     if not (IsInGroup and IsInGroup()) then
         ns.Print("Automatic picking needs a party or raid group.", "F82C00")
@@ -1056,6 +1142,14 @@ end
 
 function ns.MaintainAssignment()
     local db = ns.GetDB()
+
+    -- Silent, unlike the two commands above: this is a background tick. Without
+    -- the check it would announce a reassignment that SetAssignedTarget then
+    -- refuses, leaving the condition unresolved -- so the same false line would
+    -- print again on the next tick, and every tick after that.
+    if not ns.IsPriest() then
+        return false
+    end
 
     if not db.autoAssignTarget then
         return false
@@ -1349,6 +1443,18 @@ end
 -- Every route to a new target ends here, so this is where the group is told.
 function ns.SetAssignedTarget(targetName, source)
     local db = ns.GetDB()
+
+    -- The single door to the stored assignment, which is why the class check
+    -- sits here rather than at each of the half dozen callers -- /pa, /pa auto,
+    -- the raid note, the automatic pick and the session clear all end up here.
+    --
+    -- Gating UpdateMacro alone was not enough: RequestMacroUpdate captures the
+    -- target *before* it gets there, so a /pa on a mage still overwrote the
+    -- priest's assignment in the account-wide database.
+    if not ns.IsPriest() then
+        return
+    end
+
     local previous = db.assignedTarget or ""
 
     db.assignedTarget = targetName or ""
@@ -1452,11 +1558,49 @@ function ns.GetAssignmentOverview()
 
         if not overview.classFile and UnitClass then
             local _, classFile = UnitClass(unit)
-            overview.classFile = classFile
+
+            -- Group members are never identity-restricted by the documented
+            -- rule, but this value travels to C_ClassColor in the panel, and a
+            -- secret arriving there errors rather than degrades.
+            overview.classFile = (not ns.IsSecretValue(classFile)) and classFile or nil
         end
     end
 
     return overview
+end
+
+-- The manual counterpart to the session clear: back to no target at all. Kept
+-- next to it deliberately, because the two must stay the same operation -- one
+-- triggered by a fresh login, one by the player.
+function ns.ClearAssignedTarget()
+    if not ns.IsPriest() then
+        ns.Print("This character is not a priest, so there is no target of its own to " ..
+            "clear. The stored one belongs to your priest.", "F8C300")
+        return false
+    end
+
+    local previous = ns.GetAssignedTarget()
+
+    if previous == "" then
+        ns.Print("No Power Infusion target was set.", "A5AAD9")
+        return false
+    end
+
+    ns.SetAssignedTarget("", nil)
+    ns.RequestMacroUpdate()
+
+    -- With automatic assignment on, "cleared" lasts until the next tick. Saying
+    -- so beats having the target reappear a second later and look like the
+    -- command did not work.
+    if ns.GetDB().autoAssignTarget then
+        ns.Print("Power Infusion target cleared (" .. previous ..
+            "). A new one is picked automatically once your group is known.", "A5AAD9")
+    else
+        ns.Print("Power Infusion target cleared (" .. previous ..
+            "). Set one with /pa, or /pa auto to pick the best.", "A5AAD9")
+    end
+
+    return true
 end
 
 -- ─── Session handling ────────────────────────────────────────────────────────
@@ -1485,6 +1629,14 @@ function ns.ClearAssignmentForNewSession(isInitialLogin, isReloadingUi)
     local db = ns.GetDB()
 
     if not db then
+        return false
+    end
+
+    -- The heartbeat is still worth keeping current on any character -- it is
+    -- what tells a fresh login from a reconnect, and the priest benefits from
+    -- an alt having written it. Only the clearing is a priest's business.
+    if not ns.IsPriest() then
+        ns.TouchSession()
         return false
     end
 
@@ -1538,6 +1690,13 @@ end
 -- macro body: the length check and the config text field would both break on
 -- them. Assigning a group member -- the normal case -- is unaffected.
 function ns.CaptureAssignedTarget()
+    if not ns.IsPriest() then
+        ns.Print("This character is not a priest, so neither the target nor the Power " ..
+            "Infusion macros were changed. Both are shared across your account and " ..
+            "belong to your priest.", "F8C300")
+        return false
+    end
+
     local targetName = UnitName("target")
 
     if ns.IsSecretValue(targetName) then
@@ -1806,6 +1965,24 @@ end
 -- changing a setting never reassigns the macros or spams chat.
 -- The target itself is captured in ns.RequestMacroUpdate, not here.
 function ns.UpdateMacro(reportAssignment)
+    -- Gated here rather than in the callers: there are a dozen of those, and
+    -- one of them would eventually be forgotten.
+    --
+    -- The macros live in the account-wide tab, so this is not about sparing a
+    -- warrior two useless macros -- it is about not overwriting the priest's.
+    -- BuildMacroBody mixes shared settings with per-character lookups, and the
+    -- racial line reads whichever character is logged in, so a rebuild from an
+    -- alt of another race writes a racial the priest does not have.
+    if not ns.IsPriest() then
+        if reportAssignment then
+            ns.Print("This character is not a priest, so neither the target nor the Power " ..
+                "Infusion macros were changed. Both are shared across your account and " ..
+                "belong to your priest.", "F8C300")
+        end
+
+        return
+    end
+
     if MacroFrame and MacroFrame:IsShown() then
         ns.Print("Can't update the macro while the Macro Frame is open. Please close it and try again.", "F82C00")
         return

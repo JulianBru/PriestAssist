@@ -33,8 +33,19 @@ local function GetLib()
     return LibStub and LibStub(LIB_NAME, true)
 end
 
+-- Guarded for the same reason as ns.IsPriest: "player" should never be
+-- identity-restricted, but this value ends up in a comparison in
+-- ClaimOutranksUs, and comparing a secret is an immediate error rather than a
+-- wrong answer. An empty name simply loses that tiebreak, which is the right
+-- way to be wrong.
 function ns.GetOwnName()
-    return UnitName and UnitName("player") or ""
+    local name = UnitName and UnitName("player")
+
+    if not name or ns.IsSecretValue(name) then
+        return ""
+    end
+
+    return name
 end
 
 -- What our Power Infusion is worth on a player, from our own list -- a Shadow
@@ -117,10 +128,13 @@ function ns.GetCollision()
     return nil
 end
 
+-- The only message that asserts something about us, and therefore the only one
+-- a non-priest must never send. Asking (`Q`) and listening stay open: a raid
+-- lead on any character may want to know who has what.
 function ns.AnnounceAssignment()
     local lib = GetLib()
 
-    if not lib then
+    if not lib or not ns.IsPriest() then
         return false
     end
 
@@ -138,7 +152,8 @@ end
 function ns.ResolveAssignmentConflict()
     local target = ns.GetAssignedTarget()
 
-    if not target or target == "" or ns.GetAssignedTargetSource() ~= "auto" then
+    if not ns.IsPriest() or not target or target == ""
+        or ns.GetAssignedTargetSource() ~= "auto" then
         return false
     end
 
@@ -233,9 +248,14 @@ function ns.ReportAssignments(onlyIfShared)
     local ownTarget = ns.GetAssignedTarget()
     local lines = {}
 
-    lines[#lines + 1] = ownName .. " (you) " ..
-        ((ownTarget and ownTarget ~= "") and ("-> " .. ownTarget ..
-            " (" .. ns.GetAssignedTargetSource() .. ")") or "-> nobody")
+    -- Our own line only where we actually have a claim. The stored target is
+    -- account-wide, so a non-priest still has one -- printing it would assert
+    -- locally exactly what we just stopped sending.
+    if ns.IsPriest() then
+        lines[#lines + 1] = ownName .. " (you) " ..
+            ((ownTarget and ownTarget ~= "") and ("-> " .. ownTarget ..
+                " (" .. ns.GetAssignedTargetSource() .. ")") or "-> nobody")
+    end
 
     for _, claim in pairs(lib.GetClaims()) do
         if (lib.NameKey(claim.name) or "") ~= (lib.NameKey(ownName) or "") then
@@ -250,11 +270,14 @@ function ns.ReportAssignments(onlyIfShared)
         ns.Print("  " .. line, "A5AAD9")
     end
 
-    if #lines == 1 then
+    -- Counted against our own line rather than a fixed 1: a non-priest does not
+    -- add one, so an empty list means the same thing there as a single line
+    -- does for a priest.
+    if #lines == (ns.IsPriest() and 1 or 0) then
         ns.Print("  No other priest is running a compatible addon.", "A5AAD9")
     end
 
-    local collision = ns.GetCollision()
+    local collision = ns.IsPriest() and ns.GetCollision()
 
     if collision then
         ns.Print("  " .. collision.name .. " has the same target as you.", "F8C300")
@@ -299,7 +322,9 @@ function ns.InitializeComm()
         ns.RequestConfigRefresh()
     end)
 
-    -- Someone asked who has what; answer with ours.
+    -- Someone asked who has what; answer with ours. AnnounceAssignment holds
+    -- the class check, so a non-priest hears the question and stays out of the
+    -- answer rather than claiming a target it cannot use.
     lib.onQuery = function()
         ns.AnnounceAssignment()
     end

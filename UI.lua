@@ -494,6 +494,13 @@ function UI.CreateDropdown(parent, width, maxSlots)
         BackdropTemplateMixin and "BackdropTemplate" or nil)
     dd.list:SetFrameStrata("TOOLTIP")
     dd.list:SetClampedToScreen(true)
+
+    -- Parented to UIParent rather than to the panel, so the panel's own mouse
+    -- handling does not cover it: an open list can hang past the panel's edge,
+    -- and a click on its padding or between two entries would otherwise land in
+    -- the world behind it.
+    dd.list:EnableMouse(true)
+
     StyleFrame(dd.list, C.bg, C.border)
     dd.list:Hide()
 
@@ -877,6 +884,17 @@ function UI.CreateHeaderedFrame(parent, name, title, width, height, frameStrata,
     frame:SetToplevel(true)
     frame:SetMovable(true)
     frame:SetClampedToScreen(true)
+
+    -- Without this the window is see-through to the mouse. Being drawn over the
+    -- world stops nothing in WoW: a frame that does not take mouse input passes
+    -- clicks straight to whatever is behind it, so clicking anywhere that is not
+    -- a button targets the mob under the panel. Only the drag handle and the
+    -- close button used to take input, which is why the whole body leaked.
+    --
+    -- Also what makes SetToplevel above do anything: raising on click needs the
+    -- click to arrive in the first place.
+    frame:EnableMouse(true)
+
     StyleFrame(frame, C.bg, C.border)
 
     -- Title bar background

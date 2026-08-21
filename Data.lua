@@ -249,6 +249,10 @@ ns.DEFAULTS = {
     assignedTargetSource = "",
     -- "percent" or "absolute", which number the Damage Gain tab ranks by.
     gainMetric = "percent",
+    -- "healer" or "shadow". Only consulted on non-priest characters, where
+    -- there is no own specialisation to read the list from. A priest's override
+    -- lives in ns.state and lasts for the session.
+    recommendFor = "healer",
     -- Heartbeat, so a fresh login can be told from a reconnect. See
     -- ns.ClearAssignmentForNewSession.
     lastSeen = 0,
@@ -332,6 +336,47 @@ end
 
 function ns.GetDB()
     return PriestAssistDB
+end
+
+-- The addon runs on every character, because WoW has no way to load an addon
+-- for one class only. What it must not do on the others is speak or write:
+-- claims would make another priest step aside for a Power Infusion that is
+-- never cast, and the macros live in the account-wide tab, so rebuilding them
+-- from a warrior overwrites the priest's.
+--
+-- Reading stays open everywhere. A raid lead on any character can look at the
+-- Damage Gain list and say who is worth infusing, and that costs nobody
+-- anything.
+--
+-- UnitClassBase returns the unlocalised token, so this works on every client
+-- language. Everything else asks this one function rather than repeating the
+-- check, because a second copy is a second thing to forget.
+function ns.IsPriest()
+    local class = UnitClassBase and UnitClassBase("player")
+
+    if not class and UnitClass then
+        class = select(2, UnitClass("player"))
+    end
+
+    -- Comparing a secret value is an immediate Lua error, not a wrong answer,
+    -- and 12.1.0 added UnitClass and UnitClassBase to the APIs that can return
+    -- one. By the documented rule "player" can never be affected -- secrets
+    -- appear for units that are not player-controlled or not in your group --
+    -- but this function is called from the assignment tick, the comm layer, the
+    -- reminder and the panel refresh, so being wrong would break all of them at
+    -- once, mid-combat. The rules are also still moving from patch to patch.
+    --
+    -- The boolean test below is fine on a secret: the specification allows
+    -- boolean tests on non-boolean secrets, because the type is not itself
+    -- secret. Only the comparison further down would be the error.
+    if ns.IsSecretValue(class) then
+        return true
+    end
+
+    -- Unknown means we are too early to tell. Treated as "yes" on purpose: the
+    -- addon then behaves as it always has, and the alternative would be to
+    -- silently disable a priest's macros because a login was slow.
+    return class == nil or class == "PRIEST"
 end
 
 function ns.IsCombatLockdownActive()

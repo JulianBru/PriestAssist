@@ -1,5 +1,23 @@
 # Priest Assist
 
+## [1.7](https://github.com/JulianBru/PriestAssist/tree/v1.7) (2026-08-21)
+
+### Changed
+
+- `/pa reset` clears your Power Infusion target. The old behaviour moved to `/pa reset macro`; your custom lines are not touched by the new one.
+
+- On characters other than priests, the addon no longer claims targets towards other priests, writes the macros or shows the reminder. The Damage Gain tab, `/pa note` and `/pa comm` still work.
+
+### Added
+
+- A switch above the Damage Gain table chooses healer or Shadow values. On a priest it follows your specialisation, and switching lasts until you reload.
+
+### Fixed
+
+- Clicks no longer pass through the options window and hit whatever is behind it. Same for an open dropdown list.
+
+- Reading your own class is guarded against secret values, which 12.1.0 made possible for `UnitClass`.
+
 ## [1.6](https://github.com/JulianBru/PriestAssist/tree/v1.6) (2026-08-20)
 
 ### Added

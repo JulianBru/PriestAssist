@@ -125,6 +125,13 @@ end
 function ns.ShowReminder(forceText, message)
     local db = ns.GetDB()
 
+    -- Nothing to remind a warrior of. `reminderEnabled` defaults to true and is
+    -- account-wide, so without this the frame is the one thing that shows up on
+    -- an alt without anybody asking for it.
+    if not ns.IsPriest() then
+        return
+    end
+
     if not db.reminderEnabled and not forceText then
         return
     end

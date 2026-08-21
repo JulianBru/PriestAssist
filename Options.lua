@@ -15,7 +15,8 @@ local COMMANDS = {
     { "/pa show", "show the reminder frame" },
     { "/pa mode", "powerinfusion | voidform, picks the primary macro" },
     { "/pa add", "append your own line to the macro" },
-    { "/pa reset", "drop your own macro lines" },
+    { "/pa reset", "clear the Power Infusion target" },
+    { "/pa reset macro", "drop your own macro lines" },
     { "/pa help", "the same list, in chat" },
 }
 

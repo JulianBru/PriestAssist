@@ -20,7 +20,8 @@ The macro you pick as primary carries the shared cooldowns (trinket, Power Infus
 | --- | --- |
 | `/pa` | Update the macro to your current target |
 | `/pa add <text>` | Append custom lines to the selected macro |
-| `/pa reset` | Remove custom lines from the selected macro |
+| `/pa reset` | Clear the Power Infusion target |
+| `/pa reset macro` | Remove custom lines from the selected macro |
 | `/pa mode powerinfusion` | Make `PriestAssist PI` the primary macro |
 | `/pa mode voidform` | Make `PriestAssist VF` the primary macro |
 | `/pa show` | Preview the reminder |

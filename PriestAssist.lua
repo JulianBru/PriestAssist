@@ -18,6 +18,9 @@ ns.state = ns.state or {
     lastNoteText = nil,
     reminderMessage = nil,
     reminderWasDragged = false,
+    -- Session-only override of which priority list the tab shows. Priests only;
+    -- see ns.GetPriorityListKind for why it is not persisted.
+    recommendFor = nil,
 }
 
 ns.frames = ns.frames or {
