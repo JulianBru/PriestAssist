@@ -706,7 +706,14 @@ local ANSWER_HEADER = "Power Infusion targets:"
 local STEP_IN_DELAY = 2
 
 function ns.NoteTopAnswerSeen(message)
-    if message and message:find(ANSWER_HEADER, 1, true) then
+    -- Guarded here as well as at the call site. `find` on a secret value throws
+    -- from tainted code, and this is a public function -- relying on one caller
+    -- to check is how the last hole of this kind got in.
+    if ns.IsSecretValue(message) or type(message) ~= "string" then
+        return
+    end
+
+    if message:find(ANSWER_HEADER, 1, true) then
         lastAnswerSeen = GetTime and GetTime() or 0
     end
 end

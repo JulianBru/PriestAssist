@@ -158,12 +158,26 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
     local replyChannel = REPLY_CHANNEL[event]
 
     if replyChannel then
+        -- Incoming chat is a secret value on a communication-restricted map --
+        -- the client documents SecretInChatMessagingLockdown as applying "when
+        -- the player is on a communication-restricted map such as a dungeon or
+        -- raid". Tainted code may hold such a value and pass it on, but any
+        -- attempt to read it, `find` included, is an immediate error rather
+        -- than a wrong answer.
+        --
+        -- Both the text and the sender are checked: either can be secret, and
+        -- the sender is used as the whisper target further down.
+        if ns.IsSecretValue(arg1) or ns.IsSecretValue(arg2) then
+            return
+        end
+
         -- Watching for somebody else's answer is what makes the step-in work:
         -- chat is the acknowledgement, so no addon message is needed to find
         -- out whether the lead is still there.
         ns.NoteTopAnswerSeen(arg1)
 
-        local requested = arg1 and arg1:match("^%s*!pa%s+top%s*(%d*)%s*$")
+        local requested = type(arg1) == "string"
+            and arg1:match("^%s*!pa%s+top%s*(%d*)%s*$")
 
         if requested then
             ns.AnswerTopRequest(requested ~= "" and requested or nil, replyChannel, arg2)
