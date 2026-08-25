@@ -1,5 +1,37 @@
 # Priest Assist
 
+## [1.8](https://github.com/JulianBru/PriestAssist/tree/v1.8) (2026-08-25)
+
+### Added
+
+- `/pa top X` lists the best targets in your group, with any existing claim beside them, and an assignment for every priest present. It changes nothing. `/pa note top` gives the same assignment as raid note lines to copy.
+
+- `!pa top X` asks the same thing from chat, for priests without the addon. One client answers, on the channel it was asked on. It can be turned off, or limited to lead and assist, in the General tab.
+
+- `/pa version` shows what everyone is running: addon, version, library, and how old their simulation data is.
+
+- Priests running the addon agree on one of them to work out the assignment for the whole group, rather than each picking for itself. With automatic assignment on, your target comes from that.
+
+- A macro option puts the combat potion before the trinket. Off by default, and only the potion moves.
+
+### Changed
+
+- `/pa auto` no longer suggests another priest. Two Power Infusions overwrite each other rather than stacking, so a second one would have to be chained to be worth anything. The Damage Gain tab still lists them.
+
+- The options window is 32 pixels taller.
+
+### Fixed
+
+- A hero talent that arrived during a fight stayed unknown for the rest of the session, and two clients could disagree about the same player. The talent string is kept now and read again once combat ends.
+
+- Addon messages sent while the client was under a chat restriction disappeared without a trace, and the call reported success anyway — a priest could believe they had announced a target that no one heard. They are held and sent when the restriction lifts.
+
+- Dragging the minimap button no longer assigns whoever you had selected at the moment you let go.
+
+- A raid note is acted on again only when the Power Infusion assignment inside it changes, not when any other part of the note is edited.
+
+- The message after a new session says what it did instead of naming a target from the last one.
+
 ## [1.7](https://github.com/JulianBru/PriestAssist/tree/v1.7) (2026-08-21)
 
 ### Changed
