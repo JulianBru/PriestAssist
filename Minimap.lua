@@ -88,7 +88,21 @@ function ns.CreateMinimapButton()
 
     minimapButton.icon = icon
 
+    -- The button is registered for both clicks and dragging, and the click
+    -- fires on mouse-up -- the same moment a drag ends. Without this flag,
+    -- nudging the button around the minimap runs /pa on release and silently
+    -- reassigns your Power Infusion target to whatever you happen to have
+    -- selected at that instant.
+    --
+    -- Every minimap button carries this guard; LibDBIcon calls it
+    -- isDraggingButton. Ours did not.
+    local dragging = false
+
     minimapButton:SetScript("OnClick", function(_, button)
+        if dragging then
+            return
+        end
+
         if button == "RightButton" then
             ns.OpenConfigPanel()
             return
@@ -98,12 +112,20 @@ function ns.CreateMinimapButton()
     end)
 
     minimapButton:SetScript("OnDragStart", function(self)
+        dragging = true
         self:SetScript("OnUpdate", UpdateMinimapAngleFromCursor)
     end)
 
     minimapButton:SetScript("OnDragStop", function(self)
         self:SetScript("OnUpdate", nil)
         UpdateMinimapAngleFromCursor()
+
+        -- Cleared a frame later, not here: OnClick arrives after OnDragStop.
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, function() dragging = false end)
+        else
+            dragging = false
+        end
     end)
 
     minimapButton:SetScript("OnEnter", function(self)

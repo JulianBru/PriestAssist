@@ -382,8 +382,8 @@ local function ReleaseStaleNoteClaim()
     db.assignedTargetSource = "manual"
 
     -- So an identical note coming back is treated as new rather than skipped by
-    -- the unchanged-text shortcut, and can claim the assignment again.
-    state.lastNoteText = nil
+    -- the unchanged-assignment shortcut, and can claim the assignment again.
+    db.lastNoteAssignment = ""
 
     ns.Print("The raid note no longer assigns you a Power Infusion target. Keeping " ..
         (db.assignedTarget or "") .. " - /pa auto can take over now.", "F8C300")
@@ -429,32 +429,54 @@ function ns.CheckNoteAssignment(force)
         return false
     end
 
-    -- Only react to an actual change, so a manual /pa keeps its target until
-    -- the note is edited.
-    if not force and note == state.lastNoteText then
+    local target, sawAnyAssignment, ambiguous =
+        ns.ParsePowerInfusionAssignment(note, UnitName("player"))
+
+    -- Compared against the Power Infusion assignment, not against the note's
+    -- text. The old check used the whole note, so a raid lead fixing a typo in
+    -- an unrelated line counted as a change and threw away a target you had set
+    -- with /pa.
+    --
+    -- Kept in the database rather than in ns.state: session state is nil after
+    -- a reload, so an entirely unchanged note read as changed and re-asserted
+    -- itself over your own pick every time you reloaded.
+    local signature = target and ("t:" .. target)
+        or (sawAnyAssignment and "none" or "absent")
+
+    if not force and signature == db.lastNoteAssignment then
         return false
     end
 
-    state.lastNoteText = note
-
-    local target, sawAnyAssignment, ambiguous =
-        ns.ParsePowerInfusionAssignment(note, UnitName("player"))
+    db.lastNoteAssignment = signature
 
     if ambiguous then
         ns.Print("The note assigns you more than one Power Infusion target. Using the first one.", "F8C300")
     end
 
     if not target then
-        -- The note was edited and your line is gone: the claim goes with it.
-        ReleaseStaleNoteClaim()
+        -- The Power Infusion block changed and no longer names you. Only a
+        -- target that came from the note goes with it -- one you set with /pa
+        -- was never the note's to take away.
+        local hadNoteTarget = ns.GetAssignedTargetSource() == "note"
 
-        if sawAnyAssignment then
-            ns.Print("The raid note has Power Infusion assignments, but none for you. " ..
-                "Set a target yourself with /pa.", "F8C300")
-        else
-            ns.Print("No Power Infusion assignment found in the raid note. " ..
-                "Set a target yourself with /pa.", "F8C300")
+        -- Deliberately not ReleaseStaleNoteClaim: that one keeps the target and
+        -- only demotes the claim, which is right when the note has vanished and
+        -- we know nothing. Here we know the assignment was removed, so clearing
+        -- is the honest answer -- and calling both would announce that the
+        -- target is kept and then clear it.
+        if hadNoteTarget then
+            ns.SetAssignedTarget("", nil)
+            ns.RequestMacroUpdate()
         end
+
+        local what = sawAnyAssignment
+            and "The raid note has Power Infusion assignments, but none for you."
+            or "The raid note no longer assigns Power Infusion."
+
+        ns.Print(what .. (hadNoteTarget
+            and " Your target was cleared - set one with /pa, or /pa auto to pick the best."
+            or " Your current target is untouched."), "F8C300")
+
         return false
     end
 
@@ -1254,8 +1276,8 @@ function ns.ReportNoteAssignment()
         return
     end
 
-    -- Force a fresh read so repeated calls keep working.
-    state.lastNoteText = nil
+    -- `force` already bypasses the unchanged-assignment check, so nothing has
+    -- to be reset first.
     ns.CheckNoteAssignment(true)
 end
 
@@ -1668,14 +1690,24 @@ function ns.ClearAssignmentForNewSession(isInitialLogin, isReloadingUi)
     -- treat an empty assignment as free to fill, so this cannot leave the addon
     -- with nothing it is willing to do.
     ns.SetAssignedTarget("", nil)
+
+    -- With the target gone, what the note last said about it is no longer a
+    -- reference point: the next read should apply the note afresh.
+    db.lastNoteAssignment = ""
+
     ns.RequestMacroUpdate()
 
+    -- Deliberately without the name. It changes nothing you would do next --
+    -- the target is gone either way -- and it invites a comparison against what
+    -- you remember doing, which is a different session. A leftover from a group
+    -- that was breaking up then reads as if the addon picked somebody at
+    -- random. The name belongs in the saved variables, not in this line.
     if db.autoAssignTarget then
-        ns.Print("New session - cleared the Power Infusion target (" .. previous ..
-            "). A new one is picked automatically once your group is known.", "A5AAD9")
+        ns.Print("Cleared the Power Infusion target from your last session. " ..
+            "A new one is picked automatically once your group is known.", "A5AAD9")
     else
-        ns.Print("New session - cleared the Power Infusion target (" .. previous ..
-            "). Set one with /pa, or /pa auto to pick the best.", "A5AAD9")
+        ns.Print("Cleared the Power Infusion target from your last session. " ..
+            "Set one with /pa, or /pa auto to pick the best.", "A5AAD9")
     end
 
     return true

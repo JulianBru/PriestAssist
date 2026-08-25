@@ -15,7 +15,6 @@ ns.state = ns.state or {
     pendingAssignTarget = false,
     lastContentType = nil,
     contentCheckToken = 0,
-    lastNoteText = nil,
     reminderMessage = nil,
     reminderWasDragged = false,
     -- Session-only override of which priority list the tab shows. Priests only;

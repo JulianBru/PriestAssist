@@ -63,7 +63,7 @@ Power Infusion
 PI: YourName TargetName
 ```
 
-Your target is set without a word in raid chat — the raid already has the note. Works with MRT and with NorthernSkyRaidTools; either one is enough. `/pa` still overrides it until the note changes again, and if there is no assignment for you, you get a quiet reminder in your own chat instead of silence.
+Your target is set without a word in raid chat — the raid already has the note. Works with MRT and with NorthernSkyRaidTools; either one is enough. `/pa` still overrides it until the note's Power Infusion assignment changes — editing an unrelated line does not take your target away — and if there is no assignment for you, you get a quiet reminder in your own chat instead of silence.
 
 ***
 

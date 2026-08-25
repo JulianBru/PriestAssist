@@ -253,6 +253,10 @@ ns.DEFAULTS = {
     -- there is no own specialisation to read the list from. A priest's override
     -- lives in ns.state and lasts for the session.
     recommendFor = "healer",
+    -- The Power Infusion assignment the raid note last gave us, so "the note
+    -- changed" means the assignment changed rather than any character of the
+    -- note's text. Persisted so a reload does not read an unchanged note as new.
+    lastNoteAssignment = "",
     -- Heartbeat, so a fresh login can be told from a reconnect. See
     -- ns.ClearAssignmentForNewSession.
     lastSeen = 0,

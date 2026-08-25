@@ -669,8 +669,9 @@ function ns.ShowDamageGainHelp()
         build.heading("How a target is picked")
         build.add("/pa auto assigns the best available player once. With the option in the " ..
             "General tab on, that happens by itself and follows the group.", "text", 7)
-        build.add("Your own /pa always wins, the raid note comes next, and the automatic " ..
-            "pick fills what is left.")
+        build.add("Your own /pa holds until the note's Power Infusion assignment changes, " ..
+            "and the automatic pick only fills what is left. Editing an unrelated line of " ..
+            "the note does not take your target away.")
         build.add("A target does not carry into the next session. A fresh login clears it, " ..
             "while /reload and reconnects keep it.")
 
