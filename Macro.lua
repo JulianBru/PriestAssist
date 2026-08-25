@@ -1054,7 +1054,11 @@ function ns.PickBestTarget(skip)
     local bestRank = nil
 
     for _, row in ipairs(ns.GetPlayerRows()) do
-        if row.present and not (skip and skip(row.name)) then
+        -- Filtered here rather than in GetPlayerRows: the Damage Gain tab reads
+        -- the same rows and should keep showing what a priest is worth. It is
+        -- the picking that has to leave them alone, not the reporting.
+        if row.present and not ns.PRIEST_SPECS[row.specID]
+            and not (skip and skip(row.name)) then
             if not bestRank or row.rank > bestRank then
                 bestName, bestEntry, bestGain, bestHero, tied = row.name, row.entry, row.gain, row.hero, 0
                 bestRank = row.rank
@@ -1065,6 +1069,294 @@ function ns.PickBestTarget(skip)
     end
 
     return bestName, bestEntry, bestGain, tied, bestHero
+end
+
+-- ─── Group assignment ────────────────────────────────────────────────────────
+-- What `/pa top` shows. Advisory only: it never sets anybody's target, which is
+-- what lets it be used to look something up rather than only to commit to it.
+
+-- Which list a priest reads, and -- separately -- who is never suggested as a
+-- target. Two Power Infusions do not stack, they overwrite each other, so a
+-- priest already casting their own would have to chain them to get anything out
+-- of a second one. The sim sheet rates a Shadow priest at 2.86 for a healer and
+-- the Damage Gain tab still shows that, because it is a true number worth
+-- knowing. It is just not something to assign.
+--
+-- Discipline and Holy do not appear in the sheet at all, and a Shadow priest is
+-- only in the healer list -- one never infuses another.
+ns.PRIEST_SPECS = { [256] = "healer", [257] = "healer", [258] = "shadow" }
+
+-- What a Power Infusion from a healer or a Shadow priest is worth on a given
+-- specialisation. The two lists disagree because a Shadow priest has to line it
+-- up with their own cooldowns while a healer can hold it, so the same player is
+-- worth a different amount depending on who infuses them.
+function ns.GainForKind(kind, specID, heroID)
+    local list = ns.SPEC_PRIORITY and ns.SPEC_PRIORITY[kind]
+    local entry = list and ns.GetPriorityEntry(list, specID)
+
+    if not entry then
+        return 0
+    end
+
+    return ns.GetHeroGain(entry, heroID) or 0
+end
+
+-- Every priest in the group and which list applies to them. Priests without the
+-- addon are included on purpose: `/pa top` is a plan somebody reads out, and one
+-- that silently leaves out a priest is worse than useless to a raid lead.
+function ns.GetGroupPriests()
+    local priests = {}
+
+    -- GetGroupSpecOverview deliberately leaves us out -- it exists to answer
+    -- "who else is here" for the target list, where we are not a candidate. In
+    -- a plan we are, so we go back in by hand.
+    local ownSpec = ns.GetOwnPriestSpec()
+    local ownKind = ownSpec and ns.PRIEST_SPECS[ownSpec]
+
+    if ownKind then
+        local name = UnitName and UnitName("player")
+
+        if name and not ns.IsSecretValue(name) then
+            priests[#priests + 1] = { name = name, kind = ownKind, specID = ownSpec, own = true }
+        end
+    end
+
+    for _, member in ipairs(ns.GetGroupSpecOverview()) do
+        local kind = member.specID and ns.PRIEST_SPECS[member.specID]
+
+        if kind and member.present then
+            priests[#priests + 1] = { name = member.name, kind = kind, specID = member.specID }
+        end
+    end
+
+    -- By name, so every client builds the same list in the same order and the
+    -- tiebreak inside Best lands on the same candidate everywhere.
+    table.sort(priests, function(a, b) return a.name < b.name end)
+    return priests
+end
+
+-- Exhaustive search over the candidates, returning the best total and the plan
+-- behind it. `plan[i]` is the index into `pool` that priest `i` gets.
+--
+-- Not a one-pass "best target per priest" loop, because that asks the wrong
+-- question: the best target for one priest can be worth more to another, and a
+-- loop that has already handed it out cannot see the second number. The cost of
+-- asking properly is small -- see BuildAssignmentPool for why the candidate list
+-- stays short.
+local function Best(count, i, pool, used, valueOf)
+    if i > count then
+        return 0, {}
+    end
+
+    local topValue, topPlan
+
+    for j = 1, #pool do
+        if not used[j] then
+            used[j] = true
+            local rest, plan = Best(count, i + 1, pool, used, valueOf)
+            used[j] = nil
+
+            local value = valueOf(i, j) + rest
+
+            -- Strictly greater, so an earlier candidate wins a tie. The pool is
+            -- sorted by name, which makes the tiebreak the same on every client.
+            if not topValue or value > topValue then
+                plan[i] = j
+                topValue, topPlan = value, plan
+            end
+        end
+    end
+
+    -- More priests than targets: whoever is left goes without.
+    return topValue or 0, topPlan or {}
+end
+
+-- The candidates worth considering. Trimming is what keeps the search small:
+-- with at most (priests) entries taken from the top of each list, four priests
+-- give eight candidates rather than the whole raid.
+function ns.BuildAssignmentPool(priests, rows)
+    local wanted = #priests
+    local seen, pool = {}, {}
+
+    for _, kind in ipairs({ "healer", "shadow" }) do
+        local ranked = {}
+
+        for _, row in ipairs(rows) do
+            if row.present and not ns.PRIEST_SPECS[row.specID] then
+                ranked[#ranked + 1] = row
+            end
+        end
+
+        table.sort(ranked, function(a, b)
+            local ga = ns.GainForKind(kind, a.specID, a.hero)
+            local gb = ns.GainForKind(kind, b.specID, b.hero)
+
+            if ga ~= gb then
+                return ga > gb
+            end
+
+            return a.name < b.name
+        end)
+
+        for index = 1, math.min(wanted, #ranked) do
+            local row = ranked[index]
+
+            if not seen[row.name] then
+                seen[row.name] = true
+                pool[#pool + 1] = row
+            end
+        end
+    end
+
+    table.sort(pool, function(a, b) return a.name < b.name end)
+    return pool
+end
+
+--- The best assignment of the group's priests to targets.
+---
+--- Values come from whatever each priest reported about itself, and only fall
+--- back to our own tables where nothing was heard. A priest is the authority on
+--- what its own Power Infusion is worth -- it may be reading a newer sim sheet,
+--- or weighting a target for a reason we cannot see -- so its number wins over
+--- ours even when we could compute one.
+---
+--- @return table a list of { priest, kind, target, gain }, and the total
+function ns.BuildGroupAssignment()
+    local priests = ns.GetGroupPriests()
+    local rows = ns.GetPlayerRows()
+
+    if #priests == 0 then
+        return {}, 0
+    end
+
+    local reported = ns.GetReportedValues and ns.GetReportedValues() or {}
+    local fixed = ns.GetFixedAssignments and ns.GetFixedAssignments() or {}
+
+    -- Priests who already have a deliberate target are not optimised: they keep
+    -- it, and their target leaves the pool so nobody else is sent to it.
+    local free, pinned = {}, {}
+
+    for _, priest in ipairs(priests) do
+        local target = fixed[(priest.name or ""):lower()]
+
+        if target then
+            pinned[priest.name] = target
+        else
+            free[#free + 1] = priest
+        end
+    end
+
+    -- Pinned targets leave the candidate list *before* it is trimmed, not
+    -- after. Trimming first and filtering second lets a pinned target eat the
+    -- one slot a remaining priest had, and they end up with nothing while a
+    -- perfectly good target sits just below the cut.
+    local available = {}
+
+    for _, row in ipairs(rows) do
+        local taken = false
+
+        for _, target in pairs(pinned) do
+            if (target or ""):lower() == (row.name or ""):lower() then
+                taken = true
+                break
+            end
+        end
+
+        if not taken then
+            available[#available + 1] = row
+        end
+    end
+
+    local pool = ns.BuildAssignmentPool(free, available)
+
+    local function valueOf(i, j)
+        local priest, row = free[i], pool[j]
+        local theirs = reported[(priest.name or ""):lower()]
+        local said = theirs and theirs[(row.name or ""):lower()]
+
+        if said then
+            return said
+        end
+
+        return ns.GainForKind(priest.kind, row.specID, row.hero)
+    end
+
+    local total, plan = Best(#free, 1, pool, {}, valueOf)
+    local assigned = {}
+
+    for index, priest in ipairs(free) do
+        if plan[index] then
+            assigned[priest.name] = { row = pool[plan[index]], gain = valueOf(index, plan[index]) }
+        end
+    end
+
+    local byName = {}
+
+    for _, row in ipairs(rows) do
+        byName[(row.name or ""):lower()] = row
+    end
+
+    local out = {}
+
+    for _, priest in ipairs(priests) do
+        local fixedTarget = pinned[priest.name]
+        local pick = assigned[priest.name]
+        local row, gain = pick and pick.row, pick and pick.gain or 0
+
+        -- A pinned priest is not part of the search, but they are part of the
+        -- plan, so their line carries what their target is actually worth.
+        -- Leaving it at zero would make the total read as if they contributed
+        -- nothing.
+        if fixedTarget then
+            row = byName[fixedTarget:lower()]
+            gain = row and ns.GainForKind(priest.kind, row.specID, row.hero) or 0
+            total = total + gain
+        end
+
+        out[#out + 1] = {
+            priest = priest.name,
+            kind = priest.kind,
+            own = priest.own,
+            fixed = fixedTarget ~= nil,
+            target = fixedTarget or (row and row.name) or nil,
+            gain = gain,
+            dps = row and row.dps or nil,
+            specName = row and row.specName or nil,
+        }
+    end
+
+    return out, total
+end
+
+--- The best targets from our own list, with any existing claim shown against
+--- them. Both come from the same rows `/pa auto` picks from, so the list can
+--- never contradict what the addon would actually do.
+function ns.GetTopTargets(count)
+    local claimed = ns.GetClaimsByTarget and ns.GetClaimsByTarget() or {}
+    local out = {}
+
+    for _, row in ipairs(ns.GetPlayerRows()) do
+        if row.present and not ns.PRIEST_SPECS[row.specID] then
+            local claim = claimed[(row.name or ""):lower()]
+
+            out[#out + 1] = {
+                name = row.name,
+                gain = row.gain,
+                dps = row.dps,
+                specName = row.specName,
+                specClass = row.specClass,
+                heroName = row.heroName,
+                claimedBy = claim and claim.priest or nil,
+                claimedByYou = claim and claim.own or false,
+            }
+
+            if #out >= (count or 5) then
+                break
+            end
+        end
+    end
+
+    return out
 end
 
 -- /pa auto. Sits below the raid note in the precedence order, so it steps aside
@@ -2038,12 +2330,9 @@ function ns.AnnounceMacroTarget(targetName)
         return
     end
 
-    local message = "Priest Assist: Power Infusion target set to " .. targetName .. "."
-    if C_ChatInfo and C_ChatInfo.SendChatMessage then
-        C_ChatInfo.SendChatMessage(message, channel)
-    else
-        SendChatMessage(message, channel)
-    end
+    -- Through the one guarded path, which holds the chat restriction check, the
+    -- mute setting and the fallback for clients without C_ChatInfo.
+    ns.SendChat("Priest Assist: Power Infusion target set to " .. targetName .. ".", channel)
 end
 
 -- reportAssignment: true only for deliberate assignments (/pa, the minimap

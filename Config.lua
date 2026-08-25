@@ -16,7 +16,11 @@ local W          = 600
 -- checkbox, which left the text field without usable height at 490.
 -- Raised again in 1.6 for the current-target preview, then brought back down
 -- once the General tab's checkboxes moved into two columns.
-local H          = 640
+-- Raised from 640 in 1.8. The General tab gained the !pa top row and the Macro
+-- tab the potion ordering checkbox, and both were already within a few pixels
+-- of the footer. Two rows is 32px, so that is what the window grew by rather
+-- than squeezing the macro text field a second time.
+local H          = 672
 local HEADER_END = 37   -- y-offset where header ends (px from panel top)
 local TAB_H      = 28
 local FOOTER_H   = 46
@@ -232,6 +236,15 @@ function ns.RefreshConfigPanel()
 
     if cc.validateTarget      then cc.validateTarget:SetChecked(db.validateTargetOnReadyCheck and true or false) end
     if cc.autoAssign          then cc.autoAssign:SetChecked(db.autoAssignTarget and true or false) end
+    if cc.answerTop and cc.answerTopLeadOnly then
+        local mode = db.answerTopRequests or "everyone"
+
+        cc.answerTop:SetChecked(mode ~= "nobody")
+        cc.answerTopLeadOnly:SetChecked(mode == "leadassist")
+
+        -- Restricting who may ask says nothing while nobody is answered at all.
+        cc.answerTopLeadOnly:SetAlpha(mode == "nobody" and 0.4 or 1.0)
+    end
     if cc.muteChat            then cc.muteChat:SetChecked(db.muteChat and true or false) end
 
     if cc.autoAssignStatus then
@@ -465,6 +478,55 @@ local INFO_PAD = 16
 
 -- The shell both info windows share: title bar in the addon's theme colour,
 -- close button, and a cursor that content is stacked beneath.
+-- The plan in raid note format, in a box you can select and copy.
+--
+-- Deliberately not a button that writes the note: MRT's note is shared raid
+-- state that a lead curates, and an addon editing it behind their back is the
+-- kind of help nobody asked for. Pasting is one keystroke more and stays their
+-- decision.
+function ns.ShowPlanAsNote()
+    local lines = ns.BuildNoteLines()
+
+    if not lines or #lines == 0 then
+        ns.Print("No assignment to write out yet -- /pa top shows why.", "F8C300")
+        return
+    end
+
+    local W, H = 380, 210
+    local frame = frames.planNote
+
+    if not frame then
+        local accent = ns.GetThemeAccentName()
+
+        frame = UI.CreateHeaderedFrame(UIParent, "PriestAssistPlanNote",
+            "Raid Note Lines", W, H, "FULLSCREEN_DIALOG", 30)
+        frame:SetPoint("CENTER", UIParent, "CENTER", 0, 60)
+        frame:SetTitleColor(accent)
+
+        local hint = UI.CreateFontString(frame,
+            "Paste these into the raid note. Priests with the addon pick them up " ..
+            "automatically; everyone else reads them like any other assignment.",
+            "textDim", "FONT_SMALL")
+        hint:SetPoint("TOPLEFT", frame, "TOPLEFT", INFO_PAD, -44)
+        hint:SetWidth(W - INFO_PAD * 2)
+        hint:SetJustifyH("LEFT")
+        hint:SetSpacing(4)
+
+        frame.box = UI.CreateCopyBox(frame, W - INFO_PAD * 2, 90, true)
+        frame.box:SetPoint("TOPLEFT", hint, "BOTTOMLEFT", 0, -10)
+
+        local close = UI.CreateButton(frame, "Close", accent, 100, 24)
+        close:SetPoint("BOTTOM", frame, "BOTTOM", 0, INFO_PAD)
+        close:SetOnClick(function() frame:Hide() end)
+
+        frames.planNote = frame
+    end
+
+    frame.box:SetValue(table.concat(lines, "\n"))
+    frame:Show()
+    frame:Raise()
+end
+
 local function InfoWindow(key, title, width, height)
     local frame = frames[key]
 
@@ -1055,9 +1117,31 @@ function ns.CreateConfigPanel()
         configControls.autoAssignStatus:SetJustifyH("LEFT")
         configControls.autoAssignStatus:SetSpacing(3)
 
+        -- Two checkboxes rather than one three-way dropdown: a dropdown needs a
+        -- label above it and costs 54px on a tab that had none to spare, and
+        -- "off" and "lead only" are not really the same kind of choice anyway --
+        -- one is whether to take part, the other is from whom.
+        configControls.answerTop = UI.CreateCheckButton(p,
+            "Answer !pa top in chat",
+            function(checked)
+                ns.GetDB().answerTopRequests = checked and "everyone" or "nobody"
+                ns.RefreshConfigPanel()
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.answerTop)
+        configControls.answerTop:SetPoint("TOPLEFT", configControls.autoAssignStatus, "BOTTOMLEFT", 0, -10)
+
+        configControls.answerTopLeadOnly = UI.CreateCheckButton(p,
+            "Only from lead and assist",
+            function(checked)
+                ns.GetDB().answerTopRequests = checked and "leadassist" or "everyone"
+                ns.RefreshConfigPanel()
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.answerTopLeadOnly)
+        configControls.answerTopLeadOnly:SetPoint("TOPLEFT", configControls.answerTop, "TOPLEFT", COL_R, 0)
+
         -- Global on purpose: there are exactly two macros, they cannot change
         -- tab per zone without losing their action bar placement.
-        local secMacros = SectionHeader(p, "Macros", configControls.autoAssignStatus, -26)
+        local secMacros = SectionHeader(p, "Macros", configControls.answerTop, -26)
 
         configControls.macroScope = UI.CreateDropdown(p, CONTENT_W, 4)
         ns.ApplyVoidAccentToDropdown(configControls.macroScope)
@@ -1287,13 +1371,9 @@ function ns.CreateConfigPanel()
         -- this box: raising the panel for the General tab turned a four-line
         -- macro into a field twice the size of the settings above it.
         --
-        -- 136 rather than 170 since 1.8: the tab is 512px tall and was already
-        -- within a few pixels of the footer, so the potion ordering checkbox had
-        -- to be paid for from somewhere. This box is where the room was -- nine
-        -- lines still fit, and a generated macro is five.
         configControls.macroText:SetPoint("TOPLEFT",  secText, "BOTTOMLEFT",  0, -10)
         configControls.macroText:SetPoint("TOPRIGHT", secText, "BOTTOMRIGHT",  0, -10)
-        configControls.macroText:SetHeight(136)
+        configControls.macroText:SetHeight(168)
 
         configControls.macroTextHint = UI.CreateFontString(p,
             "Click away to apply. Generated lines are rebuilt automatically.",

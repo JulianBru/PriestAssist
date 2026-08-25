@@ -11,6 +11,8 @@ local COMMANDS = {
     { "/pa", "assign the player you are targeting" },
     { "/pa auto", "assign whoever gains most, once" },
     { "/pa note", "check what the raid note parser sees" },
+    { "/pa top", "best targets, and who should take whom" },
+    { "/pa note top", "the same as raid note lines, to copy" },
     { "/pa comm", "who else is infusing whom" },
     { "/pa version", "what everyone is running" },
     { "/pa show", "show the reminder frame" },

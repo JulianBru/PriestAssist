@@ -284,6 +284,513 @@ function ns.ReportAssignments(onlyIfShared)
     end
 end
 
+--- Every line the addon says *to other players* goes through here.
+---
+--- One path rather than a check at each call site, because there are two things
+--- that are easy to forget: the chat restriction, and which send function the
+--- client actually has -- the global SendChatMessage went away in 11.2.0.
+---
+--- Deliberately *not* the place for muteChat. Every message that leaves this
+--- client already has its own switch -- announceTarget for the assignment, and
+--- answerTopRequests for !pa top -- and folding a third one in here would let
+--- "silence chat messages" quietly turn off a feature somebody enabled
+--- somewhere else.
+---
+--- Dropped under a restriction rather than held. The deferral in Send is for
+--- claims, which are state worth arriving late; a reply that surfaces two
+--- minutes after the pull, when the boss is dead and the roster has moved on,
+--- is noise. NorthernSkyRaidTools drops in its chat path for the same reason.
+---
+--- @return boolean whether it actually went out
+function ns.SendChat(message, channel, target)
+    if not message or message == "" or not channel then
+        return false
+    end
+
+    if C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
+        and C_ChatInfo.InChatMessagingLockdown() then
+        return false
+    end
+
+    local send = (C_ChatInfo and C_ChatInfo.SendChatMessage) or SendChatMessage
+
+    if not send then
+        return false
+    end
+
+    -- Through pcall: this is the one call in the addon that reaches outside the
+    -- client, and a hardware-event or restriction error here would otherwise
+    -- take down whatever was running -- for AnnounceMacroTarget, the assignment
+    -- that was in progress.
+    return (pcall(send, message, channel, nil, target))
+end
+
+-- How many targets we report values for. Six keeps the message well inside the
+-- 255 byte limit even with long realm names, and a seventh candidate has never
+-- decided an assignment for a group this size.
+local REPORTED_VALUES = 6
+
+--- What our Power Infusion is worth on the best players in the group, from our
+--- own list. Sent so the lead can solve the assignment without knowing our
+--- specialisation or reading our tables -- we are the authority on our own
+--- numbers, and this is the only part of them anybody else needs.
+function ns.AnnounceOwnValues()
+    local lib = GetLib()
+
+    if not lib or not ns.IsPriest() then
+        return false
+    end
+
+    local values = {}
+
+    for _, row in ipairs(ns.GetPlayerRows()) do
+        if row.present and not ns.PRIEST_SPECS[row.specID] then
+            values[#values + 1] = { name = row.name, gain = row.gain }
+
+            if #values >= REPORTED_VALUES then
+                break
+            end
+        end
+    end
+
+    return lib.AnnounceValues(values)
+end
+
+--- What every priest said, for ns.BuildGroupAssignment.
+function ns.GetReportedValues()
+    local lib = GetLib()
+    return lib and lib.GetReportedValues() or {}
+end
+
+--- Are we the one who computes for the group?
+function ns.IsAssignmentLead()
+    local lib = GetLib()
+
+    if not lib or not lib.GetLead then
+        return false
+    end
+
+    local leadName = lib.GetLead()
+
+    if not leadName then
+        return false
+    end
+
+    return (lib.NameKey(leadName) or "") == (lib.NameKey(ns.GetOwnName()) or "")
+end
+
+local planId = 0
+local lastPublish = 0
+
+-- Recomputing on every announcement would publish a plan per message during the
+-- burst that follows a group change.
+local PUBLISH_COOLDOWN = 3
+
+--- Compute and publish, if we are the lead. Everyone else does nothing here.
+function ns.PublishGroupAssignment(force)
+    local lib = GetLib()
+
+    if not lib or not ns.IsAssignmentLead() then
+        return false
+    end
+
+    local now = GetTime and GetTime() or 0
+
+    if not force and now - lastPublish < PUBLISH_COOLDOWN then
+        return false
+    end
+
+    local assignment = ns.BuildGroupAssignment()
+
+    if #assignment == 0 then
+        return false
+    end
+
+    lastPublish = now
+    planId = planId + 1
+    return lib.AnnouncePlan(planId, assignment)
+end
+
+--- Our line of the current plan, or nil.
+---
+--- Only accepted from the client we ourselves consider the lead. For a second
+--- or two after a roster change two of them can both think they are it, and
+--- this settles that without arbitration: once the rosters agree, so do we.
+function ns.GetPlannedTarget()
+    local lib = GetLib()
+    local plan = lib and lib.GetPlan and lib.GetPlan()
+
+    if not plan or not ns.IsPriest() then
+        return nil
+    end
+
+    local leadName = lib.GetLead()
+
+    if not leadName or (lib.NameKey(leadName) or "") ~= (plan.fromKey or "") then
+        return nil
+    end
+
+    local ownKey = lib.NameKey(ns.GetOwnName())
+    return ownKey and plan.assignments[ownKey:lower()] or nil
+end
+
+--- Priests whose target is not the addon's to move, keyed by lowercased name.
+--- A manual or note assignment is a decision somebody made; the plan works
+--- around it rather than proposing something it knows will be ignored.
+function ns.GetFixedAssignments()
+    local lib = GetLib()
+    local out = {}
+
+    if not lib then
+        return out
+    end
+
+    for key, claim in pairs(lib.GetClaims()) do
+        if claim.source == "manual" or claim.source == "note" then
+            out[key:lower()] = claim.target
+        end
+    end
+
+    -- Ours is held locally, not claimed to ourselves over the wire.
+    local ownSource = ns.IsPriest() and ns.GetAssignedTargetSource()
+    local ownTarget = ns.GetAssignedTarget()
+
+    if (ownSource == "manual" or ownSource == "note") and ownTarget and ownTarget ~= "" then
+        local key = lib.NameKey(ns.GetOwnName())
+
+        if key then
+            out[key:lower()] = ownTarget
+        end
+    end
+
+    return out
+end
+
+--- Take our line of the plan, if there is one and nothing more deliberate is in
+--- the way. Manual and note assignments are never touched -- the plan is how
+--- the automatic pick is made, not a licence to overrule a decision.
+function ns.ApplyPlannedTarget()
+    if not ns.IsPriest() then
+        return false
+    end
+
+    local db = ns.GetDB()
+
+    if not db.autoAssignTarget then
+        return false
+    end
+
+    local source = ns.GetAssignedTargetSource()
+
+    if source == "manual" or source == "note" then
+        return false
+    end
+
+    local target = ns.GetPlannedTarget()
+
+    if not target or target == "" or target == ns.GetAssignedTarget() then
+        return false
+    end
+
+    ns.SetAssignedTarget(target, "auto")
+    ns.RequestMacroUpdate()
+    return true
+end
+
+--- Every claim keyed by the target rather than by the priest holding it, which
+--- is the direction `/pa top` needs: it walks a list of targets and asks who,
+--- if anybody, already has each one.
+--- Lowercased keys, matching how names are compared everywhere else here.
+function ns.GetClaimsByTarget()
+    local lib = GetLib()
+    local out = {}
+
+    if not lib then
+        return out
+    end
+
+    local ownKey = lib.NameKey(ns.GetOwnName())
+
+    for key, claim in pairs(lib.GetClaims()) do
+        local target = lib.NameKey(claim.target)
+
+        if target then
+            out[target:lower()] = { priest = claim.name, own = (key == ownKey) }
+        end
+    end
+
+    -- Our own target is stored locally, not claimed to ourselves over the wire.
+    local ownTarget = ns.IsPriest() and ns.GetAssignedTarget()
+
+    if ownTarget and ownTarget ~= "" then
+        local target = lib.NameKey(ownTarget)
+
+        if target then
+            out[target:lower()] = { priest = ns.GetOwnName(), own = true }
+        end
+    end
+
+    return out
+end
+
+-- ─── /pa top ─────────────────────────────────────────────────────────────────
+
+-- Capped so one question cannot pour a screen into raid chat, and defaulted to
+-- the number of priests present: the usual reason to ask is "we have three
+-- priests, who takes whom".
+local TOP_MAX = 10
+
+-- One answer per ten seconds from this client, counted globally rather than per
+-- asker -- otherwise five people in turn each get their own list.
+local TOP_COOLDOWN = 10
+local lastTopAnswer = 0
+
+function ns.GetTopCount(requested)
+    -- The number of priests is both the default and the floor: asking for two
+    -- targets in a group of three priests hands back a list that cannot cover
+    -- them, which does not answer the question being asked.
+    local priests = math.max(#ns.GetGroupPriests(), 1)
+    local count = tonumber(requested) or priests
+
+    return math.max(priests, math.min(TOP_MAX, math.floor(count)))
+end
+
+--- The lines `/pa top` produces, as plain strings. Shared by the local print
+--- and the chat answer so the two can never drift apart.
+function ns.BuildTopLines(count)
+    local top = ns.GetTopTargets(count)
+
+    if #top == 0 then
+        return nil
+    end
+
+    local lines = {}
+
+    -- Two entries per line: ten targets is ten lines otherwise, which is a lot
+    -- to pour into raid chat at once.
+    for index = 1, #top, 2 do
+        local parts = {}
+
+        for offset = 0, 1 do
+            local row = top[index + offset]
+
+            if row then
+                parts[#parts + 1] = string.format("%d. %s %.2f%%%s",
+                    index + offset, row.name, row.gain or 0,
+                    row.claimedBy and (" [" .. (row.claimedByYou and "you"
+                        or row.claimedBy) .. "]") or "")
+            end
+        end
+
+        lines[#lines + 1] = table.concat(parts, "   ")
+    end
+
+    return lines
+end
+
+--- The plan, one line per priest. nil when there is nothing to say.
+function ns.BuildPlanLines()
+    local assignment = ns.BuildGroupAssignment()
+
+    if #assignment < 2 then
+        return nil
+    end
+
+    local parts = {}
+
+    for _, entry in ipairs(assignment) do
+        if entry.target then
+            parts[#parts + 1] = entry.priest .. " -> " .. entry.target ..
+                (entry.fixed and " (set)" or "")
+        end
+    end
+
+    if #parts == 0 then
+        return nil
+    end
+
+    return parts
+end
+
+--- Raid note format, ready to paste. The note is the one channel that reaches
+--- priests without the addon and already outranks the automatic pick, so a plan
+--- somebody wants to make binding goes there rather than through a new message.
+function ns.BuildNoteLines()
+    local assignment = ns.BuildGroupAssignment()
+    local lines = {}
+
+    for _, entry in ipairs(assignment) do
+        if entry.target then
+            lines[#lines + 1] = "PI: " .. entry.priest .. " " .. entry.target
+        end
+    end
+
+    return lines
+end
+
+--- /pa top, printed locally.
+function ns.ReportTopTargets(requested)
+    local count = ns.GetTopCount(requested)
+    local lines = ns.BuildTopLines(count)
+
+    if not lines then
+        ns.Print("Nobody in your group is worth infusing yet. " ..
+            "Specialisations arrive over addon comms -- /pa version shows who reports.", "F8C300")
+        return
+    end
+
+    ns.Print("Best Power Infusion targets:", "A5AAD9")
+
+    for _, line in ipairs(lines) do
+        ns.Print("  " .. line, "A5AAD9")
+    end
+
+    local plan = ns.BuildPlanLines()
+
+    if plan then
+        local lib = GetLib()
+        local leadName = lib and lib.GetLead and lib.GetLead()
+
+        ns.Print("Assignment" .. (leadName and (" (by " .. leadName .. ")") or "") .. ":", "A5AAD9")
+
+        for _, line in ipairs(plan) do
+            ns.Print("  " .. line, "A5AAD9")
+        end
+
+        ns.Print("Nothing was changed. /pa note top shows these as raid note lines.", "A5AAD9")
+    end
+end
+
+--- Who this client is willing to answer !pa top for.
+local function MayAnswer(sender)
+    local db = ns.GetDB()
+
+    -- Answering in chat is chat output, so silencing the addon covers it. The
+    -- assignment announcement is not caught here: it has its own switch, and
+    -- taking it away from somebody who ticked a different box would be a
+    -- surprise rather than a setting.
+    if db.muteChat then
+        return false
+    end
+
+    local mode = db.answerTopRequests or "everyone"
+
+    if mode == "nobody" then
+        return false
+    end
+
+    if mode == "leadassist" then
+        local unit = sender and (sender:match("^([^%-]+)") or sender)
+
+        return (UnitIsGroupLeader and UnitIsGroupLeader(unit))
+            or (UnitIsGroupAssistant and UnitIsGroupAssistant(unit)) or false
+    end
+
+    return true
+end
+
+--- Answer `!pa top` on the channel it arrived on.
+---
+--- Only whoever the group considers the lead replies, so a raid with three
+--- priests does not produce three identical walls of text. That is a tiebreak
+--- among the clients that *received* the question, not an absolute: a whisper
+--- reaches exactly one of them, and the lead's client never sees it at all.
+---
+--- Chat is its own acknowledgement -- every candidate watches the same channel
+--- it would post to, so if the lead is silent the next one can step in without a
+--- single addon message being spent on liveness.
+-- Set whenever an answer from anybody appears in chat, which is what lets a
+-- non-lead client tell "the lead handled it" from "nobody did".
+local lastAnswerSeen = 0
+local ANSWER_HEADER = "Power Infusion targets:"
+local STEP_IN_DELAY = 2
+
+function ns.NoteTopAnswerSeen(message)
+    if message and message:find(ANSWER_HEADER, 1, true) then
+        lastAnswerSeen = GetTime and GetTime() or 0
+    end
+end
+
+-- Local, and that is the point. When this was split off so the step-in could
+-- call it, it was briefly a second public entry that reached the chat without
+-- passing MayAnswer -- so a muted client, or one set to answer nobody, would
+-- still have talked if anything called it. One door, and the checks are on it.
+local function DeliverTopAnswer(requested, channel, sender)
+    local now = GetTime and GetTime() or 0
+
+    if now - lastTopAnswer < TOP_COOLDOWN then
+        return false
+    end
+
+    local lines = ns.BuildTopLines(ns.GetTopCount(requested))
+
+    if not lines then
+        return false
+    end
+
+    local target = (channel == "WHISPER") and sender or nil
+
+    if not ns.SendChat(ANSWER_HEADER, channel, target) then
+        return false
+    end
+
+    lastTopAnswer = now
+
+    for _, line in ipairs(lines) do
+        ns.SendChat(line, channel, target)
+    end
+
+    local plan = ns.BuildPlanLines()
+
+    if plan then
+        ns.SendChat("Suggested: " .. table.concat(plan, ", "), channel, target)
+    end
+
+    return true
+end
+
+function ns.AnswerTopRequest(requested, channel, sender)
+    if not ns.IsPriest() or not MayAnswer(sender) then
+        return false
+    end
+
+    -- Nobody needs a target list mid-pull, and the client may not be allowed to
+    -- talk anyway. This is the window where an unwanted answer actually hurts.
+    if ns.state.inEncounter then
+        return false
+    end
+
+    local now = GetTime and GetTime() or 0
+
+    if now - lastTopAnswer < TOP_COOLDOWN then
+        return false
+    end
+
+    -- A whisper reached exactly one client, so there is nobody to defer to. On a
+    -- shared channel the lead goes first and everybody else waits to see whether
+    -- it did -- no addon message is spent on working out whether it is alive.
+    if channel ~= "WHISPER" and not ns.IsAssignmentLead() then
+        if C_Timer and C_Timer.After then
+            C_Timer.After(STEP_IN_DELAY, function()
+                -- Re-checked rather than trusted from two seconds ago: the
+                -- setting can have been changed, or the fight started, in the
+                -- window we were waiting.
+                if not MayAnswer(sender) or ns.state.inEncounter then
+                    return
+                end
+
+                if (GetTime and GetTime() or 0) - lastAnswerSeen >= STEP_IN_DELAY then
+                    DeliverTopAnswer(requested, channel, sender)
+                end
+            end)
+        end
+
+        return false
+    end
+
+    return DeliverTopAnswer(requested, channel, sender)
+end
+
 -- What `/pa version` prints. Two blocks, and the local one is the more useful
 -- half: it is what somebody reporting a problem can answer without anybody else
 -- being online, and it costs no protocol at all.
@@ -425,6 +932,7 @@ function ns.SyncAssignments(force)
     -- before anybody needs a computation, not at the moment they ask for one.
     lib.RequestInfo()
     ns.AnnounceOwnInfo()
+    ns.AnnounceOwnValues()
     return true
 end
 
@@ -437,6 +945,17 @@ function ns.InitializeComm()
 
     lib.RegisterListener(ns, function()
         ns.ResolveAssignmentConflict()
+
+        -- Order matters. Publishing first would compute from what we knew
+        -- before this message; taking our line first would act on a plan that
+        -- is about to be replaced. As the lead we publish, as anybody else we
+        -- follow, and no client does both in the same pass.
+        if ns.IsAssignmentLead() then
+            ns.PublishGroupAssignment()
+        else
+            ns.ApplyPlannedTarget()
+        end
+
         ns.RequestConfigRefresh()
     end)
 

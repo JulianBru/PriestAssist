@@ -63,7 +63,20 @@ function ns.HandleSlashCommand(msg)
     end
 
     if command == "note" then
-        ns.ReportNoteAssignment()
+        -- /pa note top gives the plan in raid note format. The note is the one
+        -- channel that reaches priests without the addon, and it already
+        -- outranks the automatic pick -- so a plan somebody wants to make
+        -- binding goes there rather than through anything we invented.
+        if rest:lower() == "top" then
+            ns.ShowPlanAsNote()
+        else
+            ns.ReportNoteAssignment()
+        end
+        return
+    end
+
+    if command == "top" then
+        ns.ReportTopTargets(rest ~= "" and rest or nil)
         return
     end
 
@@ -89,7 +102,7 @@ function ns.HandleSlashCommand(msg)
     end
 
     if command == "help" then
-        ns.Print("Commands: /pa, /pa auto (pick by specialisation), /pa reset (clear the target), /pa add ..., /pa reset macro (drop your own macro lines), /pa mode powerinfusion|voidform (picks the primary macro), /pa show, /pa note (check the raid note), /pa comm (who else has a Power Infusion target), /pa version (what everyone is running)", "A5AAD9")
+        ns.Print("Commands: /pa, /pa auto (pick by specialisation), /pa reset (clear the target), /pa add ..., /pa reset macro (drop your own macro lines), /pa mode powerinfusion|voidform (picks the primary macro), /pa show, /pa note (check the raid note), /pa comm (who else has a Power Infusion target), /pa top X (best targets and who should take whom), /pa note top (the same as raid note lines), /pa version (what everyone is running). Others can ask with !pa top in chat.", "A5AAD9")
         return
     end
 
@@ -111,13 +124,60 @@ eventFrame:RegisterEvent("PLAYER_DIFFICULTY_CHANGED")
 -- lead would have just edited it. The text is compared before anything happens.
 eventFrame:RegisterEvent("READY_CHECK")
 eventFrame:RegisterEvent("ENCOUNTER_START")
+eventFrame:RegisterEvent("ENCOUNTER_END")
 eventFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
+
+-- "!pa top" from somebody without the addon. Every channel it can plausibly
+-- arrive on, because the answer goes back to the one it came from -- a whisper
+-- reached one client, party chat reached one subgroup, and a lead who never saw
+-- the question cannot answer it.
+for _, event in ipairs({
+    "CHAT_MSG_PARTY", "CHAT_MSG_PARTY_LEADER",
+    "CHAT_MSG_RAID", "CHAT_MSG_RAID_LEADER",
+    "CHAT_MSG_INSTANCE_CHAT", "CHAT_MSG_INSTANCE_CHAT_LEADER",
+    "CHAT_MSG_WHISPER",
+}) do
+    eventFrame:RegisterEvent(event)
+end
+
+local REPLY_CHANNEL = {
+    CHAT_MSG_PARTY = "PARTY",
+    CHAT_MSG_PARTY_LEADER = "PARTY",
+    CHAT_MSG_RAID = "RAID",
+    CHAT_MSG_RAID_LEADER = "RAID",
+    CHAT_MSG_INSTANCE_CHAT = "INSTANCE_CHAT",
+    CHAT_MSG_INSTANCE_CHAT_LEADER = "INSTANCE_CHAT",
+    CHAT_MSG_WHISPER = "WHISPER",
+}
 -- Fires on logout and on /reload, and is the last chance to write the heartbeat
 -- precisely. A disconnect does not fire it, but the client still saves, so the
 -- ticker's value is what survives there.
 eventFrame:RegisterEvent("PLAYER_LOGOUT")
 -- arg2 carries isReloadingUi for PLAYER_ENTERING_WORLD.
 eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
+    local replyChannel = REPLY_CHANNEL[event]
+
+    if replyChannel then
+        -- Watching for somebody else's answer is what makes the step-in work:
+        -- chat is the acknowledgement, so no addon message is needed to find
+        -- out whether the lead is still there.
+        ns.NoteTopAnswerSeen(arg1)
+
+        local requested = arg1 and arg1:match("^%s*!pa%s+top%s*(%d*)%s*$")
+
+        if requested then
+            ns.AnswerTopRequest(requested ~= "" and requested or nil, replyChannel, arg2)
+        end
+
+        return
+    end
+
+    -- Only used to stay quiet during a pull. ENCOUNTER_END also fires on a wipe.
+    if event == "ENCOUNTER_END" then
+        state.inEncounter = false
+        return
+    end
+
     if event == "PLAYER_LOGIN" then
         ns.InitializeDatabase()
         ns.ApplyVoidTheme()
@@ -191,6 +251,10 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
     if event == "READY_CHECK" or event == "ENCOUNTER_START" or event == "GROUP_ROSTER_UPDATE" then
         local isReadyCheck = (event == "READY_CHECK")
 
+        if event == "ENCOUNTER_START" then
+            state.inEncounter = true
+        end
+
         -- The Damage Gain tab lists who is in the group, so it goes stale when
         -- somebody joins or leaves.
         if event == "GROUP_ROSTER_UPDATE" then
@@ -251,3 +315,7 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
         ns.RequestConfigRefresh()
     end
 end)
+
+-- Exposed so the test harness can deliver events without a real client. Nothing
+-- inside the addon reads it.
+ns.eventFrame = eventFrame

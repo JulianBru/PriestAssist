@@ -247,6 +247,11 @@ ns.DEFAULTS = {
     useNoteAssignment = false,
     muteChat = false,
     autoAssignTarget = false,
+    -- Who this client answers "!pa top" for: "everyone", "leadassist" or
+    -- "nobody". A list of ignored names was considered and dropped -- it cannot
+    -- work, because silencing our own client just means the next candidate
+    -- answers two seconds later and the asker gets their list anyway.
+    answerTopRequests = "everyone",
     -- Checks on ready check whether the assigned player is actually there.
     validateTargetOnReadyCheck = true,
     -- One selected profile: it is both what the panel edits and what the macros

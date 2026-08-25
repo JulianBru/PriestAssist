@@ -17,6 +17,18 @@
 --   <version>^Q                            everyone please announce
 --   <version>^?                            everyone please identify
 --   <version>^I^<addon>^<addonVersion>^<libMinor>^<src>^<dataVersion>^<state>
+--   <version>^V^<name>:<gain>,...          what my Power Infusion is worth
+--   <version>^P^<planId>^<priest>=<target>,...   the lead's assignment
+--
+-- V carries values rather than specialisations on purpose. No two clients see
+-- the same group -- specs arrive asynchronously and only from players running a
+-- library that broadcasts them -- so a priest is the only reliable authority on
+-- what its own Power Infusion is worth. It also lets an addon working from a
+-- different sim source take part without anybody having to understand it.
+--
+-- P is sent by one client only, the one lib.GetLead names. Two clients solving
+-- the same assignment from different views of the roster would disagree, which
+-- is the whole reason the lead exists.
 --
 -- A message whose version we do not know is dropped rather than guessed at.
 --
@@ -68,12 +80,19 @@ lib.STATE_OBSERVING = "observing"
 
 lib.claims = lib.claims or {}
 lib.info = lib.info or {}
+lib.reported = lib.reported or {}
 lib.listeners = lib.listeners or {}
 lib.frame = lib.frame or CreateFrame("Frame")
 
 local claims = lib.claims
 local info = lib.info
+local reported = lib.reported
 local listeners = lib.listeners
+
+-- The newest plan we have seen, or nil. One table rather than one per sender:
+-- there is only ever one lead, and keeping a losing candidate's plan around
+-- would just be something to accidentally read later.
+local plan = lib.plan
 
 -- Names arrive as "Name-Realm" from the chat system but plain from the roster,
 -- so both sides are reduced to the same key. Case is left alone: the client's
@@ -120,6 +139,39 @@ local function Channel()
     end
 
     return nil
+end
+
+-- "Name:5.76,Other:4.91" into a lowercased lookup. Anything malformed is
+-- skipped rather than defaulted: a value we invent would be indistinguishable
+-- from one somebody meant.
+local function ParseValues(payload)
+    local out = {}
+
+    for name, gain in (payload or ""):gmatch("([^,:]+):([^,]+)") do
+        local key = NameKey(name)
+        local number = tonumber(gain)
+
+        if key and number then
+            out[key:lower()] = number
+        end
+    end
+
+    return out
+end
+
+-- "Priest=Target,Other=Second" the same way.
+local function ParsePlan(payload)
+    local out = {}
+
+    for priest, target in (payload or ""):gmatch("([^,=]+)=([^,]+)") do
+        local key = NameKey(priest)
+
+        if key then
+            out[key:lower()] = target
+        end
+    end
+
+    return out
 end
 
 local function Notify()
@@ -269,6 +321,58 @@ function lib.AnnounceInfo(addon, addonVersion, source, dataVersion, state)
     }, SEPARATOR))
 end
 
+--- Say what our Power Infusion is worth on each of these players.
+--- @param values table a list of { name = string, gain = number }, best first
+function lib.AnnounceValues(values)
+    local parts = {}
+
+    for _, value in ipairs(values or {}) do
+        if value.name and value.name ~= "" then
+            parts[#parts + 1] = value.name .. ":" .. string.format("%.2f", value.gain or 0)
+        end
+    end
+
+    local own = NameKey(UnitName and UnitName("player"))
+
+    if own then
+        reported[own] = ParseValues(table.concat(parts, ","))
+        Notify()
+    end
+
+    return Send(PROTOCOL .. SEPARATOR .. "V" .. SEPARATOR .. table.concat(parts, ","))
+end
+
+--- What each priest said its Power Infusion is worth, as
+--- `[priestKey][targetKey] = gain`, both lowercased.
+function lib.GetReportedValues()
+    return reported
+end
+
+--- Publish an assignment. Only the client lib.GetLead names should call this.
+--- @param planId number rises with every recomputation
+--- @param assignments table a list of { priest = string, target = string }
+function lib.AnnouncePlan(planId, assignments)
+    local parts = {}
+
+    for _, entry in ipairs(assignments or {}) do
+        if entry.priest and entry.target and entry.target ~= "" then
+            parts[#parts + 1] = entry.priest .. "=" .. entry.target
+        end
+    end
+
+    return Send(table.concat({
+        PROTOCOL, "P", tonumber(planId) or 0, table.concat(parts, ","),
+    }, SEPARATOR))
+end
+
+--- The most recent plan, or nil. Carries who sent it, so a client can ignore a
+--- plan from somebody it does not currently consider the lead -- during the
+--- second or two after a roster change two clients can briefly both think they
+--- are it, and this resolves that without any arbitration.
+function lib.GetPlan()
+    return plan
+end
+
 --- What every client has told us it is running, keyed by player name.
 --- Unlike claims these do not expire: they are dropped when the player leaves
 --- the group, because waiting ten minutes to find out that nobody is going to
@@ -356,6 +460,10 @@ end
 function lib.Reset()
     wipe(claims)
     wipe(info)
+    wipe(reported)
+
+    plan = nil
+    lib.plan = nil
 
     -- A held message was addressed to a group we are no longer in. Sending it
     -- to the next one would announce a target from the last raid.
@@ -444,6 +552,25 @@ local function HandleMessage(text, sender)
         return
     end
 
+    if kind == "V" then
+        reported[senderKey] = ParseValues(parts[3])
+        Notify()
+        return
+    end
+
+    if kind == "P" then
+        plan = {
+            from = sender,
+            fromKey = senderKey,
+            id = tonumber(parts[3]) or 0,
+            assignments = ParsePlan(parts[4]),
+        }
+
+        lib.plan = plan
+        Notify()
+        return
+    end
+
     if kind == "C" then
         if claims[senderKey] then
             claims[senderKey] = nil
@@ -507,8 +634,18 @@ lib.frame:SetScript("OnEvent", function(_, event, prefix, text, _, sender)
         for key, entry in pairs(info) do
             if not InOurGroup(entry.name) then
                 info[key] = nil
+                reported[key] = nil
                 dropped = true
             end
+        end
+
+        -- A plan from somebody who has left names priests who may also be gone.
+        -- Dropping it makes the group fall back to its own picks until the new
+        -- lead publishes, which is better than following a plan nobody owns.
+        if plan and not InOurGroup(plan.from) then
+            plan = nil
+            lib.plan = nil
+            dropped = true
         end
 
         if dropped then

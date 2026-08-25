@@ -13,6 +13,8 @@ ns.state = ns.state or {
     instanceReminderTimerToken = 0,
     pendingMacroUpdate = false,
     pendingAssignTarget = false,
+    -- Only used to keep !pa top quiet during a pull.
+    inEncounter = false,
     lastContentType = nil,
     contentCheckToken = 0,
     reminderMessage = nil,
