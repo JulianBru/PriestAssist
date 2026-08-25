@@ -164,6 +164,10 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
             ns.CheckInstanceReminder()
         end
 
+        -- Hero talents cannot be decoded in combat, so anything that arrived
+        -- during the fight is still waiting on its loadout string.
+        ns.RetryPendingHeroTalents()
+
         -- Spec reports that arrived during the fight are shown now.
         ns.FlushPendingConfigRefresh()
 

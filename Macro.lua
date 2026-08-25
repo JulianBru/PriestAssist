@@ -594,6 +594,10 @@ end
 local specByName = {}
 local heroByName = {}
 
+-- The raw loadout strings, kept for the ones combat would not let us read. See
+-- ns.RetryPendingHeroTalents.
+local talentStringByName = {}
+
 -- The library hands out names through Ambiguate(sender, "none"), which never
 -- shortens -- every remote player arrives as "Name-Realm". The roster gives
 -- plain names, so both sides go through the same normalisation or nothing ever
@@ -610,8 +614,45 @@ function ns.OnSpecializationUpdate(specID, _, _, playerName, talentString)
     -- talent costs no extra traffic. It stays nil whenever the sender omits it
     -- or the client cannot decode the format, and every caller treats that as
     -- "hero unknown" rather than as an error.
+    --
+    -- The string itself is kept, not just what it decoded to. DecodeHeroTalent
+    -- goes through GetViewConfigID, which refuses while InCombatLockdown is
+    -- true or the talent frame is open -- so a broadcast landing during a pull
+    -- would otherwise lose that player's hero talent for the rest of the
+    -- session, and the conservative fallback would stand in for it. Worse, two
+    -- clients decoding the identical string would disagree, purely on what each
+    -- of them happened to be doing when it arrived.
+    talentStringByName[key] = talentString
     heroByName[key] = ns.DecodeHeroTalent(talentString)
     ns.RequestConfigRefresh()
+end
+
+-- Decode what combat refused. Called once the fight ends.
+--
+-- Only entries still missing a hero are retried, and anything that did decode
+-- drops its string here rather than at the moment it succeeded -- the check is
+-- the same either way, and doing it in one place keeps the two tables from
+-- drifting apart.
+function ns.RetryPendingHeroTalents()
+    local decoded = false
+
+    for key, talentString in pairs(talentStringByName) do
+        if heroByName[key] ~= nil then
+            talentStringByName[key] = nil
+        else
+            local hero = ns.DecodeHeroTalent(talentString)
+
+            if hero ~= nil then
+                heroByName[key] = hero
+                talentStringByName[key] = nil
+                decoded = true
+            end
+        end
+    end
+
+    if decoded then
+        ns.RequestConfigRefresh()
+    end
 end
 
 function ns.InitializeSpecTracking()

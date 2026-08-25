@@ -103,7 +103,28 @@ local function Notify()
     end
 end
 
-local function Send(message)
+-- Addon messages are refused while the client is under a chat restriction, and
+-- SendAddonMessage gives no sign of it: the message never goes out, the call
+-- succeeds, and both sides carry on. A claim lost that way is invisible
+-- everywhere -- the priest believes they announced, every other priest keeps
+-- treating the target as free, and two of them infuse the same player.
+--
+-- So a message that cannot go out now is held and sent when the restriction
+-- lifts. Only the newest per verb is kept: an "A" superseded by another "A" has
+-- nothing left worth sending, and replaying a queue of stale claims would
+-- announce a history nobody asked for.
+local pending = lib.pending or {}
+lib.pending = pending
+
+local function InLockdown()
+    if not (C_ChatInfo and C_ChatInfo.InChatMessagingLockdown) then
+        return false
+    end
+
+    return C_ChatInfo.InChatMessagingLockdown() and true or false
+end
+
+local function Transmit(message)
     local channel = Channel()
 
     if not channel or not (C_ChatInfo and C_ChatInfo.SendAddonMessage) then
@@ -112,6 +133,41 @@ local function Send(message)
 
     C_ChatInfo.SendAddonMessage(PREFIX, message, channel)
     return true
+end
+
+-- The second field, matching the protocol at the top of the file.
+local function Verb(message)
+    return message:match("^[^%" .. SEPARATOR .. "]*%" .. SEPARATOR ..
+        "([^%" .. SEPARATOR .. "]*)") or message
+end
+
+local function Send(message)
+    if not Channel() then
+        return false
+    end
+
+    local verb = Verb(message)
+
+    if InLockdown() then
+        pending[verb] = message
+        return false
+    end
+
+    -- Anything held for this verb is what we are about to replace.
+    pending[verb] = nil
+
+    return Transmit(message)
+end
+
+local function Flush()
+    if InLockdown() or not Channel() then
+        return
+    end
+
+    for verb, message in pairs(pending) do
+        pending[verb] = nil
+        Transmit(message)
+    end
 end
 
 --- Register for a callback whenever the known claims change.
@@ -191,6 +247,11 @@ end
 --- Drop everything. Used when the group changes underneath us.
 function lib.Reset()
     wipe(claims)
+
+    -- A held message was addressed to a group we are no longer in. Sending it
+    -- to the next one would announce a target from the last raid.
+    wipe(pending)
+
     Notify()
 end
 
@@ -282,11 +343,33 @@ end
 lib.frame:UnregisterAllEvents()
 lib.frame:RegisterEvent("CHAT_MSG_ADDON")
 lib.frame:RegisterEvent("GROUP_ROSTER_UPDATE")
+
+-- Fires whenever the client enters or leaves a chat restriction, which is the
+-- only notice we get that a held message can go out. Registered up front rather
+-- than only while something is held: the event is rare, and registering on
+-- demand would be one more piece of state to get wrong.
+--
+-- Through pcall because RegisterEvent raises on an event the client does not
+-- know, and this one arrived in 12.0. PriestAssist itself does not support
+-- anything older, but this file is meant to be publishable on its own.
+pcall(lib.frame.RegisterEvent, lib.frame, "ADDON_RESTRICTION_STATE_CHANGED")
+
 lib.frame:SetScript("OnEvent", function(_, event, prefix, text, _, sender)
     if event == "GROUP_ROSTER_UPDATE" then
         -- Someone who left the group cannot be holding a target any more.
         if not Channel() then
             lib.Reset()
+        end
+        return
+    end
+
+    if event == "ADDON_RESTRICTION_STATE_CHANGED" then
+        -- A frame later, as NorthernSkyRaidTools does: the event arrives before
+        -- InChatMessagingLockdown reports the new state.
+        if C_Timer and C_Timer.After then
+            C_Timer.After(0, Flush)
+        else
+            Flush()
         end
         return
     end
