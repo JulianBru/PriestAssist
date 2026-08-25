@@ -54,6 +54,7 @@ def load(path: Path) -> dict:
         out[key] = specs
 
     out["updated"] = ns.SPEC_PRIORITY_UPDATED
+    out["version"] = ns.SPEC_PRIORITY_VERSION
     out["names"] = ns.PRIEST_SPEC_NAMES
     return out
 
@@ -64,6 +65,20 @@ def validate(data: dict) -> list[str]:
     updated = data["updated"]
     if not (isinstance(updated, str) and re.fullmatch(r"\d{2}/\d{2}/\d{4}", updated)):
         problems.append(f"SPEC_PRIORITY_UPDATED is {updated!r}, expected DD/MM/YYYY")
+
+    # Other priests compare this number to decide whose data is newer, so it
+    # has to say the same thing as the date beside it. A version that drifted
+    # from the date would put the wrong client in charge and tell somebody with
+    # current data that theirs is stale.
+    version = data["version"]
+    if not isinstance(version, (int, float)) or int(version) != version:
+        problems.append(f"SPEC_PRIORITY_VERSION is {version!r}, expected an integer")
+    elif re.fullmatch(r"\d{2}/\d{2}/\d{4}", updated or ""):
+        day, month, year = updated.split("/")
+        expected = int(f"{year}{month}{day}")
+        if int(version) != expected:
+            problems.append(f"SPEC_PRIORITY_VERSION is {int(version)}, but "
+                            f"SPEC_PRIORITY_UPDATED {updated!r} means {expected}")
 
     for spec_id in (256, 257, 258):
         if not data["names"][spec_id]:

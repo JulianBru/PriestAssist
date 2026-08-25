@@ -33,6 +33,16 @@ local _, ns = ...
 -- Replace it once the sheet has a changelog.
 ns.SPEC_PRIORITY_UPDATED = "20/08/2026"
 
+-- The same day as a sortable integer, YYYYMMDD. Priests running the addon
+-- exchange this so one of them can be picked to compute a shared assignment,
+-- and so anybody running older simulation data gets told about it.
+--
+-- Day granularity on purpose: two files generated on the same day count as
+-- equal even if their numbers differ. That is exactly as precise as the date
+-- above ever was, and inventing a finer counter would suggest an accuracy the
+-- source does not have.
+ns.SPEC_PRIORITY_VERSION = 20260820
+
 ns.SPEC_PRIORITY = {
     healer = {
         { specID =  265, gain = 5.00, heroes = { { name = "Hellcaller", id = 58, gain = 5.76, dps = 11409 }, { name = "Soul Harvester", id = 57, gain = 5.00, dps = 10341 } } },  -- Aff Wlock

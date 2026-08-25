@@ -98,6 +98,16 @@ HEADER = '''local _, ns = ...
 {date_note}
 ns.SPEC_PRIORITY_UPDATED = "{updated}"
 
+-- The same day as a sortable integer, YYYYMMDD. Priests running the addon
+-- exchange this so one of them can be picked to compute a shared assignment,
+-- and so anybody running older simulation data gets told about it.
+--
+-- Day granularity on purpose: two files generated on the same day count as
+-- equal even if their numbers differ. That is exactly as precise as the date
+-- above ever was, and inventing a finer counter would suggest an accuracy the
+-- source does not have.
+ns.SPEC_PRIORITY_VERSION = {version}
+
 ns.SPEC_PRIORITY = {{
 '''
 
@@ -291,8 +301,15 @@ DATE_NOTES = {
 }
 
 
+def version_from(updated: str) -> int:
+    """DD/MM/YYYY as a sortable YYYYMMDD integer."""
+    day, month, year = updated.split("/")
+    return int(f"{year}{month}{day}")
+
+
 def render(healer, shadow, names, updated: str, shadow_timing: str, date_source: str) -> str:
-    out = [HEADER.format(updated=updated, date_note=DATE_NOTES[date_source])]
+    out = [HEADER.format(updated=updated, version=version_from(updated),
+                         date_note=DATE_NOTES[date_source])]
 
     for key, specs in (("healer", healer), ("shadow", shadow)):
         out.append(f"    {key} = {{\n")
@@ -387,7 +404,10 @@ def main() -> int:
     def without_date(text):
         if text is None:
             return None
-        return re.sub(r'ns\.SPEC_PRIORITY_UPDATED = "[^"]*"', "", text)
+        # Both, or the no-op check below still sees a difference on every run:
+        # the version is derived from the very date being ignored.
+        text = re.sub(r'ns\.SPEC_PRIORITY_UPDATED = "[^"]*"', "", text)
+        return re.sub(r"ns\.SPEC_PRIORITY_VERSION = \d+", "", text)
 
     # Falling back to today means the date moves on every run. Rewriting the
     # file for that alone would open a pull request every week saying nothing --
