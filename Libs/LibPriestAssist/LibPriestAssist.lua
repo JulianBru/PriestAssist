@@ -15,10 +15,21 @@
 --   <version>^A^<target>^<source>^<gain>   announce a claim
 --   <version>^C                            claim withdrawn
 --   <version>^Q                            everyone please announce
+--   <version>^?                            everyone please identify
+--   <version>^I^<addon>^<addonVersion>^<libMinor>^<src>^<dataVersion>^<state>
 --
 -- A message whose version we do not know is dropped rather than guessed at.
+--
+-- `?` and `I` were added without raising the version, and could be: a client
+-- that predates them falls through the `kind ~= "A"` check below and discards
+-- them, while its claims keep working. Raising the version would have been the
+-- expensive move -- the check is strict equality, so two versions would stop
+-- hearing each other entirely and both would quietly infuse the same player.
+--
+-- Only a change to what an existing field of A, C or Q means needs a new
+-- version.
 
-local MAJOR, MINOR = "LibPriestAssist-1.0", 1
+local MAJOR, MINOR = "LibPriestAssist-1.0", 2
 local lib = LibStub and LibStub:NewLibrary(MAJOR, MINOR)
 
 if not lib then
@@ -28,6 +39,12 @@ end
 local PROTOCOL = 1
 local PREFIX = "PriestAssist"
 local SEPARATOR = "^"
+
+--- Which copy of the library ended up loaded. LibStub keeps only the highest
+--- minor per client, so an addon that embeds a newer one replaces ours without
+--- saying so -- exposed because "it behaves differently for him" is otherwise
+--- not diagnosable.
+lib.minor = MINOR
 
 -- A claim from someone who has gone quiet should not block a target forever.
 -- Long enough to survive a wipe and the run back, short enough that a priest
@@ -42,11 +59,20 @@ local QUERY_REPLY_SPREAD = 2
 --- addon ranks them the same way.
 lib.SOURCE_RANK = { manual = 3, note = 2, auto = 1 }
 
+--- Whether a client takes part in assigning targets, or only watches. A
+--- non-priest running a Power Infusion addon never claims anything, and without
+--- this it would be indistinguishable from somebody not running one at all.
+--- Only `active` clients are eligible to lead.
+lib.STATE_ACTIVE = "active"
+lib.STATE_OBSERVING = "observing"
+
 lib.claims = lib.claims or {}
+lib.info = lib.info or {}
 lib.listeners = lib.listeners or {}
 lib.frame = lib.frame or CreateFrame("Frame")
 
 local claims = lib.claims
+local info = lib.info
 local listeners = lib.listeners
 
 -- Names arrive as "Name-Realm" from the chat system but plain from the roster,
@@ -207,6 +233,88 @@ function lib.Query()
     return Send(PROTOCOL .. SEPARATOR .. "Q")
 end
 
+--- Ask every other addon to say what it is running.
+function lib.RequestInfo()
+    return Send(PROTOCOL .. SEPARATOR .. "?")
+end
+
+--- Say what we are running. Recorded locally as well as sent, so a client on
+--- its own still appears in its own list and can lead a group of one.
+--- @param addon string the addon's name
+--- @param addonVersion string its version
+--- @param source string where its target values come from, e.g. "pa"
+--- @param dataVersion number|nil how new those values are, higher is newer
+--- @param state string lib.STATE_ACTIVE or lib.STATE_OBSERVING
+function lib.AnnounceInfo(addon, addonVersion, source, dataVersion, state)
+    local own = NameKey(UnitName and UnitName("player"))
+
+    local entry = {
+        name = UnitName and UnitName("player") or "",
+        addon = tostring(addon or "?"),
+        addonVersion = tostring(addonVersion or "?"),
+        libMinor = MINOR,
+        source = tostring(source or "?"),
+        dataVersion = tonumber(dataVersion) or 0,
+        state = (state == lib.STATE_ACTIVE) and lib.STATE_ACTIVE or lib.STATE_OBSERVING,
+    }
+
+    if own then
+        info[own] = entry
+        Notify()
+    end
+
+    return Send(table.concat({
+        PROTOCOL, "I", entry.addon, entry.addonVersion, entry.libMinor,
+        entry.source, entry.dataVersion, entry.state,
+    }, SEPARATOR))
+end
+
+--- What every client has told us it is running, keyed by player name.
+--- Unlike claims these do not expire: they are dropped when the player leaves
+--- the group, because waiting ten minutes to find out that nobody is going to
+--- answer is not a useful way to spend a pull.
+function lib.GetInfo()
+    return info
+end
+
+--- Who should compute anything that has to be computed once for the group.
+---
+--- Deliberately a function of who is present rather than stored ownership, so
+--- there is nothing to hand over when somebody drops and nothing to remember
+--- when they come back: announcing again makes them the lead again.
+---
+--- Only `active` clients are eligible. Among them, a client is out of the
+--- running if another one *from the same source* reports newer data -- versions
+--- from different sources are not an ordering, and pretending they are would
+--- decide it on a comparison that means nothing. The name breaks what is left,
+--- so every client reaches the same answer without exchanging another message.
+---
+--- @return string|nil the player name, and its info entry
+function lib.GetLead()
+    local leadKey, leadEntry
+
+    for key, entry in pairs(info) do
+        if entry.state == lib.STATE_ACTIVE then
+            local outranked = false
+
+            for _, other in pairs(info) do
+                if other.state == lib.STATE_ACTIVE
+                    and other.source == entry.source
+                    and other.dataVersion > entry.dataVersion then
+                    outranked = true
+                    break
+                end
+            end
+
+            if not outranked and (not leadKey or key < leadKey) then
+                leadKey, leadEntry = key, entry
+            end
+        end
+    end
+
+    return leadEntry and leadEntry.name or nil, leadEntry
+end
+
 --- Every claim we know of, keyed by the claiming priest's name.
 --- Entries are { target, targetKey, source, gain, time }. Expired ones are
 --- dropped as they are found, so the caller never sees a stale claim.
@@ -247,6 +355,7 @@ end
 --- Drop everything. Used when the group changes underneath us.
 function lib.Reset()
     wipe(claims)
+    wipe(info)
 
     -- A held message was addressed to a group we are no longer in. Sending it
     -- to the next one would announce a target from the last raid.
@@ -308,6 +417,33 @@ local function HandleMessage(text, sender)
         return
     end
 
+    if kind == "?" then
+        if lib.onInfoRequest then
+            C_Timer.After(math.random() * QUERY_REPLY_SPREAD, function()
+                lib.onInfoRequest()
+            end)
+        end
+        return
+    end
+
+    if kind == "I" then
+        local state = parts[8]
+
+        info[senderKey] = {
+            name = sender,
+            addon = parts[3] or "?",
+            addonVersion = parts[4] or "?",
+            libMinor = tonumber(parts[5]) or 0,
+            source = parts[6] or "?",
+            dataVersion = tonumber(parts[7]) or 0,
+            -- A state we do not recognise must not become eligible to lead.
+            state = (state == lib.STATE_ACTIVE) and lib.STATE_ACTIVE or lib.STATE_OBSERVING,
+        }
+
+        Notify()
+        return
+    end
+
     if kind == "C" then
         if claims[senderKey] then
             claims[senderKey] = nil
@@ -359,7 +495,26 @@ lib.frame:SetScript("OnEvent", function(_, event, prefix, text, _, sender)
         -- Someone who left the group cannot be holding a target any more.
         if not Channel() then
             lib.Reset()
+            return
         end
+
+        -- Claims are allowed to age out on their own -- a priest who wiped and
+        -- is running back should not lose their target. Info records are not:
+        -- they decide who computes for the group, and a stale one would leave
+        -- everybody waiting on somebody who already left.
+        local dropped = false
+
+        for key, entry in pairs(info) do
+            if not InOurGroup(entry.name) then
+                info[key] = nil
+                dropped = true
+            end
+        end
+
+        if dropped then
+            Notify()
+        end
+
         return
     end
 

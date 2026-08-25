@@ -12,6 +12,7 @@ local COMMANDS = {
     { "/pa auto", "assign whoever gains most, once" },
     { "/pa note", "check what the raid note parser sees" },
     { "/pa comm", "who else is infusing whom" },
+    { "/pa version", "what everyone is running" },
     { "/pa show", "show the reminder frame" },
     { "/pa mode", "powerinfusion | voidform, picks the primary macro" },
     { "/pa add", "append your own line to the macro" },

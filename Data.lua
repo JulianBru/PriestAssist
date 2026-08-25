@@ -15,6 +15,12 @@ ns.VOID_VOLLEY_SPELL_ID = 1242173
 -- Which one you have is asked of the client, not derived from your race --
 -- C_SpellBook.IsSpellKnown survives any reshuffling of races and spells, and a
 -- player only ever knows one of them.
+-- Where our target values come from, sent alongside SPEC_PRIORITY_VERSION.
+-- Versions are only comparable within one source: another addon simming from a
+-- different sheet may well number its data "3.1.2", and deciding who has the
+-- newer numbers by comparing that against 20260820 would be inventing an answer.
+ns.SPEC_PRIORITY_SOURCE = "pa"
+
 ns.RACIAL_SPELL_IDS = {
     265221,     -- Fireblood, Dark Iron Dwarf
     26297,      -- Berserking, Troll

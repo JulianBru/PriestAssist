@@ -284,10 +284,121 @@ function ns.ReportAssignments(onlyIfShared)
     end
 end
 
+-- What `/pa version` prints. Two blocks, and the local one is the more useful
+-- half: it is what somebody reporting a problem can answer without anybody else
+-- being online, and it costs no protocol at all.
+function ns.ReportVersions()
+    local lib = GetLib()
+
+    local addonVersion = C_AddOns and C_AddOns.GetAddOnMetadata
+        and C_AddOns.GetAddOnMetadata(ns.ADDON_NAME, "Version")
+
+    ns.Print(ns.ADDON_DISPLAY_NAME .. " " .. (addonVersion or "?") ..
+        (lib and ("   LibPriestAssist " .. (lib.minor or "?")) or
+            "   LibPriestAssist missing"), "A5AAD9")
+
+    ns.Print("  Sim data " .. ns.SPEC_PRIORITY_SOURCE .. ":" ..
+        (ns.SPEC_PRIORITY_VERSION or "?") ..
+        "   (" .. (ns.SPEC_PRIORITY_UPDATED or "?") .. ")", "A5AAD9")
+
+    local db = ns.GetDB()
+    local list = select(2, ns.GetActivePriorityList())
+
+    ns.Print("  Profile \"" .. (ns.GetActiveProfileKey() or "?") .. "\"" ..
+        ", auto-assign " .. (db.autoAssignTarget and "on" or "off") ..
+        ", " .. (ns.IsPriest() and "priest" or "not a priest") ..
+        ", reading the " .. (list or "?") .. " list", "A5AAD9")
+
+    -- Whether the raid note can be read at all is the first thing to check when
+    -- somebody says note assignments do nothing.
+    local noteSource = (_G.VMRT and _G.VMRT.Note and "MRT")
+        or (_G.NSRT and "NorthernSkyRaidTools")
+        or nil
+
+    ns.Print("  Raid note: " .. (noteSource and (noteSource .. " detected")
+        or "no note addon detected"), "A5AAD9")
+
+    if not lib or not (IsInGroup and IsInGroup()) then
+        return
+    end
+
+    local leadName = lib.GetLead and lib.GetLead()
+    local leadKey = leadName and lib.NameKey(leadName) or nil
+    local newest = 0
+
+    for _, entry in pairs(lib.GetInfo()) do
+        if entry.source == ns.SPEC_PRIORITY_SOURCE and entry.dataVersion > newest then
+            newest = entry.dataVersion
+        end
+    end
+
+    ns.Print("In your group:", "A5AAD9")
+
+    -- pairs() order is whatever the hash gives us, which for a list somebody is
+    -- reading off to report a problem is no order at all. Ourselves first, then
+    -- by name.
+    local ownKey = lib.NameKey(ns.GetOwnName())
+    local keys = {}
+
+    for key in pairs(lib.GetInfo()) do
+        keys[#keys + 1] = key
+    end
+
+    table.sort(keys, function(a, b)
+        if (a == ownKey) ~= (b == ownKey) then
+            return a == ownKey
+        end
+        return a < b
+    end)
+
+    for _, key in ipairs(keys) do
+        local entry = lib.GetInfo()[key]
+
+        -- Only flagged against the same source. Telling somebody their data is
+        -- old because a number from a different sheet happens to be larger
+        -- would be a confident guess, not information.
+        local stale = entry.source == ns.SPEC_PRIORITY_SOURCE
+            and entry.dataVersion < newest
+
+        ns.Print(string.format("  %-22s %s %s   %s:%s   %s%s%s",
+            entry.name .. ((key == ownKey) and " (you)" or ""),
+            entry.addon, entry.addonVersion,
+            entry.source, tostring(entry.dataVersion), entry.state,
+            (key == leadKey) and "   <- lead" or "",
+            stale and "   (older sim data)" or ""), "A5AAD9")
+    end
+
+    if #keys <= 1 then
+        ns.Print("  Nobody else is running a compatible addon.", "A5AAD9")
+    end
+end
+
 -- GROUP_ROSTER_UPDATE fires far more often than the roster really changes, so
 -- the sync it triggers is throttled. A ready check can always force one.
 local SYNC_COOLDOWN = 5
 local lastSync = 0
+
+-- Unlike a claim, this says nothing about a target -- it is what we are running,
+-- which is true on a mage as much as on a priest. So there is no class check
+-- here; the honest answer for a non-priest is `observing`, not silence.
+-- Silence would be indistinguishable from not having the addon at all.
+function ns.AnnounceOwnInfo()
+    local lib = GetLib()
+
+    if not lib then
+        return false
+    end
+
+    local version = C_AddOns and C_AddOns.GetAddOnMetadata
+        and C_AddOns.GetAddOnMetadata(ns.ADDON_NAME, "Version")
+
+    return lib.AnnounceInfo(
+        ns.ADDON_DISPLAY_NAME,
+        version or "?",
+        ns.SPEC_PRIORITY_SOURCE,
+        ns.SPEC_PRIORITY_VERSION,
+        ns.IsPriest() and lib.STATE_ACTIVE or lib.STATE_OBSERVING)
+end
 
 --- Ask everyone to announce, and announce ourselves so anyone who just arrived
 --- learns where we stand.
@@ -307,6 +418,13 @@ function ns.SyncAssignments(force)
     lastSync = now
     lib.Query()
     ns.AnnounceAssignment()
+
+    -- Who is running what rides along with the claim sync rather than having a
+    -- moment of its own. It is the same event either way -- the group changed --
+    -- and the lead is worked out from these answers, so it has to be current
+    -- before anybody needs a computation, not at the moment they ask for one.
+    lib.RequestInfo()
+    ns.AnnounceOwnInfo()
     return true
 end
 
@@ -327,6 +445,12 @@ function ns.InitializeComm()
     -- answer rather than claiming a target it cannot use.
     lib.onQuery = function()
         ns.AnnounceAssignment()
+    end
+
+    -- Somebody wants to know what everyone is running. Answered on any
+    -- character, priest or not -- see ns.AnnounceOwnInfo.
+    lib.onInfoRequest = function()
+        ns.AnnounceOwnInfo()
     end
 
     return true

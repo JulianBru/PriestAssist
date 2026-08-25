@@ -79,8 +79,17 @@ function ns.HandleSlashCommand(msg)
         return
     end
 
+    -- Asks the group first, then prints -- the answers arrive over the wire, so
+    -- the same one-second wait /pa comm uses. The local block does not need it,
+    -- but printing half the output now and half in a second reads like a bug.
+    if command == "version" then
+        ns.SyncAssignments(true)
+        C_Timer.After(1, function() ns.ReportVersions() end)
+        return
+    end
+
     if command == "help" then
-        ns.Print("Commands: /pa, /pa auto (pick by specialisation), /pa reset (clear the target), /pa add ..., /pa reset macro (drop your own macro lines), /pa mode powerinfusion|voidform (picks the primary macro), /pa show, /pa note (check the raid note), /pa comm (who else has a Power Infusion target)", "A5AAD9")
+        ns.Print("Commands: /pa, /pa auto (pick by specialisation), /pa reset (clear the target), /pa add ..., /pa reset macro (drop your own macro lines), /pa mode powerinfusion|voidform (picks the primary macro), /pa show, /pa note (check the raid note), /pa comm (who else has a Power Infusion target), /pa version (what everyone is running)", "A5AAD9")
         return
     end
 
