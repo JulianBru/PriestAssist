@@ -214,6 +214,11 @@ ns.PROFILE_DEFAULTS = {
     macroVariant = "standalone",
     combatPotion = "none",
     combatPotionQuality = 2,
+    -- Which of the two fires first is not something the addon can work out: it
+    -- depends on the trinket's internal cooldown and on whether the potion
+    -- buffs something the trinket scales off. Off by default, which is the
+    -- order every earlier version produced.
+    potionBeforeTrinket = false,
     trinketSlot = "13",
     includeRacial = false,
     announceTarget = false,

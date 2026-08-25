@@ -269,6 +269,7 @@ function ns.RefreshConfigPanel()
     if cc.macroVariant        then cc.macroVariant:SetSelectedValue(profile.macroVariant or ns.PROFILE_DEFAULTS.macroVariant) end
     if cc.combatPotion        then cc.combatPotion:SetSelectedValue(profile.combatPotion or ns.PROFILE_DEFAULTS.combatPotion) end
     if cc.combatPotionQuality then cc.combatPotionQuality:SetSelectedValue(profile.combatPotionQuality or ns.PROFILE_DEFAULTS.combatPotionQuality) end
+    if cc.potionBeforeTrinket then cc.potionBeforeTrinket:SetChecked(profile.potionBeforeTrinket and true or false) end
     if cc.trinketSlot         then cc.trinketSlot:SetSelectedValue(profile.trinketSlot or ns.PROFILE_DEFAULTS.trinketSlot) end
     if cc.macroNotice then
         local entries = {}
@@ -311,7 +312,7 @@ function ns.RefreshConfigPanel()
 
             cc.announceTarget:ClearAllPoints()
             cc.announceTarget:SetPoint("TOPLEFT",
-                racialName and cc.includeRacial or cc.combatPotion, "BOTTOMLEFT", 0, -14)
+                racialName and cc.includeRacial or cc.potionBeforeTrinket, "BOTTOMLEFT", 0, -14)
         end
 
         -- Without a notice the macro text section moves up and the field grows.
@@ -1222,6 +1223,20 @@ function ns.CreateConfigPanel()
             ns.RefreshConfigPanel()
         end)
 
+        -- Always visible, including when no potion is selected. It could be
+        -- hidden in that case, but that would put a second conditional row into
+        -- an anchor chain that already has one, and the dropdown it belongs to
+        -- sits directly above it -- there is no doubt what it refers to.
+        configControls.potionBeforeTrinket = UI.CreateCheckButton(p,
+            "Use the potion before the trinket",
+            function(checked)
+                ns.GetActiveProfile().potionBeforeTrinket = checked and true or false
+                ns.RequestMacroUpdate()
+                ns.RefreshConfigPanel()
+            end)
+        ns.ApplyVoidAccentToCheckButton(configControls.potionBeforeTrinket)
+        configControls.potionBeforeTrinket:SetPoint("TOPLEFT", configControls.combatPotion, "BOTTOMLEFT", 0, -14)
+
         -- Created for everyone, shown only to characters that have one of the
         -- four on-use racials. Built unconditionally rather than skipped,
         -- because this runs at login and the spellbook is not something to bet
@@ -1233,7 +1248,7 @@ function ns.CreateConfigPanel()
                 ns.RefreshConfigPanel()
             end)
         ns.ApplyVoidAccentToCheckButton(configControls.includeRacial)
-        configControls.includeRacial:SetPoint("TOPLEFT", configControls.combatPotion, "BOTTOMLEFT", 0, -14)
+        configControls.includeRacial:SetPoint("TOPLEFT", configControls.potionBeforeTrinket, "BOTTOMLEFT", 0, -14)
 
         configControls.announceTarget = UI.CreateCheckButton(p,
             "Announce target in party or raid chat",
@@ -1246,7 +1261,10 @@ function ns.CreateConfigPanel()
         -- below the racial checkbox when there is one -- but it needs an anchor
         -- from the start, because macroNotice hangs off it and the refresh does
         -- not run while the panel is closed.
-        configControls.announceTarget:SetPoint("TOPLEFT", configControls.combatPotion, "BOTTOMLEFT", 0, -14)
+        --
+        -- Must match the fallback in RefreshConfigPanel, or the first frame the
+        -- panel is shown has this sitting on top of the row above it.
+        configControls.announceTarget:SetPoint("TOPLEFT", configControls.potionBeforeTrinket, "BOTTOMLEFT", 0, -14)
 
         -- Warnings (shown only when relevant, height follows the content)
         configControls.macroNotice = UI.CreateNotice(p, CONTENT_W, ns.WARNING_ICON_PATH)
@@ -1268,9 +1286,14 @@ function ns.CreateConfigPanel()
         -- to stretch, which meant every pixel another tab needed was handed to
         -- this box: raising the panel for the General tab turned a four-line
         -- macro into a field twice the size of the settings above it.
+        --
+        -- 136 rather than 170 since 1.8: the tab is 512px tall and was already
+        -- within a few pixels of the footer, so the potion ordering checkbox had
+        -- to be paid for from somewhere. This box is where the room was -- nine
+        -- lines still fit, and a generated macro is five.
         configControls.macroText:SetPoint("TOPLEFT",  secText, "BOTTOMLEFT",  0, -10)
         configControls.macroText:SetPoint("TOPRIGHT", secText, "BOTTOMRIGHT",  0, -10)
-        configControls.macroText:SetHeight(170)
+        configControls.macroText:SetHeight(136)
 
         configControls.macroTextHint = UI.CreateFontString(p,
             "Click away to apply. Generated lines are rebuilt automatically.",

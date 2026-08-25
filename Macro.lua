@@ -1807,6 +1807,22 @@ function ns.BuildGeneratedMacroBody(variant, profile)
     -- into the primary macro, so pressing the other one never fires them early.
     if isPrimary then
         local trinketLines = ns.BuildTrinketLines(profile)
+        local racialLine = ns.BuildRacialLines(profile)
+        local combatPotionLines = ns.BuildCombatPotionLines(variant, profile)
+
+        -- The potion goes last by default, which is what every version before
+        -- 1.8 produced. Moving it in front of the trinket is a per-profile
+        -- choice: a trinket with a long internal cooldown wants to fire first,
+        -- while a potion the trinket scales off has to be up before it.
+        --
+        -- Only the potion moves. Trinket, Power Infusion and racial keep their
+        -- order relative to each other either way, so this cannot reshuffle a
+        -- macro somebody already relies on beyond the one line.
+        if profile.potionBeforeTrinket and combatPotionLines then
+            lines[#lines + 1] = combatPotionLines
+            combatPotionLines = nil
+        end
+
         if trinketLines then
             lines[#lines + 1] = trinketLines
         end
@@ -1815,12 +1831,10 @@ function ns.BuildGeneratedMacroBody(variant, profile)
             lines[#lines + 1] = ns.BuildPowerInfusionLines(targetName)
         end
 
-        local racialLine = ns.BuildRacialLines(profile)
         if racialLine then
             lines[#lines + 1] = racialLine
         end
 
-        local combatPotionLines = ns.BuildCombatPotionLines(variant, profile)
         if combatPotionLines then
             lines[#lines + 1] = combatPotionLines
         end
