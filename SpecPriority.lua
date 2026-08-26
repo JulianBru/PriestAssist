@@ -28,10 +28,9 @@ local _, ns = ...
 -- gear, not as a prediction for your raid.
 
 -- DD/MM/YYYY, shown in the Damage Gain tab.
--- WARNING: the sheet had no date, so this is the day the file was
--- generated. It says nothing about how old the simulations are.
--- Replace it once the sheet has a changelog.
-ns.SPEC_PRIORITY_UPDATED = "20/08/2026"
+-- Taken from the sheet's own changelog: what matters is how old the
+-- simulations are, not when someone last pressed a button.
+ns.SPEC_PRIORITY_UPDATED = "25/08/2026"
 
 -- The same day as a sortable integer, YYYYMMDD. Priests running the addon
 -- exchange this so one of them can be picked to compute a shared assignment,
@@ -41,63 +40,63 @@ ns.SPEC_PRIORITY_UPDATED = "20/08/2026"
 -- equal even if their numbers differ. That is exactly as precise as the date
 -- above ever was, and inventing a finer counter would suggest an accuracy the
 -- source does not have.
-ns.SPEC_PRIORITY_VERSION = 20260820
+ns.SPEC_PRIORITY_VERSION = 20260825
 
 ns.SPEC_PRIORITY = {
     healer = {
-        { specID =  265, gain = 5.00, heroes = { { name = "Hellcaller", id = 58, gain = 5.76, dps = 11409 }, { name = "Soul Harvester", id = 57, gain = 5.00, dps = 10341 } } },  -- Aff Wlock
-        { specID =  263, gain = 4.80, heroes = { { name = "Totemic", id = 54, gain = 4.82, dps = 10832 }, { name = "Stormbringer", id = 55, gain = 4.80, dps = 11278 } } },  -- Enh Shaman
-        { specID =   63, gain = 4.69, heroes = { { name = "Sunfury", id = 39, gain = 4.91, dps = 10605 }, { name = "Frostfire", id = 41, gain = 4.69, dps = 9760 } } },  -- Fire Mage
-        { specID =  259, gain = 4.53, heroes = { { name = "Fatebound", id = 52, gain = 4.55, dps = 10873 }, { name = "Deathstalker", id = 53, gain = 4.53, dps = 11076 } } },  -- Assa Rogue
-        { specID =  254, gain = 4.44, heroes = { { name = "Sentinel", id = 42, gain = 4.79, dps = 11303 }, { name = "Dark Ranger", id = 44, gain = 4.44, dps = 9490 } } },  -- MM Hunter
-        { specID =  266, gain = 4.31, heroes = { { name = "Diabolist", id = 59, gain = 5.13, dps = 10461 }, { name = "Soul Harvester", id = 57, gain = 4.31, dps = 9056 } } },  -- Demo Wlock
-        { specID =  262, gain = 4.19, heroes = { { name = "Farseer", id = 56, gain = 4.20, dps = 9830 }, { name = "Stormbringer", id = 55, gain = 4.19, dps = 9252 } } },  -- Ele Shaman
-        { specID =  269, gain = 3.95, heroes = { { name = "Shado-Pan", id = 65, gain = 4.58, dps = 11043 }, { name = "Conduit", id = 64, gain = 3.95, dps = 9326 } } },  -- WW Monk
-        { specID =  103, gain = 3.73, heroes = { { name = "Wildstalker", id = 22, gain = 4.60, dps = 11112 }, { name = "Claw", id = 21, gain = 3.73, dps = 9012 } } },  -- Feral Druid
-        { specID =  255, gain = 3.63, heroes = { { name = "Pack Leader", id = 43, gain = 4.08, dps = 8963 }, { name = "Sentinel", id = 42, gain = 3.63, dps = 8233 } } },  -- Survival Hunter
-        { specID =  253, gain = 3.54, heroes = { { name = "Dark Ranger", id = 44, gain = 3.62, dps = 7171 }, { name = "Pack Leader", id = 43, gain = 3.54, dps = 8141 } } },  -- BM Hunter
-        { specID =   70, gain = 3.52, heroes = { { name = "Herald", id = 50, gain = 4.98, dps = 10542 }, { name = "Templar", id = 48, gain = 3.52, dps = 7723 } } },  -- Ret Paladin
-        { specID =   71, gain = 3.32, heroes = { { name = "Colossus", id = 62, gain = 3.51, dps = 7391 }, { name = "Slayer", id = 60, gain = 3.32, dps = 8170 } } },  -- Arms Warrior
-        { specID =  251, gain = 3.30, heroes = { { name = "Rider", id = 32, gain = 3.83, dps = 8858 }, { name = "Deathbringer", id = 33, gain = 3.30, dps = 7373 } } },  -- Frost DK
-        { specID = 1467, gain = 3.27, heroes = { { name = "Flameshaper", id = 37, gain = 4.87, dps = 11227 }, { name = "SC", id = 36, gain = 3.27, dps = 7449 } } },  -- Deva Evoker
-        { specID =   62, gain = 3.15, heroes = { { name = "Spellslinger", id = 40, gain = 3.45, dps = 6913 }, { name = "Sunfury", id = 39, gain = 3.15, dps = 6795 } } },  -- Arcane Mage
-        { specID =  258, gain = 2.86, heroes = { { name = "Archon", id = 19, gain = 2.86, dps = 6317 }, { name = "Voidweaver", id = 18, gain = 2.86, dps = 6138 } } },  -- Shadow Priest
-        { specID =  577, gain = 2.81, heroes = { { name = "Aldrachi Reaver", id = 35, gain = 2.94, dps = 7104 }, { name = "Fel Scarred", id = 34, gain = 2.81, dps = 6627 } } },  -- Havoc DH
-        { specID =   64, gain = 2.78, heroes = { { name = "Frostfire", id = 41, gain = 2.98, dps = 5998 }, { name = "Spellslinger", id = 40, gain = 2.78, dps = 5846 } } },  -- Frost Mage
-        { specID =  252, gain = 2.77, heroes = { { name = "Sanlayn", id = 31, gain = 3.08, dps = 6973 }, { name = "Rider", id = 32, gain = 2.77, dps = 6528 } } },  -- UH DK
-        { specID =  260, gain = 2.74, heroes = { { name = "Trickster", id = 51, gain = 3.34, dps = 8641 }, { name = "Fatebound", id = 52, gain = 2.74, dps = 6766 } } },  -- Outlaw Rogue
-        { specID =  267, gain = 2.48, heroes = { { name = "Hellcaller", id = 58, gain = 2.62, dps = 5932 }, { name = "Diabolist", id = 59, gain = 2.48, dps = 5413 } } },  -- Destro Wlock
-        { specID =  102, gain = 2.25, heroes = { { name = "Elune", id = 24, gain = 4.14, dps = 9388 }, { name = "Keeper", id = 23, gain = 2.25, dps = 4983 } } },  -- Balance Druid
-        { specID = 1480, gain = 2.24, heroes = { { name = "Void-Scarred", id = 126, gain = 2.72, dps = 7260 }, { name = "Annihilator", id = 124, gain = 2.24, dps = 5289 } } },  -- Devourer DH
-        { specID =   72, gain = 2.03, heroes = { { name = "Thane", id = 61, gain = 3.24, dps = 7761 }, { name = "Slayer", id = 60, gain = 2.03, dps = 5258 } } },  -- Fury Warrior
-        { specID =  261, gain = 1.27, heroes = { { name = "Trickster", id = 51, gain = 1.29, dps = 3108 }, { name = "Deathstalker", id = 53, gain = 1.27, dps = 3419 } } },  -- Sub Rogue
+        { specID =  265, gain = 4.86, heroes = { { name = "Hellcaller", id = 58, gain = 5.77, dps = 12724 }, { name = "Soul Harvester", id = 57, gain = 4.86, dps = 10834 } } },  -- Aff Wlock
+        { specID =  263, gain = 4.68, heroes = { { name = "Totemic", id = 54, gain = 4.70, dps = 10312 }, { name = "Stormbringer", id = 55, gain = 4.68, dps = 10677 } } },  -- Enh Shaman
+        { specID =   63, gain = 4.65, heroes = { { name = "Sunfury", id = 39, gain = 4.87, dps = 10523 }, { name = "Frostfire", id = 41, gain = 4.65, dps = 9687 } } },  -- Fire Mage
+        { specID =  259, gain = 4.51, heroes = { { name = "Fatebound", id = 52, gain = 4.52, dps = 10702 }, { name = "Deathstalker", id = 53, gain = 4.51, dps = 10925 } } },  -- Assa Rogue
+        { specID =  254, gain = 4.50, heroes = { { name = "Sentinel", id = 42, gain = 4.63, dps = 10959 }, { name = "Dark Ranger", id = 44, gain = 4.50, dps = 9547 } } },  -- MM Hunter
+        { specID =  266, gain = 4.38, heroes = { { name = "Diabolist", id = 59, gain = 5.13, dps = 10984 }, { name = "Soul Harvester", id = 57, gain = 4.38, dps = 9593 } } },  -- Demo Wlock
+        { specID =  269, gain = 4.15, heroes = { { name = "Shado-Pan", id = 65, gain = 4.65, dps = 10925 }, { name = "Conduit", id = 64, gain = 4.15, dps = 9668 } } },  -- WW Monk
+        { specID =  262, gain = 3.73, heroes = { { name = "Farseer", id = 56, gain = 3.95, dps = 9640 }, { name = "Stormbringer", id = 55, gain = 3.73, dps = 8582 } } },  -- Ele Shaman
+        { specID =  103, gain = 3.72, heroes = { { name = "Wildstalker", id = 22, gain = 4.74, dps = 11093 }, { name = "Claw", id = 21, gain = 3.72, dps = 8822 } } },  -- Feral Druid
+        { specID =  252, gain = 3.72, heroes = { { name = "Sanlayn", id = 31, gain = 3.83, dps = 9075 }, { name = "Rider", id = 32, gain = 3.72, dps = 8940 } } },  -- UH DK
+        { specID =  253, gain = 3.60, heroes = { { name = "Dark Ranger", id = 44, gain = 3.61, dps = 7291 }, { name = "Pack Leader", id = 43, gain = 3.60, dps = 8443 } } },  -- BM Hunter
+        { specID =  255, gain = 3.45, heroes = { { name = "Pack Leader", id = 43, gain = 3.58, dps = 8197 }, { name = "Sentinel", id = 42, gain = 3.45, dps = 8008 } } },  -- Survival Hunter
+        { specID = 1467, gain = 3.32, heroes = { { name = "Flameshaper", id = 37, gain = 4.82, dps = 11139 }, { name = "SC", id = 36, gain = 3.32, dps = 7569 } } },  -- Deva Evoker
+        { specID =  251, gain = 3.29, heroes = { { name = "Rider", id = 32, gain = 4.14, dps = 10076 }, { name = "Deathbringer", id = 33, gain = 3.29, dps = 7803 } } },  -- Frost DK
+        { specID =   70, gain = 3.24, heroes = { { name = "Herald", id = 50, gain = 4.84, dps = 11194 }, { name = "Templar", id = 48, gain = 3.24, dps = 7480 } } },  -- Ret Paladin
+        { specID =   71, gain = 3.05, heroes = { { name = "Colossus", id = 62, gain = 3.16, dps = 6487 }, { name = "Slayer", id = 60, gain = 3.05, dps = 7340 } } },  -- Arms Warrior
+        { specID =   62, gain = 2.83, heroes = { { name = "Spellslinger", id = 40, gain = 3.33, dps = 6650 }, { name = "Sunfury", id = 39, gain = 2.83, dps = 6130 } } },  -- Arcane Mage
+        { specID =  258, gain = 2.76, heroes = { { name = "Archon", id = 19, gain = 2.88, dps = 6271 }, { name = "Voidweaver", id = 18, gain = 2.76, dps = 5795 } } },  -- Shadow Priest
+        { specID =   64, gain = 2.76, heroes = { { name = "Spellslinger", id = 40, gain = 2.76, dps = 5722 }, { name = "Frostfire", id = 41, gain = 2.76, dps = 5487 } } },  -- Frost Mage
+        { specID =  577, gain = 2.76, heroes = { { name = "Aldrachi Reaver", id = 35, gain = 2.93, dps = 7068 }, { name = "Fel Scarred", id = 34, gain = 2.76, dps = 6557 } } },  -- Havoc DH
+        { specID = 1480, gain = 2.59, heroes = { { name = "Void-Scarred", id = 126, gain = 2.66, dps = 6968 }, { name = "Annihilator", id = 124, gain = 2.59, dps = 6062 } } },  -- Devourer DH
+        { specID =  267, gain = 2.41, heroes = { { name = "Hellcaller", id = 58, gain = 2.60, dps = 5840 }, { name = "Diabolist", id = 59, gain = 2.41, dps = 5235 } } },  -- Destro Wlock
+        { specID =  102, gain = 2.23, heroes = { { name = "Elune", id = 24, gain = 4.15, dps = 9360 }, { name = "Keeper", id = 23, gain = 2.23, dps = 4941 } } },  -- Balance Druid
+        { specID =  260, gain = 2.09, heroes = { { name = "Trickster", id = 51, gain = 2.99, dps = 7666 }, { name = "Fatebound", id = 52, gain = 2.09, dps = 4972 } } },  -- Outlaw Rogue
+        { specID =   72, gain = 2.05, heroes = { { name = "Thane", id = 61, gain = 2.93, dps = 6897 }, { name = "Slayer", id = 60, gain = 2.05, dps = 5247 } } },  -- Fury Warrior
+        { specID =  261, gain = 1.34, heroes = { { name = "Trickster", id = 51, gain = 1.56, dps = 3767 }, { name = "Deathstalker", id = 53, gain = 1.34, dps = 3616 } } },  -- Sub Rogue
     },
     shadow = {
-        { specID =  259, gain = 5.59, heroes = { { name = "Fatebound", id = 52, gain = 5.75, dps = 13738 }, { name = "Deathstalker", id = 53, gain = 5.59, dps = 13674 } } },  -- Assa Rogue
-        { specID =  265, gain = 4.61, heroes = { { name = "Hellcaller", id = 58, gain = 5.44, dps = 10770 }, { name = "Soul Harvester", id = 57, gain = 4.61, dps = 9535 } } },  -- Aff Wlock
-        { specID =  263, gain = 4.47, heroes = { { name = "Totemic", id = 54, gain = 4.73, dps = 10622 }, { name = "Stormbringer", id = 55, gain = 4.47, dps = 10507 } } },  -- Enh Shaman
-        { specID =  266, gain = 4.14, heroes = { { name = "Diabolist", id = 59, gain = 4.42, dps = 9012 }, { name = "Soul Harvester", id = 57, gain = 4.14, dps = 8699 } } },  -- Demo Wlock
-        { specID =  255, gain = 3.93, heroes = { { name = "Pack Leader", id = 43, gain = 4.03, dps = 8854 }, { name = "Sentinel", id = 42, gain = 3.93, dps = 8909 } } },  -- Survival Hunter
-        { specID =  262, gain = 3.71, heroes = { { name = "Farseer", id = 56, gain = 4.01, dps = 9388 }, { name = "Stormbringer", id = 55, gain = 3.71, dps = 8197 } } },  -- Ele Shaman
-        { specID =  103, gain = 3.54, heroes = { { name = "Wildstalker", id = 22, gain = 4.19, dps = 10124 }, { name = "Claw", id = 21, gain = 3.54, dps = 8559 } } },  -- Feral Druid
-        { specID =  269, gain = 3.47, heroes = { { name = "Shado-Pan", id = 65, gain = 3.76, dps = 9063 }, { name = "Conduit", id = 64, gain = 3.47, dps = 8187 } } },  -- WW Monk
-        { specID =  254, gain = 3.44, heroes = { { name = "Sentinel", id = 42, gain = 3.76, dps = 8869 }, { name = "Dark Ranger", id = 44, gain = 3.44, dps = 7354 } } },  -- MM Hunter
-        { specID =  253, gain = 3.31, heroes = { { name = "Pack Leader", id = 43, gain = 3.46, dps = 7955 }, { name = "Dark Ranger", id = 44, gain = 3.31, dps = 6556 } } },  -- BM Hunter
-        { specID =   70, gain = 3.13, heroes = { { name = "Herald", id = 50, gain = 4.65, dps = 9846 }, { name = "Templar", id = 48, gain = 3.13, dps = 6866 } } },  -- Ret Paladin
-        { specID =   71, gain = 3.13, heroes = { { name = "Slayer", id = 60, gain = 3.36, dps = 8266 }, { name = "Colossus", id = 62, gain = 3.13, dps = 6598 } } },  -- Arms Warrior
-        { specID = 1467, gain = 3.10, heroes = { { name = "Flameshaper", id = 37, gain = 4.82, dps = 11112 }, { name = "SC", id = 36, gain = 3.10, dps = 7062 } } },  -- Deva Evoker
-        { specID =  251, gain = 2.83, heroes = { { name = "Rider", id = 32, gain = 3.34, dps = 7724 }, { name = "Deathbringer", id = 33, gain = 2.83, dps = 6321 } } },  -- Frost DK
-        { specID =  577, gain = 2.82, heroes = { { name = "Fel Scarred", id = 34, gain = 2.85, dps = 6718 }, { name = "Aldrachi Reaver", id = 35, gain = 2.82, dps = 6813 } } },  -- Havoc DH
-        { specID =   63, gain = 2.71, heroes = { { name = "Frostfire", id = 41, gain = 3.26, dps = 6785 }, { name = "Sunfury", id = 39, gain = 2.71, dps = 5853 } } },  -- Fire Mage
-        { specID =   62, gain = 2.71, heroes = { { name = "Spellslinger", id = 40, gain = 3.11, dps = 6233 }, { name = "Sunfury", id = 39, gain = 2.71, dps = 5845 } } },  -- Arcane Mage
-        { specID =   64, gain = 2.63, heroes = { { name = "Frostfire", id = 41, gain = 2.84, dps = 5714 }, { name = "Spellslinger", id = 40, gain = 2.63, dps = 5530 } } },  -- Frost Mage
-        { specID =  260, gain = 2.58, heroes = { { name = "Trickster", id = 51, gain = 3.11, dps = 8059 }, { name = "Fatebound", id = 52, gain = 2.58, dps = 6383 } } },  -- Outlaw Rogue
-        { specID =  252, gain = 2.36, heroes = { { name = "Rider", id = 32, gain = 2.40, dps = 5653 }, { name = "Sanlayn", id = 31, gain = 2.36, dps = 5344 } } },  -- UH DK
-        { specID =  102, gain = 2.25, heroes = { { name = "Elune", id = 24, gain = 3.12, dps = 7075 }, { name = "Keeper", id = 23, gain = 2.25, dps = 4981 } } },  -- Balance Druid
-        { specID =  267, gain = 2.24, heroes = { { name = "Hellcaller", id = 58, gain = 2.36, dps = 5342 }, { name = "Diabolist", id = 59, gain = 2.24, dps = 4890 } } },  -- Destro Wlock
-        { specID = 1480, gain = 2.11, heroes = { { name = "Void-Scarred", id = 126, gain = 2.73, dps = 7288 }, { name = "Annihilator", id = 124, gain = 2.11, dps = 4982 } } },  -- Devourer DH
-        { specID =   72, gain = 1.93, heroes = { { name = "Thane", id = 61, gain = 3.06, dps = 7333 }, { name = "Slayer", id = 60, gain = 1.93, dps = 4998 } } },  -- Fury Warrior
-        { specID =  261, gain = 1.13, heroes = { { name = "Deathstalker", id = 53, gain = 1.48, dps = 3983 }, { name = "Trickster", id = 51, gain = 1.13, dps = 2720 } } },  -- Sub Rogue
+        { specID =  259, gain = 5.60, heroes = { { name = "Fatebound", id = 52, gain = 5.76, dps = 13635 }, { name = "Deathstalker", id = 53, gain = 5.60, dps = 13569 } } },  -- Assa Rogue
+        { specID =  265, gain = 4.50, heroes = { { name = "Hellcaller", id = 58, gain = 5.31, dps = 11710 }, { name = "Soul Harvester", id = 57, gain = 4.50, dps = 10036 } } },  -- Aff Wlock
+        { specID =  263, gain = 4.36, heroes = { { name = "Totemic", id = 54, gain = 4.70, dps = 10311 }, { name = "Stormbringer", id = 55, gain = 4.36, dps = 9954 } } },  -- Enh Shaman
+        { specID =  266, gain = 4.15, heroes = { { name = "Diabolist", id = 59, gain = 4.33, dps = 9271 }, { name = "Soul Harvester", id = 57, gain = 4.15, dps = 9090 } } },  -- Demo Wlock
+        { specID =  269, gain = 3.67, heroes = { { name = "Shado-Pan", id = 65, gain = 3.93, dps = 9239 }, { name = "Conduit", id = 64, gain = 3.67, dps = 8549 } } },  -- WW Monk
+        { specID =  103, gain = 3.58, heroes = { { name = "Wildstalker", id = 22, gain = 4.22, dps = 9884 }, { name = "Claw", id = 21, gain = 3.58, dps = 8491 } } },  -- Feral Druid
+        { specID =  255, gain = 3.52, heroes = { { name = "Sentinel", id = 42, gain = 3.67, dps = 8522 }, { name = "Pack Leader", id = 43, gain = 3.52, dps = 8053 } } },  -- Survival Hunter
+        { specID =  254, gain = 3.50, heroes = { { name = "Sentinel", id = 42, gain = 3.60, dps = 8524 }, { name = "Dark Ranger", id = 44, gain = 3.50, dps = 7426 } } },  -- MM Hunter
+        { specID =  262, gain = 3.38, heroes = { { name = "Farseer", id = 56, gain = 3.94, dps = 9609 }, { name = "Stormbringer", id = 55, gain = 3.38, dps = 7777 } } },  -- Ele Shaman
+        { specID =  253, gain = 3.35, heroes = { { name = "Dark Ranger", id = 44, gain = 3.36, dps = 6787 }, { name = "Pack Leader", id = 43, gain = 3.35, dps = 7860 } } },  -- BM Hunter
+        { specID = 1467, gain = 3.07, heroes = { { name = "Flameshaper", id = 37, gain = 4.87, dps = 11252 }, { name = "SC", id = 36, gain = 3.07, dps = 7000 } } },  -- Deva Evoker
+        { specID =   71, gain = 2.92, heroes = { { name = "Slayer", id = 60, gain = 3.09, dps = 7434 }, { name = "Colossus", id = 62, gain = 2.92, dps = 5998 } } },  -- Arms Warrior
+        { specID =   70, gain = 2.83, heroes = { { name = "Herald", id = 50, gain = 4.63, dps = 10707 }, { name = "Templar", id = 48, gain = 2.83, dps = 6536 } } },  -- Ret Paladin
+        { specID =  251, gain = 2.79, heroes = { { name = "Rider", id = 32, gain = 3.43, dps = 8348 }, { name = "Deathbringer", id = 33, gain = 2.79, dps = 6617 } } },  -- Frost DK
+        { specID =  252, gain = 2.74, heroes = { { name = "Sanlayn", id = 31, gain = 2.79, dps = 6611 }, { name = "Rider", id = 32, gain = 2.74, dps = 6587 } } },  -- UH DK
+        { specID =  577, gain = 2.71, heroes = { { name = "Fel Scarred", id = 34, gain = 3.09, dps = 7335 }, { name = "Aldrachi Reaver", id = 35, gain = 2.71, dps = 6537 } } },  -- Havoc DH
+        { specID =   63, gain = 2.68, heroes = { { name = "Frostfire", id = 41, gain = 3.22, dps = 6709 }, { name = "Sunfury", id = 39, gain = 2.68, dps = 5788 } } },  -- Fire Mage
+        { specID =   64, gain = 2.61, heroes = { { name = "Frostfire", id = 41, gain = 2.70, dps = 5367 }, { name = "Spellslinger", id = 40, gain = 2.61, dps = 5409 } } },  -- Frost Mage
+        { specID =   62, gain = 2.28, heroes = { { name = "Spellslinger", id = 40, gain = 3.01, dps = 6012 }, { name = "Sunfury", id = 39, gain = 2.28, dps = 4941 } } },  -- Arcane Mage
+        { specID = 1480, gain = 2.28, heroes = { { name = "Void-Scarred", id = 126, gain = 2.55, dps = 6680 }, { name = "Annihilator", id = 124, gain = 2.28, dps = 5342 } } },  -- Devourer DH
+        { specID =  267, gain = 2.25, heroes = { { name = "Hellcaller", id = 58, gain = 2.31, dps = 5189 }, { name = "Diabolist", id = 59, gain = 2.25, dps = 4887 } } },  -- Destro Wlock
+        { specID =  260, gain = 2.17, heroes = { { name = "Trickster", id = 51, gain = 2.89, dps = 7404 }, { name = "Fatebound", id = 52, gain = 2.17, dps = 5158 } } },  -- Outlaw Rogue
+        { specID =  102, gain = 2.12, heroes = { { name = "Elune", id = 24, gain = 3.12, dps = 7039 }, { name = "Keeper", id = 23, gain = 2.12, dps = 4697 } } },  -- Balance Druid
+        { specID =   72, gain = 1.83, heroes = { { name = "Thane", id = 61, gain = 2.63, dps = 6194 }, { name = "Slayer", id = 60, gain = 1.83, dps = 4686 } } },  -- Fury Warrior
+        { specID =  261, gain = 1.40, heroes = { { name = "Trickster", id = 51, gain = 1.53, dps = 3697 }, { name = "Deathstalker", id = 53, gain = 1.40, dps = 3778 } } },  -- Sub Rogue
     },
 }
 
