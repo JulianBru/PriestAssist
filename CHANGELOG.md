@@ -1,5 +1,9 @@
 # Priest Assist
 
+## [1.8.2](https://github.com/JulianBru/PriestAssist/tree/v1.8.2) (2026-08-26)
+
+- Update PI Data post tuning
+
 ## [1.8](https://github.com/JulianBru/PriestAssist/tree/v1.8) (2026-08-25)
 
 ### Added
