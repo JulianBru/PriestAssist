@@ -155,7 +155,11 @@ function ns.RefreshConfigPanel()
     if not frames.configPanel or not frames.configPanel:IsShown() then return end
     local db = ns.GetDB()
     local cc = configControls
-    local profile = ns.GetActiveProfile()
+    -- What the panel shows is what the panel edits: the specialisation the
+    -- segments point at, which is your own unless you moved them. Reading the
+    -- active profile here instead would display Shadow's settings while the
+    -- controls below write Holy's.
+    local profile = ns.GetEditedProfile()
     local profileKey = ns.GetActiveProfileKey()
 
     if cc.reminderEnabled     then cc.reminderEnabled:SetChecked(db.reminderEnabled and true or false) end
@@ -278,6 +282,21 @@ function ns.RefreshConfigPanel()
 
     -- Profile-bound controls
     if cc.profileSelect       then cc.profileSelect:SetSelectedValue(profileKey) end
+
+    -- Both segment rows read one value, so they cannot drift apart. Hidden on
+    -- anything that is not a priest: those have a single fallback set and
+    -- nothing to choose between.
+    do
+        local editedSpec = ns.GetEditedSpecKey()
+        local shown = ns.SPEC_PROFILE_NAMES[editedSpec] ~= nil
+
+        for _, segments in ipairs({ cc.macroSpecSegments, cc.profileSpecSegments }) do
+            if segments then
+                segments:SetShown(shown)
+                segments:SetActive(editedSpec)
+            end
+        end
+    end
     if cc.announceTarget      then cc.announceTarget:SetChecked(profile.announceTarget and true or false) end
     if cc.macroVariant        then cc.macroVariant:SetSelectedValue(profile.macroVariant or ns.PROFILE_DEFAULTS.macroVariant) end
     if cc.combatPotion        then cc.combatPotion:SetSelectedValue(profile.combatPotion or ns.PROFILE_DEFAULTS.combatPotion) end
@@ -750,6 +769,123 @@ function ns.ShowDamageGainHelp()
 
     frame:Show()
     frame:Raise()
+end
+
+-- ─── Specialisation segments ──────────────────────────────────────────────────
+-- A row of segments, each holding one or more specialisation icons, of which
+-- exactly one is lit. Used for "whose profiles am I editing"; the Damage Gain
+-- tab still carries its own older copy of the same idea.
+--
+-- @param groups a list of { value = any, specs = { specID, … } }
+-- @param onSelect called with the chosen value
+-- @return the frame, with :SetActive(value) and a `width` field
+local function MakeSpecSegments(parent, groups, onSelect, height)
+    local SEG_H, ICON, SEG_PAD, ICON_GAP, GROUP_GAP = height or 26, 18, 7, 3, 6
+
+    local ar, ag, ab = UI.GetColorRGB(ns.GetThemeAccentName())
+    local sr, sg, sb = UI.GetColorRGB("separator")
+
+    local function GroupWidth(specs)
+        return #specs * ICON + (#specs - 1) * ICON_GAP + SEG_PAD * 2
+    end
+
+    local total = 0
+
+    for index, group in ipairs(groups) do
+        total = total + GroupWidth(group.specs) + (index > 1 and GROUP_GAP or 0)
+    end
+
+    local segments = CreateFrame("Frame", nil, parent)
+    segments:SetSize(total, SEG_H)
+    segments.width = total
+
+    local buttons = {}
+    local previous
+
+    for _, group in ipairs(groups) do
+        local btn = CreateFrame("Button", nil, segments,
+            BackdropTemplateMixin and "BackdropTemplate" or nil)
+        btn:SetSize(GroupWidth(group.specs), SEG_H)
+
+        if previous then
+            btn:SetPoint("LEFT", previous, "RIGHT", GROUP_GAP, 0)
+        else
+            btn:SetPoint("LEFT", segments, "LEFT", 0, 0)
+        end
+
+        if btn.SetBackdrop then
+            btn:SetBackdrop({
+                bgFile   = "Interface\\Buttons\\WHITE8x8",
+                edgeFile = "Interface\\Buttons\\WHITE8x8",
+                edgeSize = 1,
+            })
+        end
+
+        btn.icons, btn.specs, btn.value = {}, group.specs, group.value
+
+        local previousIcon
+
+        for index = 1, #group.specs do
+            local tex = btn:CreateTexture(nil, "ARTWORK")
+            tex:SetSize(ICON, ICON)
+            tex:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+
+            if previousIcon then
+                tex:SetPoint("LEFT", previousIcon, "RIGHT", ICON_GAP, 0)
+            else
+                tex:SetPoint("LEFT", btn, "LEFT", SEG_PAD, 0)
+            end
+
+            previousIcon = tex
+            btn.icons[index] = tex
+        end
+
+        btn:SetScript("OnClick", function()
+            onSelect(btn.value)
+        end)
+
+        previous = btn
+        buttons[#buttons + 1] = btn
+    end
+
+    function segments:SetActive(value)
+        for _, btn in ipairs(buttons) do
+            local on = btn.value == value
+
+            -- Resolved on every refresh, not once at creation. The panel is
+            -- built at login, and GetSpecDisplay hands back a placeholder while
+            -- the client has no specialisation data yet -- set once, that
+            -- placeholder would stay for the rest of the session.
+            for index, specID in ipairs(btn.specs) do
+                local _, icon = ns.GetSpecDisplay(specID)
+                btn.icons[index]:SetTexture(icon)
+            end
+
+            if btn.SetBackdropColor then
+                if on then
+                    btn:SetBackdropColor(ar, ag, ab, 0.25)
+                    btn:SetBackdropBorderColor(ar, ag, ab, 1)
+                else
+                    local wr, wg, wb = UI.GetColorRGB("bgWidget")
+                    btn:SetBackdropColor(wr, wg, wb, 1)
+                    btn:SetBackdropBorderColor(sr, sg, sb, 1)
+                end
+            end
+        end
+    end
+
+    return segments
+end
+
+-- One segment per priest specialisation, in the client's own order.
+local function EditedSpecGroups()
+    local groups = {}
+
+    for _, specID in ipairs(ns.SPEC_PROFILE_ORDER) do
+        groups[#groups + 1] = { value = specID, specs = { specID } }
+    end
+
+    return groups
 end
 
 -- ─── CreateConfigPanel ────────────────────────────────────────────────────────
@@ -1239,9 +1375,19 @@ function ns.CreateConfigPanel()
         local p       = tabMacro
         local secProf = SectionHeader(p, "Profile")
 
-        configControls.profileSelect = UI.CreateDropdown(p, CONTENT_W, 4)
+        -- The segments share the profile selector's row rather than taking one
+        -- of their own: this tab sits within a few pixels of the footer, and a
+        -- row costs 36. Same arrangement the potion and its priority use below.
+        configControls.macroSpecSegments = MakeSpecSegments(p, EditedSpecGroups(),
+            function(specID) ns.SetEditedSpecKey(specID) end, 22)
+
+        local SPEC_SEG_W = configControls.macroSpecSegments.width
+
+        configControls.profileSelect = UI.CreateDropdown(p, CONTENT_W - SPEC_SEG_W - 8, 4)
         ns.ApplyVoidAccentToDropdown(configControls.profileSelect)
         configControls.profileSelect:SetPoint("TOPLEFT", secProf, "BOTTOMLEFT", 0, -32)
+
+        configControls.macroSpecSegments:SetPoint("TOPRIGHT", secProf, "BOTTOMRIGHT", 0, -32)
         configControls.profileSelect:SetLabel("Editing", accent)
         configControls.profileSelect:SetItems(ns.PROFILE_OPTIONS)
         configControls.profileSelect:SetOnSelect(function(value)
@@ -1276,7 +1422,7 @@ function ns.CreateConfigPanel()
         configControls.trinketSlot:SetLabel("Trinket", accent)
         configControls.trinketSlot:SetItems(ns.TRINKET_OPTIONS)
         configControls.trinketSlot:SetOnSelect(function(value)
-            ns.GetActiveProfile().trinketSlot = value
+            ns.GetEditedProfile().trinketSlot = value
             ns.RequestMacroUpdate()
             ns.RefreshConfigPanel()
         end)
@@ -1291,7 +1437,7 @@ function ns.CreateConfigPanel()
         configControls.combatPotion:SetLabel("Combat Potion", accent)
         configControls.combatPotion:SetItems(ns.COMBAT_POTION_OPTIONS)
         configControls.combatPotion:SetOnSelect(function(value)
-            ns.GetActiveProfile().combatPotion = value
+            ns.GetEditedProfile().combatPotion = value
             ns.RequestMacroUpdate()
             ns.RefreshConfigPanel()
         end)
@@ -1302,7 +1448,7 @@ function ns.CreateConfigPanel()
         configControls.combatPotionQuality:SetLabel("Potion Priority", accent)
         configControls.combatPotionQuality:SetItems(ns.COMBAT_POTION_QUALITY_OPTIONS)
         configControls.combatPotionQuality:SetOnSelect(function(value)
-            ns.GetActiveProfile().combatPotionQuality = tonumber(value) or ns.PROFILE_DEFAULTS.combatPotionQuality
+            ns.GetEditedProfile().combatPotionQuality = tonumber(value) or ns.PROFILE_DEFAULTS.combatPotionQuality
             ns.RequestMacroUpdate()
             ns.RefreshConfigPanel()
         end)
@@ -1314,7 +1460,7 @@ function ns.CreateConfigPanel()
         configControls.potionBeforeTrinket = UI.CreateCheckButton(p,
             "Use the potion before the trinket",
             function(checked)
-                ns.GetActiveProfile().potionBeforeTrinket = checked and true or false
+                ns.GetEditedProfile().potionBeforeTrinket = checked and true or false
                 ns.RequestMacroUpdate()
                 ns.RefreshConfigPanel()
             end)
@@ -1327,7 +1473,7 @@ function ns.CreateConfigPanel()
         -- on being ready; the anchoring below decides what is actually visible.
         configControls.includeRacial = UI.CreateCheckButton(p, "Include racial",
             function(checked)
-                ns.GetActiveProfile().includeRacial = checked and true or false
+                ns.GetEditedProfile().includeRacial = checked and true or false
                 ns.RequestMacroUpdate()
                 ns.RefreshConfigPanel()
             end)
@@ -1337,7 +1483,7 @@ function ns.CreateConfigPanel()
         configControls.announceTarget = UI.CreateCheckButton(p,
             "Announce target in party or raid chat",
             function(checked)
-                ns.GetActiveProfile().announceTarget = checked and true or false
+                ns.GetEditedProfile().announceTarget = checked and true or false
             end)
         ns.ApplyVoidAccentToCheckButton(configControls.announceTarget)
 
@@ -1401,9 +1547,16 @@ function ns.CreateConfigPanel()
         local p   = tabProfiles
         local sec = SectionHeader(p, "Profiles")
 
+        -- Same value as the one on the Macro tab, not a second opinion. Two
+        -- independent controls could disagree, and the first sign of it would
+        -- be a macro built from the wrong profile.
+        configControls.profileSpecSegments = MakeSpecSegments(p, EditedSpecGroups(),
+            function(specID) ns.SetEditedSpecKey(specID) end)
+        configControls.profileSpecSegments:SetPoint("TOPRIGHT", sec, "BOTTOMRIGHT", 0, -4)
+
         -- Read-only list for now; free naming and management can follow later.
         local listFrame = CreateFrame("Frame", nil, p, BackdropTemplateMixin and "BackdropTemplate" or nil)
-        listFrame:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -14)
+        listFrame:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -34)
         listFrame:SetSize(CONTENT_W, #ns.PROFILE_ORDER * 22 + 12)
         if listFrame.SetBackdrop then
             listFrame:SetBackdrop({

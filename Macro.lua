@@ -94,19 +94,106 @@ end
 -- There is exactly one selected profile. It is what the config panel edits and
 -- what the macros are built from; auto-switching just changes which one it is.
 
-function ns.GetProfile(key)
-    local db = ns.GetDB()
-    local profiles = db.profiles or {}
+-- Which set of profiles this character uses. A priest specialisation, or the
+-- shared fallback for everything else -- including the moment before the spec
+-- can be read at all, which is on the macro build path and must never be nil.
+function ns.GetProfileSpecKey()
+    local spec = ns.GetOwnPriestSpec and ns.GetOwnPriestSpec()
 
-    return profiles[key] or profiles[db.activeProfile] or profiles[ns.DEFAULTS.activeProfile]
+    if spec and ns.SPEC_PROFILE_NAMES[spec] then
+        return spec
+    end
+
+    return ns.SPEC_PROFILE_FALLBACK
+end
+
+-- Which set the config panel is editing. Follows the character unless the
+-- segmented control was moved, and that override lasts for the session only --
+-- a control that remembers where you left it three days ago eventually edits
+-- the wrong profile without saying so.
+function ns.GetEditedSpecKey()
+    local override = ns.state.editSpec
+
+    if override and (ns.SPEC_PROFILE_NAMES[override] or override == ns.SPEC_PROFILE_FALLBACK) then
+        return override
+    end
+
+    return ns.GetProfileSpecKey()
+end
+
+function ns.SetEditedSpecKey(specKey)
+    if not (ns.SPEC_PROFILE_NAMES[specKey] or specKey == ns.SPEC_PROFILE_FALLBACK) then
+        return false
+    end
+
+    ns.EnsureSpecProfiles(specKey)
+    ns.state.editSpec = specKey
+    ns.RefreshConfigPanel()
+    return true
+end
+
+--- Create a specialisation's profiles if it has none yet.
+---
+--- Called when a specialisation becomes known, not at login: writing defaults
+--- for a spec that cannot be read yet would bake in the wrong ones permanently.
+--- Healer sets start without potion, trinket or racial -- a healer takes Power
+--- Infusion for the raid's damage, and those three lines are about their own.
+function ns.EnsureSpecProfiles(specKey)
+    local db = ns.GetDB()
+
+    db.profiles = db.profiles or {}
+
+    if db.profiles[specKey] then
+        return false
+    end
+
+    local set = {}
+    local isHealer = (specKey == 256 or specKey == 257)
+
+    for _, key in ipairs(ns.PROFILE_ORDER) do
+        set[key] = ns.CopyDefaults(ns.PROFILE_DEFAULTS, {})
+
+        if isHealer then
+            set[key].combatPotion = "none"
+            set[key].trinketSlot = "none"
+            set[key].includeRacial = false
+        end
+    end
+
+    db.profiles[specKey] = set
+    return true
+end
+
+-- The set for a specialisation, creating it if this is the first time we have
+-- seen that spec.
+local function ProfileSet(specKey)
+    local db = ns.GetDB()
+
+    ns.EnsureSpecProfiles(specKey)
+    return db.profiles[specKey]
+end
+
+function ns.GetProfile(key, specKey)
+    local db = ns.GetDB()
+    local set = ProfileSet(specKey or ns.GetProfileSpecKey())
+
+    return set[key] or set[db.activeProfile] or set[ns.DEFAULTS.activeProfile]
 end
 
 function ns.GetActiveProfile()
     return ns.GetProfile(ns.GetDB().activeProfile)
 end
 
+-- Still the content key, unchanged in meaning. The specialisation is applied
+-- when looking up, never stored in the selection.
 function ns.GetActiveProfileKey()
     return ns.GetDB().activeProfile
+end
+
+--- The profile the config panel edits, which is not necessarily the one the
+--- macros are built from -- the segmented control can point at another spec.
+function ns.GetEditedProfile()
+    return ns.GetProfile(ns.GetDB().activeProfile, ns.GetEditedSpecKey())
 end
 
 function ns.GetProfileDisplayName(key)
@@ -190,7 +277,10 @@ end
 
 function ns.GetProfileForContent(contentType)
     local mapped = ns.GetDB().contentProfiles[contentType]
-    return ns.GetDB().profiles[mapped] and mapped or ns.DEFAULTS.activeProfile
+
+    -- Checked against the known content keys rather than against a set: the
+    -- mapping is spec independent, and the set for this spec may not exist yet.
+    return ns.PROFILE_NAMES[mapped] and mapped or ns.DEFAULTS.activeProfile
 end
 
 -- Switches the selected profile and rebuilds. Uses the silent update path, so
@@ -198,7 +288,7 @@ end
 function ns.SetActiveProfile(key, reason)
     local db = ns.GetDB()
 
-    if not db.profiles[key] or db.activeProfile == key then
+    if not ns.PROFILE_NAMES[key] or db.activeProfile == key then
         return false
     end
 
@@ -734,7 +824,31 @@ function ns.InitializeSpecTracking()
     -- Dot, not colon: RegisterGroup takes the addon table as its first
     -- argument, so a method call would hand it the library itself.
     lib.RegisterGroup(ns, ns.OnSpecializationUpdate)
+
+    -- Changing specialisation changes the whole profile set, so the macros are
+    -- rebuilt from different settings without anybody having edited anything.
+    -- The library calls this with no arguments; the new spec is read from the
+    -- client, which is the only place it is authoritative anyway.
+    if lib.RegisterPlayerSpecChange then
+        lib.RegisterPlayerSpecChange(ns, ns.OnOwnSpecializationChanged)
+    end
+
     return true
+end
+
+-- Also called once at login, where "changed" means "is now known".
+function ns.OnOwnSpecializationChanged()
+    local specKey = ns.GetProfileSpecKey()
+
+    ns.EnsureSpecProfiles(specKey)
+
+    -- The panel follows the character again. Somebody who was looking at Holy's
+    -- profiles and then respecs to Holy should not stay pointed at Shadow's.
+    ns.state.editSpec = nil
+
+    ns.RequestMacroUpdate()
+    ns.RefreshConfigPanel()
+    return specKey
 end
 
 function ns.GetKnownSpec(playerName)
@@ -2286,7 +2400,12 @@ end
 
 -- Applies text edited in the config panel. Returns true when the macro changed.
 function ns.ApplyMacroTextFromPanel(fullText, variant, shownGeneratedBody, profileKey)
-    local profile = profileKey and ns.GetProfile(profileKey) or ns.GetActiveProfile()
+    -- Through the edited specialisation, matching what the field was filled
+    -- from. Without it, editing Holy's macro text would write into whichever
+    -- spec is logged in.
+    local profile = profileKey
+        and ns.GetProfile(profileKey, ns.GetEditedSpecKey())
+        or ns.GetEditedProfile()
     variant = ns.ResolveMacroVariant(variant, profile)
 
     local userAdded, generatedIntact =

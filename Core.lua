@@ -40,11 +40,16 @@ function ns.HandleSlashCommand(msg)
         if what == "macro" or what == "macros" then
             ns.SetAdditionalMacroText("")
             ns.RequestMacroUpdate()
+        elseif what == "profiles cancel" then
+            ns.CancelMigrationHold()
+        elseif what == "profiles" then
+            ns.RestoreLegacyProfiles()
         elseif what == "" or what == "target" then
             ns.ClearAssignedTarget()
         else
-            ns.Print("Usage: /pa reset (clears the target) or /pa reset macro " ..
-                "(drops your own macro lines)", "F82C00")
+            ns.Print("Usage: /pa reset (clears the target), /pa reset macro " ..
+                "(drops your own macro lines) or /pa reset profiles " ..
+                "(puts the profiles back on the older layout)", "F82C00")
         end
 
         return
@@ -59,6 +64,13 @@ function ns.HandleSlashCommand(msg)
 
     if command == "show" then
         ns.ShowReminder(true)
+        return
+    end
+
+    -- Not gated on being a priest: reading the panel is what a non-priest is
+    -- explicitly allowed to do.
+    if command == "open" or command == "config" or command == "options" then
+        ns.OpenConfigPanel()
         return
     end
 
@@ -102,7 +114,7 @@ function ns.HandleSlashCommand(msg)
     end
 
     if command == "help" then
-        ns.Print("Commands: /pa, /pa auto (pick by specialisation), /pa reset (clear the target), /pa add ..., /pa reset macro (drop your own macro lines), /pa mode powerinfusion|voidform (picks the primary macro), /pa show, /pa note (check the raid note), /pa comm (who else has a Power Infusion target), /pa top X (best targets and who should take whom), /pa note top (the same as raid note lines), /pa version (what everyone is running). Others can ask with !pa top in chat.", "A5AAD9")
+        ns.Print("Commands: /pa, /pa open (settings), /pa auto (pick by specialisation), /pa reset (clear the target), /pa add ..., /pa reset macro (drop your own macro lines), /pa mode powerinfusion|voidform (picks the primary macro), /pa show, /pa note (check the raid note), /pa comm (who else has a Power Infusion target), /pa top X (best targets and who should take whom), /pa note top (the same as raid note lines), /pa version (what everyone is running). Others can ask with !pa top in chat.", "A5AAD9")
         return
     end
 
@@ -210,7 +222,29 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
                 "previous configuration, so nothing has changed until you edit one.", "A5AAD9")
         end
 
+        -- Tied to the snapshot having been written, not to the version number:
+        -- stamping an existing install from nil to 1 changes a version without
+        -- keeping anything, and announcing a backup that is not there is worse
+        -- than saying nothing.
+        if ns.pendingSpecProfileNotice then
+            ns.pendingSpecProfileNotice = nil
+            ns.Print("Profiles are now kept per specialisation, and each one starts from " ..
+                "your previous settings. The old layout was saved — /pa reset profiles " ..
+                "puts it back.", "A5AAD9")
+        end
+
+        if ns.GetDB().migrationHold then
+            ns.Print("Your profiles are held on the older layout and will not migrate. " ..
+                "/pa reset profiles cancel lifts that.", "F8C300")
+        end
+
         ns.InitializeSpecTracking()
+
+        -- The set for this specialisation is created here rather than in
+        -- InitializeDatabase, which runs before the spec can be read reliably.
+        -- Writing healer defaults for a spec we cannot see yet would bake in the
+        -- wrong ones with no second chance.
+        ns.OnOwnSpecializationChanged()
         ns.InitializeComm()
         ns.RegisterOptionsPanel()
         ns.ScheduleInstanceReminder(1)

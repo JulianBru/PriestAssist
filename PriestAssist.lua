@@ -22,6 +22,10 @@ ns.state = ns.state or {
     -- Session-only override of which priority list the tab shows. Priests only;
     -- see ns.GetPriorityListKind for why it is not persisted.
     recommendFor = nil,
+    -- Which specialisation's profiles the config panel is editing. Session only
+    -- and deliberately separate from recommendFor above: that one answers whose
+    -- numbers you are reading, this one whose settings you are changing.
+    editSpec = nil,
 }
 
 ns.frames = ns.frames or {

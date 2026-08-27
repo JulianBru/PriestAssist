@@ -9,6 +9,7 @@ local UI = ns.UI
 
 local COMMANDS = {
     { "/pa", "assign the player you are targeting" },
+    { "/pa open", "open this settings panel" },
     { "/pa auto", "assign whoever gains most, once" },
     { "/pa note", "check what the raid note parser sees" },
     { "/pa top", "best targets, and who should take whom" },

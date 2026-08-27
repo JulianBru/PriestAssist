@@ -166,6 +166,45 @@ ns.OUTLINE_OPTIONS = {
 
 -- ─── Profiles ────────────────────────────────────────────────────────────────
 -- Fixed set for now. Free naming can follow later without touching the model.
+--
+-- Profiles are stored two levels deep since 1.9: profiles[spec][content]. A
+-- Shadow priest and a healer priest want different macros, and before this there
+-- was nowhere for that difference to live -- the database is account-wide, so
+-- whoever logged in last decided for both.
+--
+-- The specialisation is applied when looking a profile up, never stored in the
+-- selection: `activeProfile` and `contentProfiles` still hold plain content keys
+-- like "raid". You *are* Holy or you are not, so it is a fact to read rather
+-- than a choice to keep.
+
+-- Which key each specialisation stores under. Discipline and Holy share a gain
+-- list -- Power Infusion is worth the same to the target whichever of them casts
+-- it -- but that says nothing about their macros, so they get separate profiles.
+ns.SPEC_PROFILE_ORDER = { 256, 257, 258 }
+
+ns.SPEC_PROFILE_NAMES = {
+    [256] = "Discipline",
+    [257] = "Holy",
+    [258] = "Shadow",
+}
+
+-- Everything that is not a priest specialisation. Those characters read the
+-- addon and never write macros or claim targets, so one bucket is enough --
+-- and it doubles as the answer for the moment before the spec can be read at
+-- all, which is on the macro build path and cannot be given nil.
+ns.SPEC_PROFILE_FALLBACK = "other"
+
+-- Storage layout of PriestAssistDB. A chain, not a switch: each step runs on its
+-- own and is repeatable, so somebody arriving from the oldest layout passes
+-- through all of them.
+--
+--   nil or 0   flat, before 1.2
+--   1          profiles[content], 1.2 through 1.8
+--   2          profiles[spec][content]
+--
+-- Needed because the shape stopped identifying the version at 2: the old guard
+-- asked `type(profiles) == "table"`, and a nested table is also a table.
+ns.DB_VERSION = 2
 
 -- One profile per content type, so the two lists line up.
 ns.PROFILE_ORDER = { "world", "delve", "dungeon", "raid", "pvp" }
@@ -497,7 +536,8 @@ local LEGACY_PROFILE_KEYS = {
     "trinketSlot", "announceTarget", "userAddedByVariant",
 }
 
-local function MigrateProfiles(existingData)
+-- nil/0 -> 1. The flat layout, where every setting sat directly on the database.
+local function MigrateToProfiles(existingData)
     if type(existingData.profiles) == "table" then
         return
     end
@@ -526,6 +566,125 @@ local function MigrateProfiles(existingData)
     end
 end
 
+-- One flat set of profiles copied under every specialisation key.
+local function SpecProfilesFrom(old)
+    local out = {}
+    local keys = { ns.SPEC_PROFILE_FALLBACK }
+
+    for _, spec in ipairs(ns.SPEC_PROFILE_ORDER) do
+        keys[#keys + 1] = spec
+    end
+
+    for _, specKey in ipairs(keys) do
+        out[specKey] = {}
+
+        for _, key in ipairs(ns.PROFILE_ORDER) do
+            out[specKey][key] = ns.CopyDefaults((old or {})[key] or {}, {})
+        end
+    end
+
+    return out
+end
+
+-- 1 -> 2. One set of profiles becomes one per specialisation.
+--
+-- Every specialisation starts from what was there, exactly as the 1.2 migration
+-- did: nothing changes until somebody edits one of them. Spec-aware defaults
+-- only apply to sets created later, on a specialisation that had none.
+local function MigrateToSpecProfiles(existingData)
+    if (existingData.dbVersion or 1) >= 2 then
+        return
+    end
+
+    local old = existingData.profiles
+
+    if type(old) ~= "table" then
+        return
+    end
+
+    -- Taken here, on existingData, and before anything is overwritten --
+    -- CopyDefaults runs over this table afterwards. All three fields, because
+    -- the other two hold profile *keys*: restore the profiles alone and the
+    -- guards further down reset a mapping that pointed at something valid.
+    existingData.profilesLegacy = {
+        dbVersion       = existingData.dbVersion or 1,
+        profiles        = old,
+        activeProfile   = existingData.activeProfile,
+        contentProfiles = existingData.contentProfiles,
+    }
+
+    existingData.profiles = SpecProfilesFrom(old)
+    ns.pendingSpecProfileNotice = true
+end
+
+local function MigrateProfiles(existingData)
+    -- Held after `/pa reset profiles`, so a reload does not immediately undo the
+    -- restore it was asked for. Cleared by `/pa reset profiles cancel`.
+    if existingData.migrationHold then
+        return
+    end
+
+    -- A fresh install has nothing to preserve, and taking a snapshot of profiles
+    -- this function created moments ago would offer a restore point to settings
+    -- nobody ever had. Checked before MigrateToProfiles, which would otherwise
+    -- make an empty database look like a populated one.
+    local isFreshInstall = next(existingData) == nil
+
+    MigrateToProfiles(existingData)
+
+    if not isFreshInstall then
+        MigrateToSpecProfiles(existingData)
+    else
+        existingData.profiles = SpecProfilesFrom(existingData.profiles)
+    end
+
+    existingData.dbVersion = ns.DB_VERSION
+end
+
+--- Put the profiles back the way an older version stored them.
+---
+--- The point of this is a downgrade: restore, **log out** — not `/reload` —
+--- install the older version, and it finds the shape it knows. Saved variables
+--- are written on logout, reload and quit, so a client killed at that moment
+--- never wrote the restore to disk at all.
+---
+--- `migrationHold` is set because of the reload reflex: without it a `/reload`
+--- loads this version again, sees the older `dbVersion`, migrates, and undoes
+--- exactly what was just asked for.
+function ns.RestoreLegacyProfiles()
+    local db = ns.GetDB()
+    local legacy = db.profilesLegacy
+
+    if type(legacy) ~= "table" or type(legacy.profiles) ~= "table" then
+        ns.Print("There is no earlier profile layout stored — nothing to go back to.", "F8C300")
+        return false
+    end
+
+    db.profiles = legacy.profiles
+    db.activeProfile = legacy.activeProfile or ns.DEFAULTS.activeProfile
+    db.contentProfiles = legacy.contentProfiles or ns.CopyDefaults(ns.DEFAULTS.contentProfiles, {})
+    db.dbVersion = legacy.dbVersion or 1
+    db.migrationHold = true
+
+    ns.Print("Profiles are back on the older layout. Log out now — not /reload — " ..
+        "then install the older version. /pa reset profiles cancel undoes this.", "F8C300")
+    return true
+end
+
+--- Let the migration run again after ns.RestoreLegacyProfiles.
+function ns.CancelMigrationHold()
+    local db = ns.GetDB()
+
+    if not db.migrationHold then
+        ns.Print("The migration is not being held.", "A5AAD9")
+        return false
+    end
+
+    db.migrationHold = nil
+    ns.Print("Hold lifted. Your profiles migrate again on the next reload.", "A5AAD9")
+    return true
+end
+
 function ns.InitializeDatabase()
     local existingData = PriestAssistDB
 
@@ -543,44 +702,66 @@ function ns.InitializeDatabase()
     PriestAssistDB = ns.CopyDefaults(ns.DEFAULTS, existingData)
 
     -- Fill in any profile the stored data does not have yet.
+    --
+    -- Only sets that already exist are completed here; a specialisation you have
+    -- never played does not get one yet. That is deliberate -- this runs at
+    -- PLAYER_LOGIN, and writing spec-aware defaults for a specialisation that
+    -- cannot be read reliably yet bakes in the wrong ones with no second chance.
+    -- ns.EnsureSpecProfiles creates a set at the moment its specialisation is
+    -- known, which is the only time it can be done correctly.
     PriestAssistDB.profiles = PriestAssistDB.profiles or {}
 
-    for _, key in ipairs(ns.PROFILE_ORDER) do
-        PriestAssistDB.profiles[key] = ns.CopyDefaults(ns.PROFILE_DEFAULTS, PriestAssistDB.profiles[key])
+    for specKey, set in pairs(PriestAssistDB.profiles) do
+        if type(set) == "table" then
+            for _, key in ipairs(ns.PROFILE_ORDER) do
+                set[key] = ns.CopyDefaults(ns.PROFILE_DEFAULTS, set[key])
+            end
+        else
+            -- Not a profile set. Only reachable if the stored data was edited by
+            -- hand or written by something else; dropping it is better than
+            -- merging defaults into whatever it is.
+            PriestAssistDB.profiles[specKey] = nil
+        end
     end
 
     if type(sharedUserAdded) == "string" and sharedUserAdded ~= "" then
-        for _, key in ipairs(ns.PROFILE_ORDER) do
-            local profile = PriestAssistDB.profiles[key]
-            local variant = profile.macroVariant
+        for _, set in pairs(PriestAssistDB.profiles) do
+            for _, key in ipairs(ns.PROFILE_ORDER) do
+                local profile = set[key]
+                local variant = profile.macroVariant
 
-            if variant ~= "standalone" and variant ~= "voidform" then
-                variant = ns.PROFILE_DEFAULTS.macroVariant
+                if variant ~= "standalone" and variant ~= "voidform" then
+                    variant = ns.PROFILE_DEFAULTS.macroVariant
+                end
+
+                profile.userAddedByVariant[variant] = sharedUserAdded
             end
-
-            profile.userAddedByVariant[variant] = sharedUserAdded
         end
     end
 
     -- Stored text already contains real line breaks, so it must not go through
     -- ns.NormalizeUserAdded — that one splits on slashes and would insert an
     -- extra blank line on every login.
-    for _, key in ipairs(ns.PROFILE_ORDER) do
-        local profile = PriestAssistDB.profiles[key]
+    for _, set in pairs(PriestAssistDB.profiles) do
+        for _, key in ipairs(ns.PROFILE_ORDER) do
+            local profile = set[key]
 
-        for _, variant in ipairs(ns.MACRO_VARIANT_ORDER) do
-            profile.userAddedByVariant[variant] =
-                ns.NormalizeUserAddedLines(profile.userAddedByVariant[variant])
+            for _, variant in ipairs(ns.MACRO_VARIANT_ORDER) do
+                profile.userAddedByVariant[variant] =
+                    ns.NormalizeUserAddedLines(profile.userAddedByVariant[variant])
+            end
         end
     end
 
-    -- Guard against a stored profile key that no longer exists.
-    if not PriestAssistDB.profiles[PriestAssistDB.activeProfile] then
+    -- Guard against a stored profile key that no longer exists. Checked against
+    -- ns.PROFILE_NAMES rather than against a set, because at this point there
+    -- may be no set at all yet — and the key is a content key either way.
+    if not ns.PROFILE_NAMES[PriestAssistDB.activeProfile] then
         PriestAssistDB.activeProfile = ns.DEFAULTS.activeProfile
     end
 
     for _, contentType in ipairs(ns.CONTENT_ORDER) do
-        if not PriestAssistDB.profiles[PriestAssistDB.contentProfiles[contentType]] then
+        if not ns.PROFILE_NAMES[PriestAssistDB.contentProfiles[contentType]] then
             PriestAssistDB.contentProfiles[contentType] = ns.DEFAULTS.contentProfiles[contentType]
         end
     end
