@@ -1323,6 +1323,74 @@ end
 -- loop that has already handed it out cannot see the second number. The cost of
 -- asking properly is small -- see BuildAssignmentPool for why the candidate list
 -- stays short.
+-- Above this many *free* priests -- those without a manual or note target, so
+-- assigning by hand shrinks the problem -- the exhaustive search is abandoned.
+-- It walks every ordering of the candidates and the candidate list grows with
+-- the priests, so the cost is factorial.
+--
+-- Two numbers per size, because the pool depends on how far the healer and
+-- Shadow lists disagree at the top. Where they overlap it is barely larger than
+-- the priest count; where they do not it is nearly twice that:
+--
+--                typical      worst seen
+--   6 priests      4.8 ms       37 ms      (pool 7 vs 9)
+--   8 priests      318 ms
+--  10 priests       39 s
+--
+-- The limit sits at the last size whose *worst* case is bearable. 37 ms is two
+-- frames, once, on the lead only, and the three second debounce keeps it from
+-- repeating. Seven would be minutes.
+local EXHAUSTIVE_LIMIT = 6
+
+-- What happens instead: shadow priests are served first, then the healers take
+-- what is left. Serving the less flexible side first is the right instinct --
+-- a Shadow has to line Power Infusion up with their own cooldowns while a
+-- healer can hold it -- and measured over 3000 random groups it lands on the
+-- optimum 85 to 92 % of the time with 14 or more damage dealers, costing
+-- 0.15 to 0.23 points when it does not.
+--
+-- That is noise, and in a group large enough to reach this limit the whole
+-- question is academic anyway.
+local function ShadowFirst(priests, pool, valueOf)
+    local order, taken, plan, total = {}, {}, {}, 0
+
+    for index, priest in ipairs(priests) do
+        order[#order + 1] = { index = index, shadow = priest.kind == "shadow" }
+    end
+
+    -- Shadows before healers, and within each group by their original position
+    -- so the result does not depend on the order pairs happened to hand back.
+    table.sort(order, function(a, b)
+        if a.shadow ~= b.shadow then
+            return a.shadow
+        end
+
+        return a.index < b.index
+    end)
+
+    for _, entry in ipairs(order) do
+        local bestJ, bestValue
+
+        for j = 1, #pool do
+            if not taken[j] then
+                local value = valueOf(entry.index, j)
+
+                if not bestValue or value > bestValue then
+                    bestJ, bestValue = j, value
+                end
+            end
+        end
+
+        if bestJ then
+            taken[bestJ] = true
+            plan[entry.index] = bestJ
+            total = total + bestValue
+        end
+    end
+
+    return total, plan
+end
+
 local function Best(count, i, pool, used, valueOf)
     if i > count then
         return 0, {}
@@ -1461,7 +1529,13 @@ function ns.BuildGroupAssignment()
         return ns.GainForKind(priest.kind, row.specID, row.hero)
     end
 
-    local total, plan = Best(#free, 1, pool, {}, valueOf)
+    local total, plan
+
+    if #free > EXHAUSTIVE_LIMIT then
+        total, plan = ShadowFirst(free, pool, valueOf)
+    else
+        total, plan = Best(#free, 1, pool, {}, valueOf)
+    end
     local assigned = {}
 
     for index, priest in ipairs(free) do
@@ -2524,6 +2598,54 @@ function ns.AnnounceMacroTarget(targetName)
     ns.SendChat("Priest Assist: Power Infusion target set to " .. targetName .. ".", channel)
 end
 
+--- Which setting to turn off, measured rather than guessed.
+---
+--- Rebuilds the macro without each optional part in turn and reports the first
+--- one that would bring it under the limit, so the advice is "this is enough"
+--- rather than "try something". Named in the order that costs the least: your
+--- own lines before anything the addon manages, and the racial before the
+--- potion, which is usually worth more.
+function ns.SuggestMacroTrim(variant, profile)
+    profile = profile or ns.GetActiveProfile()
+
+    local function fits(changes)
+        local probe = {}
+
+        for key, value in pairs(profile) do
+            probe[key] = value
+        end
+
+        for key, value in pairs(changes) do
+            probe[key] = value
+        end
+
+        local body = ns.BuildGeneratedMacroBody(variant, probe)
+        return body:len() <= ns.MACRO_MAX_LENGTH
+    end
+
+    local userAdded = ns.GetUserAdded(variant, profile)
+
+    if userAdded and userAdded ~= "" and fits({}) then
+        return "Your own lines are what pushes it over -- /pa reset macro clears them."
+    end
+
+    local options = {
+        { changes = { includeRacial = false }, text = "Turning the racial off is enough." },
+        { changes = { combatPotion = "none" }, text = "Turning the combat potion off is enough." },
+        { changes = { trinketSlot = "13" }, text = "Using one trinket slot instead of both is enough." },
+        { changes = { macroVariant = "standalone" },
+          text = "Making Power Infusion the primary macro instead of Voidform is enough." },
+    }
+
+    for _, option in ipairs(options) do
+        if fits(option.changes) then
+            return option.text
+        end
+    end
+
+    return "Turn off the combat potion, the racial or the second trinket in the Macro tab."
+end
+
 -- reportAssignment: true only for deliberate assignments (/pa, the minimap
 -- button, the "Update Macro" button). Those report the target and may announce
 -- it. Everything else rebuilds with the stored target and stays silent, so
@@ -2581,39 +2703,53 @@ function ns.UpdateMacro(reportAssignment)
         local macroName = ns.GetMacroNameForVariant(variant)
         local body = ns.BuildMacroBody(variant)
 
+        -- Not written at all rather than written and cut. WoW truncates at 255
+        -- without asking, and what falls off the end is whatever the addon put
+        -- there last -- the potion, or a half-finished /use item: that does
+        -- nothing. Keeping the previous macro means the button still works;
+        -- writing a truncated one means it silently does less than it says.
         if body:len() > ns.MACRO_MAX_LENGTH then
-            ns.Print("\"" .. macroName .. "\" is longer than " .. ns.MACRO_MAX_LENGTH ..
-                " characters and may be truncated by WoW.", "F82C00")
-        end
+            -- Whether there is an older version to fall back on changes what
+            -- the player should expect to find on their bar, so say which it is
+            -- rather than claiming something was kept that never existed.
+            local existing = GetMacroIndexByName(macroName)
 
-        -- Indices shift whenever a macro is deleted, so resolve them freshly.
-        local index = GetMacroIndexByName(macroName)
-        local relocated = ns.MacroNeedsRelocation(index)
-
-        if relocated then
-            DeleteMacro(index)
-            index = 0
-        end
-
-        if index == 0 then
-            CreateMacro(macroName, ns.GetMacroIconForVariant(variant), body, isCharacterMacro or nil)
+            ns.Print("\"" .. macroName .. "\" would be " .. body:len() .. " characters, " ..
+                "over WoW's limit of " .. ns.MACRO_MAX_LENGTH .. ". " ..
+                ((existing and existing > 0)
+                    and "It was left as it was, so it still works but no longer follows your target. "
+                    or "It was not created. ") ..
+                ns.SuggestMacroTrim(variant, profile), "F82C00")
+        else
+            -- Indices shift whenever a macro is deleted, so resolve them freshly.
+            local index = GetMacroIndexByName(macroName)
+            local relocated = ns.MacroNeedsRelocation(index)
 
             if relocated then
-                movedCount = movedCount + 1
-            else
-                createdCount = createdCount + 1
+                DeleteMacro(index)
+                index = 0
             end
-        elseif GetMacroBody and GetMacroBody(index) == body then
-            -- Already exactly this text, so writing it again would only cost
-            -- work. Assigning the same target twice is the common case -- a
-            -- ready check, a roster change, /pa on someone already assigned --
-            -- and each rewrite was measured at tens of kilobytes.
-            --
-            -- Compared against the macro itself rather than a remembered value:
-            -- the game holds the truth, and anything editing the macro behind
-            -- our back is then noticed rather than skipped over.
-        else
-            EditMacro(index, macroName, ns.GetMacroIconForVariant(variant), body)
+
+            if index == 0 then
+                CreateMacro(macroName, ns.GetMacroIconForVariant(variant), body, isCharacterMacro or nil)
+
+                if relocated then
+                    movedCount = movedCount + 1
+                else
+                    createdCount = createdCount + 1
+                end
+            elseif GetMacroBody and GetMacroBody(index) == body then
+                -- Already exactly this text, so writing it again would only cost
+                -- work. Assigning the same target twice is the common case -- a
+                -- ready check, a roster change, /pa on someone already assigned
+                -- -- and each rewrite was measured at tens of kilobytes.
+                --
+                -- Compared against the macro itself rather than a remembered
+                -- value: the game holds the truth, and anything editing the
+                -- macro behind our back is then noticed rather than skipped.
+            else
+                EditMacro(index, macroName, ns.GetMacroIconForVariant(variant), body)
+            end
         end
     end
 

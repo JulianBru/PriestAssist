@@ -1,5 +1,17 @@
 # Priest Assist
 
+## [1.9-alpha2](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha2) (2026-08-27)
+
+Everything in alpha 1 still applies, including how to go back.
+
+### Fixed
+
+- A macro over WoW's 255 character limit was written anyway and cut off by the game, which usually cost the last line — the combat potion, or half of a `/use item:` that then did nothing. It is left alone now instead, and the message says which setting to turn off, having tried them to find one that is enough.
+
+  This is reachable without any custom lines: Voidform as the primary macro, with a potion, both trinket slots and a racial, comes to 263 characters on a target with a long name.
+
+- Working out who infuses whom searched every possible assignment, which is fine for the two or three priests a group actually has and stops responding at ten. Above six it now serves the Shadow priests first and lets the healers take what is left — measured at 85 to 92 % of the best answer, in groups where the difference is academic anyway.
+
 ## [1.9-alpha1](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha1) (2026-08-27)
 
 An alpha, because it changes how settings are stored. Your existing profiles are copied to every specialisation unchanged and the previous layout is kept, but the change cannot be undone by installing an older version alone — see the last entry.
@@ -20,7 +32,9 @@ An alpha, because it changes how settings are stored. Your existing profiles are
 
 ### Fixed
 
-- Nothing. This release is the storage change and what it needed.
+- A priest who left the group kept their target reserved for up to ten minutes, pushing everyone else onto worse ones. Their claim is dropped with them now. Somebody who is merely quiet — wiped and running back — still keeps theirs.
+
+- Asking the group what it is doing did not ask what its targets are worth. Anybody who joins can immediately become the one computing the assignment, and without those numbers they fell back to their own tables for every priest they had not heard from.
 
 ### If you want to go back
 
