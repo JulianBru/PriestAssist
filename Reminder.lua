@@ -190,6 +190,11 @@ function ns.CheckInstanceReminder()
             ns.ShowReminder(false, ns.ADDON_DISPLAY_NAME .. "\n" ..
                 icon .. " " .. text .. ", use /pa " .. icon)
         end
+
+        -- Same moment, different question: the reminder asks whether a target
+        -- is missing, this asks whether the one you have is unambiguous. Both
+        -- hang off a real instance change, so neither repeats on a reload.
+        ns.ReportNameCollision()
     end
 
     state.lastInstanceKey = currentInstanceKey

@@ -1,5 +1,15 @@
 # Priest Assist
 
+## [1.9-alpha3](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha3) (2026-08-27)
+
+### Added
+
+- A warning when the player you are set to infuse shares their name with somebody else in the group. Two players called Kelmar from different realms are one name to the addon — the specialisation and gain it holds belong to whichever of them it heard from last, and the macro cannot tell them apart either.
+
+  Said when you enter a dungeon or raid and on a ready check, both of which are moments you can still do something about it. Only about your own target: two players sharing a name neither of whom you are infusing costs nothing.
+
+  It cannot promise the opposite. A name the client will not let an addon read — which happens in combat — takes no part in the comparison, so saying nothing means none was found rather than none is there.
+
 ## [1.9-alpha2](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha2) (2026-08-27)
 
 Everything in alpha 1 still applies, including how to go back.

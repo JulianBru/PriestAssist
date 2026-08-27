@@ -605,6 +605,94 @@ function ns.FindRaidMember(targetName)
     return nil
 end
 
+--- Everyone in the group whose name matches `targetName` once the realm is
+--- stripped, as their full roster names.
+---
+--- Two players called Kelmar from different realms collapse to one key
+--- everywhere in the addon -- specialisation, hero talent, claims, gain values
+--- -- because the roster hands out bare names for your own realm and
+--- `Name-Realm` for everyone else, so both sides have to be reduced to the same
+--- thing or nothing ever matches. Keeping the realm instead would mean carrying
+--- it through the macro and the protocol, and a realm name with a space in it
+--- is not even valid in a macro without rewriting it.
+---
+--- So it is not prevented, it is reported. This is what finds it.
+---
+--- Never an all-clear: a name we cannot read does not take part in the
+--- comparison, so an empty result means "none found", not "none there".
+--- @return table the full names, with two or more entries when it collides
+function ns.FindNameCollision(targetName)
+    local wanted = NormalizeNoteName(targetName)
+    local found = {}
+
+    if wanted == "" then
+        return found
+    end
+
+    local function consider(name)
+        -- Comparing a secret value throws rather than returning false, and in
+        -- combat a name outside the group can be one. Skipping is the only
+        -- option; see the caveat above.
+        if not name or ns.IsSecretValue(name) then
+            return
+        end
+
+        if NormalizeNoteName(name) == wanted then
+            found[#found + 1] = name
+        end
+    end
+
+    if IsInRaid and IsInRaid() then
+        for index = 1, ns.MAX_RAID_MEMBERS do
+            consider((GetRaidRosterInfo(index)))
+        end
+    elseif IsInGroup and IsInGroup() then
+        consider(UnitName and UnitName("player"))
+
+        for index = 1, 4 do
+            local unit = "party" .. index
+
+            if not UnitExists or UnitExists(unit) then
+                consider(UnitName and UnitName(unit))
+            end
+        end
+    end
+
+    return found
+end
+
+--- Warn once if the assigned target's name is not unique in the group.
+---
+--- Only about our own target, not about every duplicate in the raid. Two
+--- warriors called Kelmar cost nothing; the same two matter when one of them is
+--- who we are supposed to infuse, because the specialisation and gain we hold
+--- for that name belong to whichever of them reported last.
+function ns.ReportNameCollision()
+    if not ns.IsPriest() then
+        return false
+    end
+
+    local target = ns.GetAssignedTarget()
+
+    if not target or target == "" then
+        return false
+    end
+
+    local matches = ns.FindNameCollision(target)
+
+    if #matches < 2 then
+        return false
+    end
+
+    ns.Print("There are " .. #matches .. " players called " .. target ..
+        " in your group (" .. table.concat(matches, ", ") .. "). The macro cannot " ..
+        "tell them apart, and the specialisation shown for that name belongs to " ..
+        "whichever of them the addon heard from last. Assign someone else with /pa " ..
+        "if it matters.", "F8C300")
+
+    return true
+end
+
 --- Is this player in our group at all? Answers for a party as well as a raid,
 --- which GetRaidRosterInfo cannot -- it returns nothing outside a raid.
 ---
@@ -711,6 +799,11 @@ function ns.CheckAssignedTargetPresence()
     if not ns.GetDB().validateTargetOnReadyCheck then
         return false
     end
+
+    -- Before the presence check rather than after: a name that matches two
+    -- players will always look present, so the answer below is reassuring and
+    -- wrong. Deliberately not gated on the presence check's own outcome.
+    ns.ReportNameCollision()
 
     -- GetRaidRosterInfo only returns anything in a raid group.
     if not (IsInRaid and IsInRaid()) then
