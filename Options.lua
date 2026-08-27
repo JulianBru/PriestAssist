@@ -21,6 +21,7 @@ local COMMANDS = {
     { "/pa add", "append your own line to the macro" },
     { "/pa reset", "clear the Power Infusion target" },
     { "/pa reset macro", "drop your own macro lines" },
+    { "/pa reset profiles", "put the profiles back on the pre-1.9 layout" },
     { "/pa help", "the same list, in chat" },
 }
 
