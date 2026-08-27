@@ -423,7 +423,9 @@ def main() -> int:
         print("error: SpecPriority.lua is out of date with the sheet", file=sys.stderr)
         return 1
 
-    target.write_text(generated, encoding="utf-8")
+    # newline="\n" or Python turns every line ending into CRLF on Windows, and
+    # the next diff shows the whole file as changed.
+    target.write_text(generated, encoding="utf-8", newline="\n")
     print(f"written: {len(healer)} targets rated for a healer priest, "
           f"{len(shadow)} for a Shadow priest, data from {updated}")
     return 0

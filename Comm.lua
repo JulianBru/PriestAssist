@@ -969,14 +969,21 @@ function ns.InitializeComm()
     -- Someone asked who has what; answer with ours. AnnounceAssignment holds
     -- the class check, so a non-priest hears the question and stays out of the
     -- answer rather than claiming a target it cannot use.
+    -- Values ride along with the claim. Anybody who joins can become the lead
+    -- the moment their I arrives -- there is no incumbency -- so the client with
+    -- the least history is disproportionately likely to be the one computing.
+    -- Without this it falls back to our own tables for every priest it has not
+    -- heard from, which is the very thing V exists to avoid.
     lib.onQuery = function()
         ns.AnnounceAssignment()
+        ns.AnnounceOwnValues()
     end
 
     -- Somebody wants to know what everyone is running. Answered on any
     -- character, priest or not -- see ns.AnnounceOwnInfo.
     lib.onInfoRequest = function()
         ns.AnnounceOwnInfo()
+        ns.AnnounceOwnValues()
     end
 
     return true

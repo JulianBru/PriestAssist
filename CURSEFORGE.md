@@ -46,11 +46,15 @@ So if you open with Voidform and want Power Infusion a moment later, make PI you
 
 ***
 
-### A profile per kind of content
+### A profile per kind of content, and per specialisation
 
 Open World, Delves, Dungeon, Raid and PvP each get their own profile, covering the primary macro, combat potion, potion priority, trinket slot, target announcement and custom lines.
 
-Switch it on and the right one is applied the moment you zone in. Nothing is loaded or swapped — the same two macros stay on your bars and only their contents change, so you never re-drag a button.
+Each of the three priest specialisations keeps its own set of those. A healer takes Power Infusion for the raid's damage, so their macro has no reason to carry a trinket, a potion or a racial — and a Shadow priest's does. Discipline, Holy and Shadow are separate, because the two healing specialisations play differently enough to want different lines.
+
+Your own specialisation is selected whenever you open the settings, and the icons above the profile selector switch to another one if you want to set it up in advance. Changing specialisation in game changes the whole set with it.
+
+Switch automatic profiles on and the right one is applied the moment you zone in. Nothing is loaded or swapped — the same two macros stay on your bars and only their contents change, so you never re-drag a button.
 
 ***
 
@@ -116,14 +120,22 @@ Off by default, and set per profile — announce in raids, stay quiet in the ope
 | Command                |What it does                                |
 | ---------------------- |------------------------------------------- |
 | <code>/pa</code>       |Update both macros to your current target   |
+| <code>/pa open</code>  |Open the settings panel                     |
+| <code>/pa top X</code> |Best targets, and who should take whom      |
+| <code>/pa note top</code> |The same assignment as raid note lines to copy |
 | <code>/pa add &lt;text&gt;</code> |Append custom lines to your primary macro |
 | <code>/pa reset</code> |Clear the Power Infusion target |
 | <code>/pa reset macro</code> |Remove custom lines from your primary macro |
+| <code>/pa reset profiles</code> |Put the profiles back on the pre-1.9 layout |
 | <code>/pa mode powerinfusion</code> |Make <code>PriestAssist PI</code> the primary macro |
 | <code>/pa mode voidform</code> |Make <code>PriestAssist VF</code> the primary macro |
 | <code>/pa note</code>  |Report what the raid note says              |
+| <code>/pa comm</code>  |Who else has a Power Infusion target        |
+| <code>/pa version</code> |What everyone in the group is running     |
 | <code>/pa show</code>  |Preview the reminder                        |
 | <code>/pa help</code>  |List all commands                           |
+
+Priests without the addon can ask in chat with `!pa top`. Note that incoming chat cannot be read inside dungeons and raids, where the game treats it as protected — there the command stays silent, and `/pa top` is the way.
 
 ***
 
@@ -167,7 +179,11 @@ Not at the moment. Mythic+ shares the Dungeon profile on purpose: a key going li
 
 **Are profiles saved per character?**
 
-No, they are shared across your account.
+No, they are shared across your account — but split by specialisation, so two priests with the same specialisation share settings while Discipline and Shadow do not overwrite each other.
+
+**What happens to my profiles when I update?**
+
+They are copied to every specialisation, unchanged. Nothing looks different until you edit one of them, and the previous layout is kept — `/pa reset profiles` puts it back if you want to go to an older version.
 
 **Why does the raid note do nothing outside a raid?**
 

@@ -1,5 +1,31 @@
 # Priest Assist
 
+## [1.9-alpha1](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha1) (2026-08-27)
+
+An alpha, because it changes how settings are stored. Your existing profiles are copied to every specialisation unchanged and the previous layout is kept, but the change cannot be undone by installing an older version alone — see the last entry.
+
+### Added
+
+- Profiles are kept per specialisation. Discipline, Holy and Shadow each have their own Open World, Delves, Dungeon, Raid and PvP profile, so a healer's macro no longer has to carry what a Shadow priest's needs.
+
+  Icons above the profile selector choose which one you are editing. Your own is selected whenever the panel opens, and changing specialisation in game changes the whole set with it.
+
+- A specialisation that has never been played gets its profiles the first time you log in on it. Discipline and Holy start without combat potion, trinket or racial: a healer takes Power Infusion for the raid's damage, and those three lines are about their own.
+
+- `/pa open` opens the settings panel.
+
+### Changed
+
+- The reminder on entering a dungeon or raid is unchanged in behaviour but now reads from the profile of the specialisation you are actually on.
+
+### Fixed
+
+- Nothing. This release is the storage change and what it needed.
+
+### If you want to go back
+
+`/pa reset profiles` puts the profiles back the way 1.8 stored them, then **log out** — not `/reload` — and install the older version. Reloading would migrate them again; the addon holds the migration after a restore and says so on every login until `/pa reset profiles cancel`.
+
 ## [1.8.2](https://github.com/JulianBru/PriestAssist/tree/v1.8.2) (2026-08-27)
 
 ### Changed

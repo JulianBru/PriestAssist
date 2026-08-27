@@ -57,3 +57,8 @@ WTF/
 # Local docs (architecture notes, dev guides) - not published
 docs/
 CLAUDE.md
+
+# Test harnesses. They load the real files against stubbed WoW APIs, so they are
+# development tooling rather than part of the addon. Kept out of the repository
+# on purpose -- run them with `python3 tests/run.py` before committing.
+tests/

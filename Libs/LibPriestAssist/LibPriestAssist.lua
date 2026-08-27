@@ -625,11 +625,18 @@ lib.frame:SetScript("OnEvent", function(_, event, prefix, text, _, sender)
             return
         end
 
-        -- Claims are allowed to age out on their own -- a priest who wiped and
-        -- is running back should not lose their target. Info records are not:
-        -- they decide who computes for the group, and a stale one would leave
-        -- everybody waiting on somebody who already left.
+        -- CLAIM_LIFETIME is there for a priest who wiped and is running back --
+        -- somebody temporarily quiet, not somebody gone. Leaving the group is
+        -- not quiet, it is a fact, and holding their claim for ten more minutes
+        -- pushes everyone else onto worse targets for no reason.
         local dropped = false
+
+        for key, claim in pairs(claims) do
+            if not InOurGroup(claim.name) then
+                claims[key] = nil
+                dropped = true
+            end
+        end
 
         for key, entry in pairs(info) do
             if not InOurGroup(entry.name) then
