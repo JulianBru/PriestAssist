@@ -173,7 +173,23 @@ function ns.CheckInstanceReminder()
     local currentInstanceKey = ns.GetCurrentInstanceKey()
 
     if currentInstanceKey and currentInstanceKey ~= state.lastInstanceKey then
-        ns.ShowReminder()
+        -- Not on every entry any more. Being reminded to pick a target while
+        -- one is already picked reads as though something went wrong, and with
+        -- several raids in a season that is most of the time somebody sees this
+        -- frame.
+        local reason, targetName = ns.GetEntryReminderReason()
+
+        if reason then
+            local text = ns.STATUS_MESSAGES[reason]
+            local icon = ns.POWER_INFUSION_ICON
+
+            if reason ~= "none" then
+                text = text:format(targetName)
+            end
+
+            ns.ShowReminder(false, ns.ADDON_DISPLAY_NAME .. "\n" ..
+                icon .. " " .. text .. ", use /pa " .. icon)
+        end
     end
 
     state.lastInstanceKey = currentInstanceKey
@@ -192,6 +208,17 @@ function ns.ScheduleInstanceReminder(delay)
     end
 
     reminderDelay = math.max(0, tonumber(reminderDelay) or 0)
+
+    -- The reminder now asks whether a target is set, and the automatic pick
+    -- settles after ns.ASSIGN_SETTLE. Firing on the shorter delay would find no
+    -- target, say so, and be contradicted three seconds later -- reliably, every
+    -- time somebody with automatic assignment enters an instance.
+    --
+    -- An explicit delay is left alone: the caller at login passes one because it
+    -- is waiting for the frame, not for the group.
+    if delay == nil then
+        reminderDelay = math.max(reminderDelay, (ns.ASSIGN_SETTLE or 5) + 0.5)
+    end
 
     C_Timer.After(reminderDelay, function()
         if reminderToken ~= state.instanceReminderTimerToken then

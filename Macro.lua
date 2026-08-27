@@ -515,6 +515,48 @@ function ns.FindRaidMember(targetName)
     return nil
 end
 
+--- Is this player in our group at all? Answers for a party as well as a raid,
+--- which GetRaidRosterInfo cannot -- it returns nothing outside a raid.
+---
+--- In a party you are not a `party` unit: `party1`-`party4` are the other four
+--- and there is no `party5`, so "player" has to be checked separately. A raid is
+--- the other way round, `raid1`-`raid40` include you, which is why the raid path
+--- needs no such case.
+---
+--- Deliberately only "present or not". Whether somebody is offline or still
+--- outside the instance is a raid-roster question, and ns.GetAssignedTargetStatus
+--- keeps answering that where it can.
+function ns.IsInOurGroup(targetName)
+    local wanted = NormalizeNoteName(targetName)
+
+    if wanted == "" then
+        return false
+    end
+
+    if IsInRaid and IsInRaid() then
+        return ns.FindRaidMember(targetName) ~= nil
+    end
+
+    if not (IsInGroup and IsInGroup()) then
+        return false
+    end
+
+    for _, unit in ipairs({ "player", "party1", "party2", "party3", "party4" }) do
+        if not UnitExists or UnitExists(unit) then
+            local name = UnitName and UnitName(unit)
+
+            -- UnitName can be secret for a unit outside the group; ours never
+            -- is, and a secret one is simply not the match we are looking for.
+            if name and not ns.IsSecretValue(name)
+                and NormalizeNoteName(name) == wanted then
+                return true
+            end
+        end
+    end
+
+    return false
+end
+
 -- Returns one of: "ok", "none", "missing", "offline", "elsewhere".
 function ns.GetAssignedTargetStatus()
     local targetName = ns.GetAssignedTarget()
@@ -550,6 +592,30 @@ local STATUS_MESSAGES = {
     offline  = "%s is offline",
     elsewhere = "%s is not in the instance",
 }
+
+ns.STATUS_MESSAGES = STATUS_MESSAGES
+
+--- Why the reminder should appear on entering an instance, or nil for silence.
+---
+--- Only "none" and "missing" count here, unlike the ready check which warns
+--- about all four. On entry the rest are noise rather than information: you zone
+--- in first and the group follows, so half of them are still "elsewhere" and the
+--- odd one is reconnecting. Somebody still loading is already in the roster and
+--- does not read as missing, so this says what it means -- the target is gone,
+--- or there never was one.
+function ns.GetEntryReminderReason()
+    local targetName = ns.GetAssignedTarget()
+
+    if not targetName or targetName == "" then
+        return "none"
+    end
+
+    if not ns.IsInOurGroup(targetName) then
+        return "missing", targetName
+    end
+
+    return nil
+end
 
 function ns.CheckAssignedTargetPresence()
     if not ns.GetDB().validateTargetOnReadyCheck then
@@ -1441,6 +1507,10 @@ end
 -- Specs arrive one player at a time, so the answer is unstable for the first
 -- seconds after a group forms. Waiting avoids three messages where one will do.
 local ASSIGN_SETTLE = 5
+
+-- Exposed because the instance reminder has to wait for the same window: it
+-- asks whether a target is set, and the automatic pick has not happened yet.
+ns.ASSIGN_SETTLE = ASSIGN_SETTLE
 local settleUntil, settleScheduled = 0, false
 
 local function Now()

@@ -1,8 +1,20 @@
 # Priest Assist
 
-## [1.8.2](https://github.com/JulianBru/PriestAssist/tree/v1.8.2) (2026-08-26)
+## [1.8.2](https://github.com/JulianBru/PriestAssist/tree/v1.8.2) (2026-08-27)
 
-- Update PI Data post tuning
+### Changed
+
+- The reminder on entering a dungeon or raid only appears when there is something to do about it — no target set, or the one you had is not in the group any more — and says which of the two it is. Changing raid or key with a target already assigned no longer shows it.
+
+  It also waits a few seconds longer than before, until the automatic assignment has settled, so it can no longer announce that nothing is set moments before the addon sets something.
+
+- Power Infusion values rebuilt from the sim sheet after the latest tuning pass.
+
+## [1.8.1](https://github.com/JulianBru/PriestAssist/tree/v1.8.1) (2026-08-25)
+
+### Fixed
+
+- Receiving a chat message inside a dungeon or raid could throw a Lua error. On those maps the text and the sender arrive as secret values, and an addon reading one is stopped outright rather than given a wrong answer — so `!pa top` cannot be seen there and now stays quiet instead of erroring. Everything else, `/pa top` included, is unaffected.
 
 ## [1.8](https://github.com/JulianBru/PriestAssist/tree/v1.8) (2026-08-25)
 
