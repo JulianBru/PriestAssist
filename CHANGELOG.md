@@ -12,7 +12,7 @@
 
   Neither half reads anything it is not allowed to. Since 12.0 an addon cannot look at another player's auras during an encounter, and since 12.1 the same is true of your own cooldown in seconds — so both halves ask the game for a handle and let it draw the numbers instead.
 
-- Cooldowns are known for 25 specialisations. Assassination Rogue is missing, because both of its cooldowns land on the enemy rather than on the rogue and there is nothing on them to watch. Destruction Warlock only works with the Hellcaller talent, for the same reason: Summon Infernal puts no buff on its caster.
+- Cooldowns are known for all 26 damage specialisations, though two of them are unproven. Assassination is read from Kingsbane, which may turn out to sit on the target rather than the rogue, and Destruction only works with the Hellcaller talent, because Summon Infernal puts no buff on its caster at all.
 
   Where a specialisation has more than one candidate — Affliction can be read from Summon Darkglare or from Malevolence — both are watched.
 

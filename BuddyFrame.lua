@@ -78,6 +78,21 @@ ns.BUDDY_COOLDOWNS = {
     [252] = { 42650 },            -- Unholy        Army of the Dead
 
     -- Rogue
+    -- Assassination expresses its whole burst on the enemy -- Deathmark and
+    -- Kingsbane are both debuffs -- so neither cast can be watched on the rogue.
+    -- Both entries here are the caster-side companions instead.
+    --
+    -- Finish the Job is the reliable one: "Damage dealt increased by 10% while
+    -- your Deathmark is active" can only sit on the rogue, and its 16 seconds
+    -- are Deathmark's. It is a talent, so it is not always there -- which is
+    -- what the second entry is for. Kingsbane 394095 is the stack counter for
+    -- the damage multiplier and looks caster-side (100 yd range, no "suffering"
+    -- wording, the same signature as Demonic Power), but that is inference, not
+    -- something anyone has seen.
+    [259] = { 1249810 },          -- Assassination Finish the Job. Deathmark
+                                  --               itself is a debuff on the
+                                  --               enemy; this talent buff runs
+                                  --               with it, 16 s, on the rogue
     [260] = { 13750 },            -- Outlaw        Adrenaline Rush
     [261] = { 121471 },           -- Subtlety      Shadow Blades
 
@@ -102,7 +117,11 @@ ns.BUDDY_COOLDOWNS = {
     -- Infernal really has none -- no Apply Aura effect, 250 ms duration and a
     -- No Aura Icon flag -- so Destruction rests on the Hellcaller talent alone.
     [265] = { 205180, 442726 },   -- Affliction    Summon Darkglare, Malevolence
-    [266] = { 265273 },           -- Demonology    Demonic Power, cast is 265187
+    [266] = { 265273 },           -- Demonology    Demonic Power, cast is 265187.
+                                  --               Drawn with an achievement
+                                  --               icon, which is the aura's own
+                                  --               art and cannot be replaced
+                                  --               without losing the lit state
     [267] = { 442726 },           -- Destruction   Malevolence, Hellcaller only
 }
 
@@ -352,6 +371,8 @@ end
 local function UpdateBuddyStyle(target, spells, unit)
     local frame = frames.buddyFrame
     local present = unit ~= nil
+    -- The first watched spell, which is also what the engine will draw once the
+    -- aura is up -- so the dim picture and the lit one are the same picture.
     local spellID = spells and spells[1]
     local key = (target or "") .. "/" .. (spellID or 0) .. "/" .. tostring(present)
 
@@ -531,6 +552,14 @@ local function BuildBuddyContainer(parent)
             -- the swipe from its actual duration, SetDurationText the countdown.
             -- We supply the widgets, it supplies the numbers we are not allowed
             -- to see.
+            --
+            -- The icon is the aura's own art, whatever that happens to be. For
+            -- two specs it is not the picture anyone would recognise --
+            -- Assassination is watched through a talent buff and Demonology
+            -- through an aura drawn with an achievement icon -- and that was
+            -- tried the other way round: no icon here, ours underneath instead.
+            -- It cost the change from dim to bright, because that only exists
+            -- while the engine draws a second, lit copy on top. Not worth it.
             local icon = button:CreateTexture(nil, "ARTWORK")
             icon:SetAllPoints()
             icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
@@ -733,6 +762,10 @@ function ns.CreateBuddyFrame()
     frame.buddy = BuildIcon(frame)
     frame.buddy:SetPoint("TOP", frame.buddyName, "BOTTOM", 0, -NAME_GAP)
 
+    -- Behind the container, and never hidden by us: while the aura runs, the
+    -- engine's own opaque icon covers it. That matters because we cannot ask
+    -- whether the aura is up -- the placeholder has to be something that gets
+    -- painted over rather than something we switch off.
     -- Behind the container, and never hidden by us: while the aura runs, the
     -- engine's own opaque icon covers it. That matters because we cannot ask
     -- whether the aura is up -- the placeholder has to be something that gets
