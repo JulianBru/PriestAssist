@@ -32,37 +32,74 @@ local frames = ns.frames
 -- with the aura has to live inside the button, created in the one window the
 -- container allows, and be left alone afterwards.
 
--- Major damage cooldown per specialisation, as the aura it puts on its own
--- caster. First pass -- several specs are missing on purpose rather than
--- guessed at, and a spec whose burst is not a self-buff (a summon, a burst of
--- instant damage) can never appear here at all.
+-- Major damage cooldown per specialisation, as **the aura it puts on its own
+-- caster**. Not the spell that was cast. The two are often the same number and
+-- sometimes are not, and when they differ the wrong one fails silently in the
+-- worst possible way: the placeholder still draws, because a cast ID is enough
+-- to look up an icon, so the frame sits there looking correct and waiting for a
+-- buff that will never match. Arcane Surge is cast as 365350 and lands as
+-- 365362, and it cost a raid night to notice.
 --
--- The ID is the *applied aura*, which is not always the cast spell.
+-- A list per specialisation rather than a single ID, because one is not enough:
+-- Affliction has two candidates depending on hero talent, Destruction has only
+-- the hero-talent one, and a Retribution Paladin presses Avenging Wrath or
+-- Crusade with no way to tell which from the specialisation. `includeSpellIDs`
+-- is a map, so any entry matching fills the slot and extra IDs cost nothing.
+--
+-- Every ID below was checked against its Wowhead entry -- the spell has to show
+-- a buff on its *caster*, not a debuff on the enemy and not a summon. Nothing
+-- here comes from memory; that produced six wrong rows and two whole
+-- specialisations written off that were fine. See docs/BUDDY_COOLDOWNS.md.
+--
+-- If a spec is absent, it is absent because nothing was verified for it, not
+-- because it cannot work. Assassination and Devourer DH are the two open ones.
 ns.BUDDY_COOLDOWNS = {
-    [62]  = 365350,    -- Arcane Mage      Arcane Surge
-    [63]  = 190319,    -- Fire Mage        Combustion
-    [64]  = 12472,     -- Frost Mage       Icy Veins
-    [102] = 194223,    -- Balance Druid    Celestial Alignment
-    [103] = 106951,    -- Feral Druid      Berserk
-    [253] = 19574,     -- BM Hunter        Bestial Wrath
-    [254] = 288613,    -- MM Hunter        Trueshot
-    [255] = 266779,    -- Survival Hunter  Coordinated Assault
-    [259] = 121471,    -- Assa Rogue       Shadow Blades
-    [260] = 13750,     -- Outlaw Rogue     Adrenaline Rush
-    [261] = 121471,    -- Sub Rogue        Shadow Blades
-    [265] = 205180,    -- Aff Warlock      Summon Darkglare
-    [266] = 265187,    -- Demo Warlock     Summon Demonic Tyrant
-    [267] = 1122,      -- Destro Warlock   Summon Infernal
-    [269] = 137639,    -- WW Monk          Storm, Earth, and Fire
-    [70]  = 231895,    -- Ret Paladin      Crusade
-    [71]  = 227847,    -- Arms Warrior     Bladestorm
-    [72]  = 1719,      -- Fury Warrior     Recklessness
-    [251] = 51271,     -- Frost DK         Pillar of Frost
-    [252] = 275699,    -- UH DK            Apocalypse
-    [262] = 191634,    -- Ele Shaman       Stormkeeper
-    [263] = 51533,     -- Enh Shaman       Feral Spirit
-    [577] = 191427,    -- Havoc DH         Metamorphosis
-    [1467] = 375087,   -- Deva Evoker      Dragonrage
+    -- Mage
+    [62]  = { 365362 },           -- Arcane        Arcane Surge, cast is 365350
+    [63]  = { 190319 },           -- Fire          Combustion, seen in game
+    [64]  = { 12472 },            -- Frost         Icy Veins
+
+    -- Druid
+    [102] = { 194223 },           -- Balance       Celestial Alignment
+    [103] = { 391528 },           -- Feral         Convoke the Spirits
+
+    -- Hunter
+    [253] = { 19574 },            -- Beast Mastery Bestial Wrath
+    [254] = { 288613 },           -- Marksmanship  Trueshot
+    [255] = { 1250646 },          -- Survival      Takedown
+
+    -- Paladin, Warrior
+    [70]  = { 31884 },            -- Retribution   Avenging Wrath
+    [71]  = { 107574 },           -- Arms          Avatar
+    [72]  = { 107574 },           -- Fury          Avatar
+
+    -- Death Knight
+    [251] = { 1249658 },          -- Frost         Breath of Sindragosa
+    [252] = { 42650 },            -- Unholy        Army of the Dead
+
+    -- Rogue
+    [260] = { 13750 },            -- Outlaw        Adrenaline Rush
+    [261] = { 121471 },           -- Subtlety      Shadow Blades
+
+    -- Shaman, Monk, Demon Hunter
+    [262] = { 1219480 },          -- Elemental     Ascendance, cast is 114050
+    [263] = { 114051 },           -- Enhancement   Ascendance
+    [269] = { 1249625 },          -- Windwalker    Zenith
+    [577] = { 162264 },           -- Havoc         Metamorphosis, cast is 191427
+
+    -- Evoker
+    [1467] = { 375087 },          -- Devastation   Dragonrage
+    [1473] = { 404977 },          -- Augmentation  Time Skip -- see the note in
+                                  --               the doc; Breath of Eons may
+                                  --               be the better window
+
+    -- Warlock. The summons were wrongly written off as untrackable: Darkglare
+    -- carries its own aura and the Tyrant applies a separate one. Only Summon
+    -- Infernal really has none -- no Apply Aura effect, 250 ms duration and a
+    -- No Aura Icon flag -- so Destruction rests on the Hellcaller talent alone.
+    [265] = { 205180, 442726 },   -- Affliction    Summon Darkglare, Malevolence
+    [266] = { 265273 },           -- Demonology    Demonic Power, cast is 265187
+    [267] = { 442726 },           -- Destruction   Malevolence, Hellcaller only
 }
 
 local ICON = 44
@@ -273,14 +310,18 @@ end
 
 -- Which spell we are currently watching, so the container is only rebuilt when
 -- it actually changes rather than on every refresh.
-local watchedSpellID, watchedUnit
+local watchedSpells, watchedUnit
 
 -- What the placeholder and the stripe were last drawn for. SPELL_UPDATE_COOLDOWN
 -- fires several times a second in combat and the class colour comes from an
 -- overview that walks the priority list, so this is not work to repeat per event.
 local styledFor
 
-local function BuddySpellID()
+--- The spell list to watch for the current target, and the target itself.
+---
+--- The list is the table straight out of BUDDY_COOLDOWNS, never a copy, so
+--- callers can compare it by identity to tell whether anything changed.
+local function BuddySpells()
     local target = ns.GetAssignedTarget()
 
     if not target or target == "" then
@@ -291,12 +332,23 @@ local function BuddySpellID()
     return specID and ns.BUDDY_COOLDOWNS[specID] or nil, target
 end
 
+local function SpellFilterFor(spells)
+    local include = {}
+
+    for _, spellID in ipairs(spells) do
+        include[spellID] = true
+    end
+
+    return include
+end
+
 -- The dimmed icon and the stripe under it. Neither can react to the aura itself
 -- -- we are never told whether it is up -- so both describe the *target*: what we
 -- are waiting for, and whether they are still here to wait for.
-local function UpdateBuddyStyle(target, spellID)
+local function UpdateBuddyStyle(target, spells, unit)
     local frame = frames.buddyFrame
-    local present = target and target ~= "" and ns.IsInOurGroup(target) or false
+    local present = unit ~= nil
+    local spellID = spells and spells[1]
     local key = (target or "") .. "/" .. (spellID or 0) .. "/" .. tostring(present)
 
     if key == styledFor then
@@ -359,9 +411,14 @@ local function UpdateBuddySlot()
         return
     end
 
-    local spellID, target = BuddySpellID()
+    local spells, target = BuddySpells()
 
-    UpdateBuddyStyle(target, spellID)
+    -- Resolved fresh, never remembered. A token is only true for this instant:
+    -- raid7 becomes a different player when the raid reorders, and a remembered
+    -- one would quietly point the container at a stranger.
+    local unit = target and target ~= "" and ns.UnitForName(target) or nil
+
+    UpdateBuddyStyle(target, spells, unit)
 
     local container = frame.buddy.container
 
@@ -369,20 +426,18 @@ local function UpdateBuddySlot()
         return
     end
 
-    -- Three things must hold before the container may run: a target, a spell
-    -- worth watching, and the target actually being in our group.
+    -- Two things must hold: a spell worth watching, and a real unit token.
     --
-    -- The group check is not a nicety. Blizzard applies the spell-ID filter only
-    -- when AuraContainerUtil.CanApplyIdentityCandidateFilters passes, and it
-    -- *skips* the filter rather than failing it when that check says no -- so
-    -- every helpful aura on the unit walks straight into the slot. Outside a
-    -- group the name resolves to no unit token, the check says no, and one
-    -- tracked cooldown turns into whatever buff the player happens to have.
-    --
-    -- Worth stating because it is easy to think it cannot happen: specialisation
-    -- data outlives the group it was learned in. Raid with somebody, leave the
-    -- group, and their spec is still on file with no unit to go with it.
-    local ready = spellID and target and target ~= "" and ns.IsInOurGroup(target)
+    -- The token is what matters, and it replaced an IsInOurGroup check that was
+    -- too weak. Blizzard applies the spell-ID filter only when
+    -- AuraContainerUtil.CanApplyIdentityCandidateFilters passes, and it *skips*
+    -- the filter rather than failing it when that check says no -- so every
+    -- helpful aura the engine can find walks straight into the slot. Handing
+    -- SetUnit a plain name leaves that resolution to the engine, and when it
+    -- fails there is no error and no empty frame: a druid's Cat Form turns up
+    -- while the target is a mage. Asking for the token ourselves means we only
+    -- ever bind to a unit we are permitted to read.
+    local ready = spells and unit
 
     if not ready then
         -- Switched off, not filtered. A filter that means "show nothing" is
@@ -393,20 +448,22 @@ local function UpdateBuddySlot()
             container:SetEnabled(false)
         end
 
-        watchedSpellID, watchedUnit = nil, nil
+        watchedSpells, watchedUnit = nil, nil
         return
     end
 
-    -- SetUnit takes a plain name: tested on 12.1, the engine resolves it, so no
-    -- walking raid1..raid40 to find a token.
-    if target ~= watchedUnit then
-        container:SetUnit(target)
-        watchedUnit = target
+    if unit ~= watchedUnit then
+        container:SetUnit(unit)
+        watchedUnit = unit
     end
 
-    if spellID ~= watchedSpellID then
-        container:SetAuraSlotCandidateFilters("cd", { includeSpellIDs = { [spellID] = true } })
-        watchedSpellID = spellID
+    -- Compared by identity: the list is the constant out of BUDDY_COOLDOWNS, so
+    -- a different specialisation is a different table and an unchanged one is
+    -- literally the same table.
+    if spells ~= watchedSpells then
+        container:SetAuraSlotCandidateFilters("cd",
+            { includeSpellIDs = SpellFilterFor(spells) })
+        watchedSpells = spells
     end
 
     -- Last, deliberately: unit and filter are in place before anything is

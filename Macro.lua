@@ -2205,14 +2205,37 @@ local SOURCE_LABEL = {
 -- The unit token for a group member, so their class can be read without them
 -- running any addon. Nil when they are not in the group, or for a name that
 -- only exists in the saved variables.
-local function UnitForName(targetName)
+--- A real unit token for a stored name, or nil where there is none.
+---
+--- Public because the buddy frame needs it: handing a plain name to an aura
+--- container leaves the engine to resolve it, and when that resolution fails the
+--- container does not go quiet -- it stops applying the spell filter and shows
+--- whatever it does find. A token that came from here is a unit we are allowed
+--- to read, which is the property the container actually needs.
+---
+--- The token is only true for this moment. `raid7` becomes somebody else when
+--- the raid reorders, so callers resolve again rather than remembering.
+function ns.UnitForName(targetName)
     local wanted = NormalizeNoteName(targetName)
 
     if wanted == "" then
         return nil
     end
 
-    if UnitName and wanted == NormalizeNoteName(UnitName("player")) then
+    -- Guarded on the way out of every UnitName, which the local version this
+    -- grew from did not do. Group members are never identity-restricted by the
+    -- documented rule, so this should not trigger -- but NormalizeNoteName runs
+    -- string.match on the result, and a secret value there is an immediate
+    -- error rather than a wrong answer. The same guard sits on the other name
+    -- comparison in this file for the same reason.
+    local function Matches(unit)
+        local name = UnitName and UnitName(unit)
+
+        return name and not ns.IsSecretValue(name)
+            and NormalizeNoteName(name) == wanted
+    end
+
+    if Matches("player") then
         return "player"
     end
 
@@ -2227,14 +2250,15 @@ local function UnitForName(targetName)
     for index = 1, count do
         local unit = prefix .. index
 
-        if UnitExists and UnitExists(unit) and UnitName
-            and NormalizeNoteName(UnitName(unit)) == wanted then
+        if UnitExists and UnitExists(unit) and Matches(unit) then
             return unit
         end
     end
 
     return nil
 end
+
+local UnitForName = ns.UnitForName
 
 --- Everything the preview needs, in one call. `name` is "" when nothing is set.
 function ns.GetAssignmentOverview()
