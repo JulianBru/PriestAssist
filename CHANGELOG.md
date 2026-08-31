@@ -1,6 +1,24 @@
 # Priest Assist
 
-## [1.9-alpha3](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha3) (2026-08-27)
+## [1.9-alpha4](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha4) (2026-08-31)
+
+### Added
+
+- A frame showing two cooldowns side by side: your own Power Infusion on the left, and the major cooldown of whoever you are set to infuse on the right. `/pa buddy` turns it on, `/pa buddy lock` pins it in place, and it is off until you ask for it.
+
+  The right icon is dim while you are waiting and lights up with a moving border for as long as their cooldown is running, which is the moment to press yours. Their name is above it in class colour, and the stripe underneath turns red if they are no longer in the group.
+
+  A prototype, and it looks like one. There is no settings tab yet, the size and the colours are fixed, and the frame moves by dragging it.
+
+  Neither half reads anything it is not allowed to. Since 12.0 an addon cannot look at another player's auras during an encounter, and since 12.1 the same is true of your own cooldown in seconds — so both halves ask the game for a handle and let it draw the numbers instead.
+
+- Cooldowns are known for 25 specialisations. Assassination Rogue is missing, because both of its cooldowns land on the enemy rather than on the rogue and there is nothing on them to watch. Destruction Warlock only works with the Hellcaller talent, for the same reason: Summon Infernal puts no buff on its caster.
+
+  Where a specialisation has more than one candidate — Affliction can be read from Summon Darkglare or from Malevolence — both are watched.
+
+### Fixed
+
+- Looking up which group member a stored name belongs to could throw an error rather than return an answer, in the content where names are withheld from addons. It is guarded now. Nothing depended on it before this release, so the fault was never reachable.
 
 ### Added
 

@@ -86,6 +86,10 @@ ns.BUDDY_COOLDOWNS = {
     [263] = { 114051 },           -- Enhancement   Ascendance
     [269] = { 1249625 },          -- Windwalker    Zenith
     [577] = { 162264 },           -- Havoc         Metamorphosis, cast is 191427
+    [1480] = { 1217607 },         -- Devourer      Void Metamorphosis, cast is
+                                  --               1217605. No fixed duration --
+                                  --               it ends when Fury runs out,
+                                  --               so expect no countdown
 
     -- Evoker
     [1467] = { 375087 },          -- Devastation   Dragonrage
