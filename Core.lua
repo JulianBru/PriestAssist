@@ -87,6 +87,16 @@ function ns.HandleSlashCommand(msg)
         return
     end
 
+    -- Prototype, no settings tab yet.
+    if command == "buddy" then
+        if rest:lower() == "lock" then
+            ns.ToggleBuddyFrameLock()
+        else
+            ns.ToggleBuddyFrame()
+        end
+        return
+    end
+
     if command == "top" then
         ns.ReportTopTargets(rest ~= "" and rest or nil)
         return

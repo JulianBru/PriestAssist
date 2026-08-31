@@ -22,4 +22,5 @@ Comm.lua
 Config.lua
 Options.lua
 Minimap.lua
+BuddyFrame.lua
 Core.lua

@@ -874,6 +874,14 @@ function ns.OnSpecializationUpdate(specID, _, _, playerName, talentString)
     talentStringByName[key] = talentString
     heroByName[key] = ns.DecodeHeroTalent(talentString)
     ns.RequestConfigRefresh()
+
+    -- The buddy frame reads the specialisation to know which cooldown to watch,
+    -- and this broadcast is the only thing that ever supplies one. Without the
+    -- refresh, a target set before its owner's specialisation arrived stays
+    -- blank until some unrelated event happens to come along.
+    if ns.UpdateBuddyFrame then
+        ns.UpdateBuddyFrame()
+    end
 end
 
 -- Decode what combat refused. Called once the fight ends.
@@ -2170,6 +2178,12 @@ function ns.SetAssignedTarget(targetName, source)
     -- message on the wire every time.
     if db.assignedTarget ~= previous and ns.AnnounceAssignment then
         ns.AnnounceAssignment()
+    end
+
+    -- The one door every assignment passes through, so the one place the buddy
+    -- frame needs to hear about a change of target.
+    if ns.UpdateBuddyFrame then
+        ns.UpdateBuddyFrame()
     end
 end
 

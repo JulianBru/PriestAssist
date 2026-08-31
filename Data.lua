@@ -329,6 +329,18 @@ ns.DEFAULTS = {
         x = 0,
         y = 180,
     },
+    -- Prototype, off by default. /pa buddy toggles it.
+    buddyFrame = {
+        enabled = false,
+        locked = false,
+        scale = 1,
+        point = {
+            point = "CENTER",
+            relativePoint = "CENTER",
+            x = 0,
+            y = -140,
+        },
+    },
     minimap = {
         angle = 225,
         hidden = false,
