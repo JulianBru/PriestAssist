@@ -330,10 +330,32 @@ ns.DEFAULTS = {
         y = 180,
     },
     -- Prototype, off by default. /pa buddy toggles it.
+    -- Global rather than per profile, unlike everything else here. Where a HUD
+    -- element sits on the screen and how big it is belongs to the screen, not to
+    -- the specialisation, and a position that changed with the content profile
+    -- would be baffling to drag.
     buddyFrame = {
         enabled = false,
         locked = false,
         scale = 1,
+        showOwnName = true,
+        showTargetName = true,
+
+        -- framed | frameless | compact
+        --
+        -- compact drops your own Power Infusion and shows only the target, so
+        -- showOwnName has nothing to act on there.
+        style = "framed",
+
+        -- glow and glowColor are read when the aura button is built and cannot
+        -- be changed afterwards, so ns.RebuildBuddyFrame handles them. Class
+        -- colour is deliberately not an option: it would be baked in at build
+        -- time and stay wrong from the next target onwards.
+        glow = true,
+        glowColor = "gold",
+
+        -- always | group | instance | combat
+        visibility = "always",
         point = {
             point = "CENTER",
             relativePoint = "CENTER",
@@ -470,9 +492,20 @@ function ns.IsEditModeActive()
     return EditModeManagerFrame and EditModeManagerFrame:IsShown()
 end
 
+--- Registered over the palette's own "accent" rather than under the addon name.
+---
+--- The widget constructors resolve "accent", so this is the whole theme: every
+--- widget is themed the moment it is built. It used to be registered under
+--- ADDON_NAME, which meant nothing found it and each call site had to repaint
+--- its widget afterwards -- thirty-four of them, and the buddy tab shipped five
+--- checkboxes still wearing the palette's purple because that step is invisible
+--- when you forget it.
+---
+--- Must run before any widget is created. Core.lua does this at PLAYER_LOGIN,
+--- two lines above CreateConfigPanel.
 function ns.ApplyVoidTheme()
     if UI and UI.SetAddonAccentColor then
-        UI.SetAddonAccentColor(ADDON_NAME, ns.VOID_ACCENT_COLOR, ns.VOID_BUTTON_COLOR, ns.VOID_BUTTON_HOVER_COLOR)
+        UI.SetAddonAccentColor("accent", ns.VOID_ACCENT_COLOR, ns.VOID_BUTTON_COLOR, ns.VOID_BUTTON_HOVER_COLOR)
     end
 end
 
@@ -484,62 +517,8 @@ function ns.GetThemeAccentName()
     return "accent"
 end
 
-function ns.ApplyVoidAccentToCheckButton(checkButton)
-    if not checkButton then
-        return
-    end
 
-    local accentName = ns.GetThemeAccentName()
-    checkButton.accentColor = accentName
 
-    if checkButton.checkedTexture then
-        checkButton.checkedTexture:SetColorTexture(UI.GetColorRGB(accentName, 0.7))
-    end
-
-    if checkButton.highlightTexture then
-        checkButton.highlightTexture:SetColorTexture(UI.GetColorRGB(accentName, 0.1))
-    end
-end
-
-function ns.ApplyVoidAccentToSlider(slider)
-    if not slider then
-        return
-    end
-
-    local accentName = ns.GetThemeAccentName()
-    slider.accentColor = accentName
-
-    if slider.thumb then
-        slider.thumb:SetColor(UI.GetColorTable(accentName, 0.7))
-    end
-
-    if slider.thumbBG2 then
-        slider.thumbBG2:SetColor(UI.GetColorTable(accentName, 0.25))
-    end
-
-    if slider.highlight then
-        slider.highlight:SetColor(UI.GetColorTable(accentName, 0.05))
-    end
-end
-
-function ns.ApplyVoidAccentToDropdown(dropdown)
-    if not dropdown then
-        return
-    end
-
-    local accentName = ns.GetThemeAccentName()
-    dropdown.accentColor = accentName
-
-    if dropdown.button then
-        dropdown.button:SetColor(accentName .. "_hover")
-    end
-
-    if dropdown.buttons then
-        for _, button in ipairs(dropdown.buttons) do
-            button:SetColor(accentName .. "_transparent")
-        end
-    end
-end
 
 -- The settings that moved into profiles in 1.2. Read off the old flat table so
 -- an upgrade keeps behaving exactly as before.

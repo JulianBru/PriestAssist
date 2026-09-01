@@ -261,7 +261,7 @@ function UI.CreateCheckButton(parent, label, onCheck)
     local fill = box:CreateTexture(nil, "OVERLAY")
     fill:SetPoint("TOPLEFT",     box, "TOPLEFT",     2, -2)
     fill:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -2,  2)
-    fill:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.90)
+    fill:SetColorTexture(UI.GetColorRGB("accent", 0.90))
     fill:Hide()
 
     container.checkedTexture   = fill
@@ -291,6 +291,18 @@ function UI.CreateCheckButton(parent, label, onCheck)
 
     function container:SetChecked(v) Apply(v and true or false) end
     function container:GetChecked()  return container._checked   end
+
+    --- Greyed out and unclickable, for a setting that exists but has nothing to
+    --- act on. The hit area is a local button, so this is the only way in from
+    --- outside; without it a disabled checkbox would still toggle itself.
+    function container:SetEnabled(enabled)
+        enabled = enabled ~= false
+        self._enabled = enabled
+        self:SetAlpha(enabled and 1.0 or 0.4)
+        hit:EnableMouse(enabled)
+    end
+
+    function container:IsEnabled() return self._enabled ~= false end
 
     hit:SetScript("OnClick", function()
         local s = not container._checked
@@ -353,7 +365,7 @@ function UI.CreateSlider(parent, text, width, low, high, step, isPercentage, sho
     sl.highlight = sl:CreateTexture(nil, "ARTWORK")
     sl.highlight:SetPoint("LEFT", 0, 0)
     sl.highlight:SetHeight(3)
-    sl.highlight:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 0.40)
+    sl.highlight:SetColorTexture(UI.GetColorRGB("accent", 0.05))
     sl.highlight.SetColor = function(self, color)
         local ct = type(color) == "table" and color or Resolve(color)
         self:SetColorTexture(ct[1], ct[2], ct[3], ct[4] or 1.0)
@@ -362,7 +374,7 @@ function UI.CreateSlider(parent, text, width, low, high, step, isPercentage, sho
     -- Thumb (visual only)
     sl.thumb = CreateFrame("Frame", nil, sl, BackdropTemplateMixin and "BackdropTemplate" or nil)
     sl.thumb:SetSize(10, 14)
-    StyleFrame(sl.thumb, Resolve("accent"), C.black)
+    StyleFrame(sl.thumb, UI.GetColorTable("accent", 0.7), C.black)
     sl.thumb.SetColor = function(self, color)
         local ct = type(color) == "table" and color or Resolve(color)
         StyleFrame(self, ct, C.black)
@@ -370,6 +382,7 @@ function UI.CreateSlider(parent, text, width, low, high, step, isPercentage, sho
 
     sl.thumbBG2 = sl:CreateTexture(nil, "ARTWORK")
     sl.thumbBG2:SetSize(14, 18)
+    sl.thumbBG2:SetColorTexture(UI.GetColorRGB("accent", 0.25))
     sl.thumbBG2.SetColor = function(self, color)
         local ct = type(color) == "table" and color or Resolve(color)
         self:SetColorTexture(ct[1], ct[2], ct[3], ct[4] or 1.0)
@@ -468,7 +481,7 @@ function UI.CreateDropdown(parent, width, maxSlots)
     dd.offset       = 0
     dd.selectedValue = nil
 
-    dd.button = UI.CreateButton(dd, "", "widget", width or 300, 22)
+    dd.button = UI.CreateButton(dd, "", "accent_hover", width or 300, 22)
     dd.button:SetPoint("TOPLEFT", 0, 0)
     dd.button.text:ClearAllPoints()
     dd.button.text:SetPoint("LEFT", 8, 0)
@@ -521,7 +534,7 @@ function UI.CreateDropdown(parent, width, maxSlots)
     end
 
     for i = 1, dd.maxSlots do
-        local itemBtn = UI.CreateButton(dd.list, "", "accent", (width or 300) - 4, 20)
+        local itemBtn = UI.CreateButton(dd.list, "", "accent_transparent", (width or 300) - 4, 20)
         itemBtn:SetPoint("TOPLEFT", 2, -2 - (i - 1) * 22)
         itemBtn.text:ClearAllPoints()
         itemBtn.text:SetPoint("LEFT", 8, 0)
@@ -909,7 +922,7 @@ function UI.CreateHeaderedFrame(parent, name, title, width, height, frameStrata,
     accentLine:SetPoint("TOPLEFT",  frame, "TOPLEFT",  1, -1)
     accentLine:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -1)
     accentLine:SetHeight(2)
-    accentLine:SetColorTexture(C.accent[1], C.accent[2], C.accent[3], 1.0)
+    accentLine:SetColorTexture(UI.GetColorRGB("accent"))
     frame._accentLine = accentLine
 
     -- 1px separator below title bar
@@ -923,7 +936,7 @@ function UI.CreateHeaderedFrame(parent, name, title, width, height, frameStrata,
     local titleFS = frame:CreateFontString(nil, "OVERLAY")
     titleFS:SetFont(GetFont(), 13, nil)
     titleFS:SetText(title or "")
-    titleFS:SetTextColor(C.accent[1], C.accent[2], C.accent[3], 1.0)
+    titleFS:SetTextColor(UI.GetColorRGB("accent"))
     titleFS:SetPoint("LEFT", frame, "TOPLEFT", 36, -(TITLE_H / 2) - 1)
     frame.title  = titleFS
     frame.header = frame

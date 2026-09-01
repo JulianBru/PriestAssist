@@ -6,8 +6,9 @@ local frames = ns.frames
 -- -- the point is to see when their burst is running so you can decide to press
 -- Power Infusion yourself.
 --
--- PROTOTYPE. Enabled with /pa buddy, no settings tab yet, and the cooldown table
--- below is a first pass rather than a complete one.
+-- Switched on with /pa buddy or from the Buddy tab, and off by default. While it
+-- is off nothing of it runs: the frequent events are unregistered and the only
+-- code left is an early return.
 --
 -- ─── Why it is built the way it is ───────────────────────────────────────────
 --
@@ -183,6 +184,18 @@ local DASH_H = "Interface\\AddOns\\PriestAssist\\Media\\glow-dash-h.tga"
 local DASH_V = "Interface\\AddOns\\PriestAssist\\Media\\glow-dash-v.tga"
 local DASH_MASK = "Interface\\Buttons\\WHITE8X8"
 
+-- Glow colours the panel offers. They are palette names, so the value stored in
+-- the database is looked up rather than trusted -- an unknown one falls back to
+-- gold instead of colouring the border with whatever GetColorRGB makes of it.
+--
+-- "accent" used to be here and was removed: the theme registers white over the
+-- palette's accent, so it had become a second White.
+local GLOW_COLORS = {
+    gold   = true,
+    white  = true,
+    danger = true,
+}
+
 local ANT_COUNT = 8      -- dashes distributed around the whole perimeter
 local ANT_THICKNESS = 2
 local ANT_PERIOD = 4     -- seconds for one full lap
@@ -309,10 +322,65 @@ end
 -- with it or there is a hole where it was.
 local function ApplyChrome()
     local frame = frames.buddyFrame
-    local locked = ns.GetDB().buddyFrame.locked
+    local db = ns.GetDB().buddyFrame
+    local style = db.style or "framed"
+    local compact = style == "compact"
 
-    frame.title:SetShown(not locked)
-    frame:SetHeight(PAD * 2 + CONTENT_H + (locked and 0 or TITLE_H))
+    -- Unlocked, the box and the title bar are always there whatever the style
+    -- says: they are the handle. A frameless frame you cannot grab would be a
+    -- frame you cannot move.
+    local showBox = (style ~= "frameless") or not db.locked
+
+    frame.title:SetShown(not db.locked)
+    frame:SetScale(db.scale or 1)
+
+    if frame.SetBackdropColor then
+        local pr, pg, pb = ns.UI.GetColorRGB("bg")
+        local br, bg, bb = ns.UI.GetColorRGB("border")
+
+        frame:SetBackdropColor(pr, pg, pb, showBox and 0.85 or 0)
+        frame:SetBackdropBorderColor(br, bg, bb, showBox and 1 or 0)
+    end
+
+    -- Compact drops the left half entirely, so the frame is one column narrower
+    -- and the right column moves over to where the left one was.
+    frame.own:SetShown(not compact)
+    frame.ownName:SetShown(not compact and db.showOwnName ~= false)
+    frame.buddyName:SetShown(db.showTargetName ~= false)
+
+    frame.buddyName:ClearAllPoints()
+    frame.buddyName:SetPoint(compact and "TOPLEFT" or "TOPRIGHT")
+
+    frame:SetWidth(PAD * 2 + COLUMN + (compact and 0 or COLUMN + GAP))
+    frame:SetHeight(PAD * 2 + CONTENT_H + (db.locked and 0 or TITLE_H))
+end
+
+--- Whether the frame may be on screen at all, before anything about the target
+--- is considered. Unlocked always wins: a rule that hides the frame while you
+--- are trying to place it would be unusable.
+local function AllowedByVisibility()
+    local db = ns.GetDB().buddyFrame
+
+    if not db.locked then
+        return true
+    end
+
+    local rule = db.visibility or "always"
+
+    if rule == "group" then
+        return IsInGroup and IsInGroup() and true or false
+    end
+
+    if rule == "instance" then
+        local inInstance = IsInInstance and IsInInstance()
+        return inInstance and true or false
+    end
+
+    if rule == "combat" then
+        return UnitAffectingCombat and UnitAffectingCombat("player") and true or false
+    end
+
+    return true
 end
 
 local function ApplyPoint()
@@ -336,11 +404,23 @@ local function UpdateOwnCooldown()
     -- SecretWhenCooldownsRestricted and stops answering in exactly the content
     -- this frame is for; the duration object has no such predicate, and the
     -- widget animates it on its own -- cooldown reduction included.
+    --
+    -- The second argument is ignoreGCD. Without it every global counts as an
+    -- active cooldown, which sweeps the swipe and would blink the icon grey
+    -- every 1.5 seconds.
     local duration = C_Spell and C_Spell.GetSpellCooldownDuration
-        and C_Spell.GetSpellCooldownDuration(ns.POWER_INFUSION_SPELL_ID)
+        and C_Spell.GetSpellCooldownDuration(ns.POWER_INFUSION_SPELL_ID, true)
 
     if duration and frame.own.cooldown.SetCooldownFromDurationObject then
         frame.own.cooldown:SetCooldownFromDurationObject(duration)
+    end
+
+    -- Whether the call returned anything, never what it returned. The function
+    -- is documented MayReturnNothing and gives back "the active cooldown
+    -- duration", so its mere presence is the state -- and presence is something
+    -- we are allowed to know about a value we may not read.
+    if frame.own.icon then
+        frame.own.icon:SetDesaturated(duration ~= nil)
     end
 end
 
@@ -606,7 +686,16 @@ local function BuildBuddyContainer(parent)
             glow:SetFrameLevel(level + 2)
             glow:EnableMouse(false)
 
-            StartMarchingAnts(glow, ICON - 2, ns.UI.GetColorRGB("gold"))
+            -- Read once, here, and never again: everything below this frame is
+            -- closed to us afterwards. Changing either setting means rebuilding
+            -- the frame, which is what ns.RebuildBuddyFrame is for.
+            local settings = ns.GetDB().buddyFrame
+
+            if settings.glow ~= false then
+                StartMarchingAnts(glow, ICON - 2,
+                    ns.UI.GetColorRGB(GLOW_COLORS[settings.glowColor] and settings.glowColor
+                        or "gold"))
+            end
 
             -- The number gets a frame of its own above the cooldown. Handing the
             -- font string straight to the button put it on the button, which is
@@ -763,12 +852,23 @@ function ns.CreateBuddyFrame()
         and C_Spell.GetSpellInfo(ns.POWER_INFUSION_SPELL_ID)
     icon:SetTexture(info and info.iconID or "Interface\\Icons\\Spell_Holy_PowerInfusion")
 
+    frame.own.icon = icon
+
     frame.own.cooldown = CreateFrame("Cooldown", nil, frame.own, "CooldownFrameTemplate")
     frame.own.cooldown:SetAllPoints()
 
     if frame.own.cooldown.SetCountdownFont then
         frame.own.cooldown:SetCountdownFont(COUNTDOWN_FONT)
     end
+
+    -- The widget knows when it finishes; we do not. SPELL_UPDATE_COOLDOWN is
+    -- not reliable for the moment a cooldown expires -- in combat something
+    -- else fires soon enough to hide that, out of combat the icon would stay
+    -- grey for a while. This is Blizzard's own answer, used the same way in the
+    -- Cooldown Manager.
+    frame.own.cooldown:SetScript("OnCooldownDone", function()
+        frame.own.icon:SetDesaturated(false)
+    end)
 
     -- Right: the target's cooldown, drawn by the engine.
     frame.buddyName = BuildName(frame.content)
@@ -819,28 +919,139 @@ function ns.CreateBuddyFrame()
     return frame
 end
 
---- Rebuild what the frame watches. Cheap enough to call from any refresh.
-function ns.UpdateBuddyFrame()
-    local db = ns.GetDB()
+-- Events the frame needs are registered here rather than in Core.lua: they are
+-- nobody else's business, and a prototype should be removable by deleting one
+-- file and one .toc line.
+--
+-- PLAYER_ENTERING_WORLD is the only one registered unconditionally, and it is
+-- what turns the rest on at login. Everything else exists only while the frame
+-- does: SPELL_UPDATE_COOLDOWN fires several times a second in combat, and a
+-- switched-off feature has no business waking for it all night.
+--
+-- The last three serve the visibility rule -- entering and leaving combat, and
+-- changing zone, are when "only in combat" and "only in dungeons" flip.
+local events = CreateFrame("Frame")
+events:RegisterEvent("PLAYER_ENTERING_WORLD")
 
-    if not frames.buddyFrame then
-        if not db.buddyFrame.enabled then
-            return
+local FREQUENT_EVENTS = {
+    "SPELL_UPDATE_COOLDOWN",
+    "GROUP_ROSTER_UPDATE",
+    "PLAYER_REGEN_ENABLED",
+    "PLAYER_REGEN_DISABLED",
+    "ZONE_CHANGED_NEW_AREA",
+}
+
+local frequentEventsOn = false
+
+local function SetFrequentEvents(on)
+    on = on and true or false
+
+    if on == frequentEventsOn then
+        return
+    end
+
+    frequentEventsOn = on
+
+    for _, event in ipairs(FREQUENT_EVENTS) do
+        if on then
+            events:RegisterEvent(event)
+        else
+            events:UnregisterEvent(event)
+        end
+    end
+end
+
+events:SetScript("OnEvent", function()
+    if ns.GetDB and ns.GetDB() and ns.GetDB().buddyFrame then
+        ns.UpdateBuddyFrame()
+    end
+end)
+
+--- Rebuild what the frame watches. Cheap enough to call from any refresh.
+---
+--- Switched off, this function is the only thing left of the feature: one table
+--- lookup and a return. Everything that could tick has been unregistered by
+--- then -- see SetFrequentEvents.
+function ns.UpdateBuddyFrame()
+    local db = ns.GetDB().buddyFrame
+
+    if not (db.enabled and ns.IsPriest()) then
+        SetFrequentEvents(false)
+
+        -- Hiding is what releases the container: its OnHide drops the unit
+        -- registrations, so nothing of ours is left listening to UNIT_AURA.
+        if frames.buddyFrame then
+            frames.buddyFrame:Hide()
         end
 
+        return
+    end
+
+    if not frames.buddyFrame then
         ns.CreateBuddyFrame()
     end
 
+    SetFrequentEvents(true)
+
     local frame = frames.buddyFrame
 
-    frame:SetShown(db.buddyFrame.enabled and ns.IsPriest() and true or false)
+    ApplyChrome()
+    frame:SetShown(AllowedByVisibility())
 
     if not frame:IsShown() then
         return
     end
 
-    UpdateOwnCooldown()
+    -- Nothing to update on the left half when the style has removed it.
+    if (db.style or "framed") ~= "compact" then
+        UpdateOwnCooldown()
+    end
+
     UpdateBuddySlot()
+end
+
+--- Start over, for the two settings that are baked into the aura button and
+--- cannot be reached afterwards: whether there is a glow and what colour it is.
+---
+--- The old frame is hidden rather than destroyed, because WoW has no way to
+--- destroy one. Each call therefore leaks a frame and a container. That is
+--- acceptable for something a person clicks a handful of times in a session and
+--- would not be if anything called it automatically -- so nothing does.
+function ns.RebuildBuddyFrame()
+    local old = frames.buddyFrame
+
+    if not old then
+        ns.UpdateBuddyFrame()
+        return
+    end
+
+    SavePoint()
+    old:Hide()
+    old:SetParent(nil)
+
+    frames.buddyFrame = nil
+    watchedSpells, watchedUnit, styledFor = nil, nil, nil
+
+    ns.UpdateBuddyFrame()
+end
+
+--- Everything that can be changed on a frame that already exists. The settings
+--- panel calls this; glow changes go through RebuildBuddyFrame instead.
+function ns.ApplyBuddyFrameSettings()
+    ns.UpdateBuddyFrame()
+end
+
+--- Back to the middle of the screen, for a frame that ended up somewhere the
+--- player cannot reach.
+function ns.ResetBuddyFramePosition()
+    local stored = ns.GetDB().buddyFrame.point
+
+    stored.point, stored.relativePoint = "CENTER", "CENTER"
+    stored.x, stored.y = 0, -140
+
+    if frames.buddyFrame then
+        ApplyPoint()
+    end
 end
 
 --- /pa buddy
@@ -877,19 +1088,3 @@ function ns.ToggleBuddyFrameLock()
     return db.buddyFrame.locked
 end
 
--- Events the frame needs are registered here rather than in Core.lua: they are
--- nobody else's business, and a prototype should be removable by deleting one
--- file and one .toc line.
---
--- SPELL_UPDATE_COOLDOWN is the only one the left half needs. Once the duration
--- object is handed over the widget animates on its own, so this is about
--- catching the moment a new cooldown starts, not about ticking.
-local events = CreateFrame("Frame")
-events:RegisterEvent("PLAYER_ENTERING_WORLD")
-events:RegisterEvent("SPELL_UPDATE_COOLDOWN")
-events:RegisterEvent("GROUP_ROSTER_UPDATE")
-events:SetScript("OnEvent", function()
-    if ns.GetDB and ns.GetDB() and ns.GetDB().buddyFrame then
-        ns.UpdateBuddyFrame()
-    end
-end)

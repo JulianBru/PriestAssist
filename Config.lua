@@ -165,6 +165,25 @@ function ns.RefreshConfigPanel()
     if cc.reminderEnabled     then cc.reminderEnabled:SetChecked(db.reminderEnabled and true or false) end
     if cc.minimapEnabled      then cc.minimapEnabled:SetChecked(not (db.minimap and db.minimap.hidden)) end
     if cc.useNoteAssignment   then cc.useNoteAssignment:SetChecked(db.useNoteAssignment and true or false) end
+
+    if cc.buddyEnabled then
+        local buddy = db.buddyFrame
+
+        cc.buddyEnabled:SetChecked(buddy.enabled and true or false)
+        cc.buddyLocked:SetChecked(buddy.locked and true or false)
+        cc.buddyOwnName:SetChecked(buddy.showOwnName ~= false)
+        cc.buddyTargetName:SetChecked(buddy.showTargetName ~= false)
+        cc.buddyGlow:SetChecked(buddy.glow ~= false)
+        cc.buddyScale:SetValue(math.floor((buddy.scale or 1) * 100 + 0.5))
+        cc.buddyVisibility:SetSelectedValue(buddy.visibility or "always")
+        cc.buddyGlowColor:SetSelectedValue(buddy.glowColor or "gold")
+        cc.buddyStyle:SetSelectedValue(buddy.style or "framed")
+
+        -- Target only has no left half, so there is no own name to show. The
+        -- box stays where it is and goes grey rather than disappearing, so the
+        -- tab does not change height when the style changes.
+        cc.buddyOwnName:SetEnabled((buddy.style or "framed") ~= "compact")
+    end
     if cc.previewName then
         local view = ns.GetAssignmentOverview()
 
@@ -1008,11 +1027,12 @@ function ns.CreateConfigPanel()
     local tabMacro    = MakeTab()
     local tabProfiles = MakeTab()
     local tabPriority = MakeTab()
+    local tabBuddy    = MakeTab()
     local tabAbout    = MakeTab()
-    local tabFrames   = { tabGeneral, tabReminder, tabMacro, tabProfiles, tabPriority, tabAbout }
+    local tabFrames   = { tabGeneral, tabReminder, tabMacro, tabProfiles, tabPriority, tabBuddy, tabAbout }
 
     -- ── Tab button system ─────────────────────────────────────────────────────
-    local tabDefs    = { "General", "Reminder", "Macro", "Profiles", "Damage Gain", "About" }
+    local tabDefs    = { "General", "Reminder", "Macro", "Profiles", "Damage Gain", "Buddy", "About" }
     local tabButtons = {}
     local activeTab  = 0
 
@@ -1146,7 +1166,6 @@ function ns.CreateConfigPanel()
         -- a few pixels at any panel width worth having.
         local COL_R = 274
 
-        ns.ApplyVoidAccentToCheckButton(configControls.reminderEnabled)
         configControls.reminderEnabled:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -14)
 
         configControls.validateTarget = UI.CreateCheckButton(p,
@@ -1154,7 +1173,6 @@ function ns.CreateConfigPanel()
             function(checked)
                 ns.GetDB().validateTargetOnReadyCheck = checked and true or false
             end)
-        ns.ApplyVoidAccentToCheckButton(configControls.validateTarget)
         configControls.validateTarget:SetPoint("TOPLEFT", configControls.reminderEnabled, "TOPLEFT", COL_R, 0)
 
         configControls.minimapEnabled = UI.CreateCheckButton(p,
@@ -1164,7 +1182,6 @@ function ns.CreateConfigPanel()
                 d.minimap.hidden = not checked
                 ns.UpdateMinimapButtonVisibility()
             end)
-        ns.ApplyVoidAccentToCheckButton(configControls.minimapEnabled)
         configControls.minimapEnabled:SetPoint("TOPLEFT", configControls.reminderEnabled, "BOTTOMLEFT", 0, -12)
 
         configControls.muteChat = UI.CreateCheckButton(p,
@@ -1183,7 +1200,6 @@ function ns.CreateConfigPanel()
                     ns.Print("Chat messages are back on.", "A5AAD9")
                 end
             end)
-        ns.ApplyVoidAccentToCheckButton(configControls.muteChat)
         configControls.muteChat:SetPoint("TOPLEFT", configControls.minimapEnabled, "TOPLEFT", COL_R, 0)
 
         -- ── Raid note ─────────────────────────────────────────────────────────
@@ -1204,7 +1220,6 @@ function ns.CreateConfigPanel()
 
                 ns.RefreshConfigPanel()
             end)
-        ns.ApplyVoidAccentToCheckButton(configControls.useNoteAssignment)
         configControls.useNoteAssignment:SetPoint("TOPLEFT", secNote, "BOTTOMLEFT", 0, -14)
 
         -- The note format is the one thing about this feature nobody can guess,
@@ -1237,7 +1252,6 @@ function ns.CreateConfigPanel()
 
                 ns.RefreshConfigPanel()
             end)
-        ns.ApplyVoidAccentToCheckButton(configControls.autoAssign)
         configControls.autoAssign:SetPoint("TOPLEFT", secAuto, "BOTTOMLEFT", 0, -14)
 
         -- The most machinery of any feature here -- ranking, hero talents,
@@ -1263,7 +1277,6 @@ function ns.CreateConfigPanel()
                 ns.GetDB().answerTopRequests = checked and "everyone" or "nobody"
                 ns.RefreshConfigPanel()
             end)
-        ns.ApplyVoidAccentToCheckButton(configControls.answerTop)
         configControls.answerTop:SetPoint("TOPLEFT", configControls.autoAssignStatus, "BOTTOMLEFT", 0, -10)
 
         configControls.answerTopLeadOnly = UI.CreateCheckButton(p,
@@ -1272,7 +1285,6 @@ function ns.CreateConfigPanel()
                 ns.GetDB().answerTopRequests = checked and "leadassist" or "everyone"
                 ns.RefreshConfigPanel()
             end)
-        ns.ApplyVoidAccentToCheckButton(configControls.answerTopLeadOnly)
         configControls.answerTopLeadOnly:SetPoint("TOPLEFT", configControls.answerTop, "TOPLEFT", COL_R, 0)
 
         -- Global on purpose: there are exactly two macros, they cannot change
@@ -1280,7 +1292,6 @@ function ns.CreateConfigPanel()
         local secMacros = SectionHeader(p, "Macros", configControls.answerTop, -26)
 
         configControls.macroScope = UI.CreateDropdown(p, CONTENT_W, 4)
-        ns.ApplyVoidAccentToDropdown(configControls.macroScope)
         -- The dropdown's own label is drawn 6px above it, so anchoring at -20
         -- put "Macro Tab" straight through the "MACROS" heading. This clears it.
         configControls.macroScope:SetPoint("TOPLEFT", secMacros, "BOTTOMLEFT", 0, -32)
@@ -1297,6 +1308,155 @@ function ns.CreateConfigPanel()
     end
 
     -- ── TAB 2: Reminder ───────────────────────────────────────────────────────
+    -- ── Buddy tab ─────────────────────────────────────────────────────────────
+    --
+    -- Global settings, not profile ones: where a HUD element sits belongs to the
+    -- screen rather than to the specialisation. Everything applies at once
+    -- except the two glow settings, which are baked into the aura button when it
+    -- is created -- those rebuild the frame.
+    do
+        local p = tabBuddy
+        local HALF = math.floor((CONTENT_W - 10) / 2)
+        local sec = SectionHeader(p, "Buddy Frame")
+
+        configControls.buddyEnabled = UI.CreateCheckButton(p,
+            "Show the buddy frame",
+            function(checked)
+                ns.GetDB().buddyFrame.enabled = checked and true or false
+                ns.ApplyBuddyFrameSettings()
+            end)
+        configControls.buddyEnabled:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -10)
+
+        configControls.buddyLocked = UI.CreateCheckButton(p,
+            "Lock the position",
+            function(checked)
+                ns.GetDB().buddyFrame.locked = checked and true or false
+                ns.ApplyBuddyFrameSettings()
+            end)
+        configControls.buddyLocked:SetPoint("TOPLEFT", configControls.buddyEnabled,
+            "TOPLEFT", HALF, 0)
+
+        configControls.buddyOwnName = UI.CreateCheckButton(p,
+            "Show your own name",
+            function(checked)
+                ns.GetDB().buddyFrame.showOwnName = checked and true or false
+                ns.ApplyBuddyFrameSettings()
+            end)
+        configControls.buddyOwnName:SetPoint("TOPLEFT", configControls.buddyEnabled,
+            "BOTTOMLEFT", 0, -6)
+
+        configControls.buddyTargetName = UI.CreateCheckButton(p,
+            "Show the target's name",
+            function(checked)
+                ns.GetDB().buddyFrame.showTargetName = checked and true or false
+                ns.ApplyBuddyFrameSettings()
+            end)
+        configControls.buddyTargetName:SetPoint("TOPLEFT", configControls.buddyOwnName,
+            "TOPLEFT", HALF, 0)
+
+        -- Style and visibility, side by side: both answer "what does it look
+        -- like and when", and neither needs the full width.
+        configControls.buddyStyle = UI.CreateDropdown(p, HALF - 4, 4)
+        configControls.buddyStyle:SetPoint("TOPLEFT", configControls.buddyOwnName,
+            "BOTTOMLEFT", 0, -34)
+        configControls.buddyStyle:SetLabel("Style", accent)
+        configControls.buddyStyle:SetItems({
+            { value = "framed",    text = "Framed" },
+            { value = "frameless", text = "Frameless" },
+            { value = "compact",   text = "Target only" },
+        })
+        configControls.buddyStyle:SetOnSelect(function(value)
+            ns.GetDB().buddyFrame.style = value
+            ns.ApplyBuddyFrameSettings()
+            ns.RefreshConfigPanel()
+        end)
+
+        configControls.buddyVisibility = UI.CreateDropdown(p, HALF - 4, 4)
+        configControls.buddyVisibility:SetPoint("TOPLEFT", configControls.buddyStyle,
+            "TOPRIGHT", 10, 0)
+        configControls.buddyVisibility:SetLabel("Visible", accent)
+        configControls.buddyVisibility:SetItems({
+            { value = "always",   text = "Always" },
+            { value = "group",    text = "In a group" },
+            { value = "instance", text = "Dungeons and raids" },
+            { value = "combat",   text = "In combat" },
+        })
+        configControls.buddyVisibility:SetOnSelect(function(value)
+            ns.GetDB().buddyFrame.visibility = value
+            ns.ApplyBuddyFrameSettings()
+        end)
+
+        configControls.buddyStyleNote = UI.CreateFontString(p,
+            "Unlocked, the frame keeps its box and ignores the visibility rule, "
+            .. "so you can always find it to move it.", "textDim", "FONT_SMALL")
+        configControls.buddyStyleNote:SetPoint("TOPLEFT", configControls.buddyStyle,
+            "BOTTOMLEFT", 1, -8)
+        configControls.buddyStyleNote:SetWidth(CONTENT_W - 2)
+        configControls.buddyStyleNote:SetJustifyH("LEFT")
+
+        configControls.buddyScale = UI.CreateSlider(p, "Scale", CONTENT_W - 2,
+            50, 150, 5, true, true)
+        configControls.buddyScale.label:SetColor(accent)
+        configControls.buddyScale:SetPoint("TOPLEFT", configControls.buddyStyleNote,
+            "BOTTOMLEFT", 0, -32)
+        configControls.buddyScale:SetOnValueChanged(function(value)
+            ns.GetDB().buddyFrame.scale = value / 100
+            ns.ApplyBuddyFrameSettings()
+        end)
+        configControls.buddyScale:EnableMouseWheel(true)
+
+        -- Not "Reset Position": the panel footer already has a button by that
+        -- name, and the two do different things.
+        configControls.buddyReset = UI.CreateButton(p, "Reset Buddy Position", accent, 160, 22)
+        configControls.buddyReset:SetPoint("TOPLEFT", configControls.buddyScale,
+            "BOTTOMLEFT", -1, -28)
+        configControls.buddyReset:SetScript("OnClick", function()
+            ns.ResetBuddyFramePosition()
+        end)
+
+        -- Glow
+        local secGlow = SectionHeader(p, "Glow", configControls.buddyReset, -20)
+
+        configControls.buddyGlowIntro = UI.CreateFontString(p,
+            "A dashed line travels around the target's icon for exactly as long "
+            .. "as their cooldown runs. It is the signal to press Power Infusion, "
+            .. "so nothing here looks different until one does.",
+            "textDim", "FONT_SMALL")
+        configControls.buddyGlowIntro:SetPoint("TOPLEFT", secGlow, "BOTTOMLEFT", 1, -10)
+        configControls.buddyGlowIntro:SetWidth(CONTENT_W - 2)
+        configControls.buddyGlowIntro:SetJustifyH("LEFT")
+
+        -- The dropdown is placed first and the checkbox hangs off it, because a
+        -- dropdown carries its label *above* itself. Anchoring it to the
+        -- checkbox put that label back up into the paragraph above -- and the
+        -- paragraph is two lines, so nothing showed the collision until it was
+        -- on screen. The 34 is the same clearance the Style row uses.
+        configControls.buddyGlowColor = UI.CreateDropdown(p, HALF - 4, 4)
+        configControls.buddyGlowColor:SetPoint("TOPLEFT", configControls.buddyGlowIntro,
+            "BOTTOMLEFT", HALF, -34)
+        configControls.buddyGlowColor:SetLabel("Glow Color", accent)
+        configControls.buddyGlowColor:SetItems({
+            { value = "gold",   text = "Gold" },
+            { value = "white",  text = "White" },
+            { value = "danger", text = "Red" },
+        })
+        configControls.buddyGlowColor:SetOnSelect(function(value)
+            ns.GetDB().buddyFrame.glowColor = value
+            ns.RebuildBuddyFrame()
+        end)
+
+        -- Hung off the dropdown's button so the two line up whatever the label
+        -- above it needs.
+        configControls.buddyGlow = UI.CreateCheckButton(p,
+            "Show the glow",
+            function(checked)
+                ns.GetDB().buddyFrame.glow = checked and true or false
+                ns.RebuildBuddyFrame()
+            end)
+        configControls.buddyGlow:SetPoint("LEFT",
+            configControls.buddyGlowColor.button, "LEFT", -HALF, 0)
+    end
+
     do
         local p = tabReminder
 
@@ -1308,7 +1468,6 @@ function ns.CreateConfigPanel()
         local OUTLINE_W = CONTENT_W - FONT_W - 8
 
         configControls.fontDropdown = UI.CreateDropdown(p, FONT_W, 8)
-        ns.ApplyVoidAccentToDropdown(configControls.fontDropdown)
         configControls.fontDropdown:SetPoint("TOPLEFT", secApp, "BOTTOMLEFT", 0, -32)
         configControls.fontDropdown:SetLabel("Font", accent)
         configControls.fontDropdown:SetItems(ns.GetFontDropdownItems())
@@ -1319,7 +1478,6 @@ function ns.CreateConfigPanel()
         end)
 
         configControls.outlineDropdown = UI.CreateDropdown(p, OUTLINE_W, 4)
-        ns.ApplyVoidAccentToDropdown(configControls.outlineDropdown)
         configControls.outlineDropdown:SetPoint("TOPLEFT", configControls.fontDropdown, "TOPRIGHT", 8, 0)
         configControls.outlineDropdown:SetLabel("Outline", accent)
         configControls.outlineDropdown:SetItems(ns.OUTLINE_OPTIONS)
@@ -1331,7 +1489,6 @@ function ns.CreateConfigPanel()
 
         -- Font Size slider
         configControls.fontSizeSlider = UI.CreateSlider(p, "Font Size", CONTENT_W - 2, 12, 40, 1, false, true)
-        ns.ApplyVoidAccentToSlider(configControls.fontSizeSlider)
         configControls.fontSizeSlider.label:SetColor(accent)
         configControls.fontSizeSlider:SetPoint("TOPLEFT", configControls.fontDropdown, "BOTTOMLEFT", 1, -40)
         configControls.fontSizeSlider:SetOnValueChanged(function(value)
@@ -1345,7 +1502,6 @@ function ns.CreateConfigPanel()
         local secDisplay = SectionHeader(p, "Display", configControls.fontSizeSlider, -30)
 
         configControls.reminderStrata = UI.CreateDropdown(p, CONTENT_W, 6)
-        ns.ApplyVoidAccentToDropdown(configControls.reminderStrata)
         configControls.reminderStrata:SetPoint("TOPLEFT", secDisplay, "BOTTOMLEFT", 0, -32)
         configControls.reminderStrata:SetLabel("Frame Strata", accent)
         configControls.reminderStrata:SetItems(ns.STRATA_OPTIONS)
@@ -1360,7 +1516,6 @@ function ns.CreateConfigPanel()
 
         -- Fade Out Delay slider
         configControls.durationSlider = UI.CreateSlider(p, "Fade Out Delay", CONTENT_W - 2, 1, 15, 1, false, true)
-        ns.ApplyVoidAccentToSlider(configControls.durationSlider)
         configControls.durationSlider.label:SetColor(accent)
         configControls.durationSlider:SetPoint("TOPLEFT", secTiming, "BOTTOMLEFT", 1, -24)
         configControls.durationSlider:SetOnValueChanged(function(value)
@@ -1384,7 +1539,6 @@ function ns.CreateConfigPanel()
         local SPEC_SEG_W = configControls.macroSpecSegments.width
 
         configControls.profileSelect = UI.CreateDropdown(p, CONTENT_W - SPEC_SEG_W - 8, 4)
-        ns.ApplyVoidAccentToDropdown(configControls.profileSelect)
         configControls.profileSelect:SetPoint("TOPLEFT", secProf, "BOTTOMLEFT", 0, -32)
 
         configControls.macroSpecSegments:SetPoint("TOPRIGHT", secProf, "BOTTOMRIGHT", 0, -32)
@@ -1403,7 +1557,6 @@ function ns.CreateConfigPanel()
         local TRINKET_W = CONTENT_W - VARIANT_W - 8
 
         configControls.macroVariant = UI.CreateDropdown(p, VARIANT_W, 4)
-        ns.ApplyVoidAccentToDropdown(configControls.macroVariant)
         configControls.macroVariant:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -32)
         -- The primary macro carries the shared cooldowns (trinket, Power
         -- Infusion, potion) and is the one shown in the text field below.
@@ -1417,7 +1570,6 @@ function ns.CreateConfigPanel()
         end)
 
         configControls.trinketSlot = UI.CreateDropdown(p, TRINKET_W, 4)
-        ns.ApplyVoidAccentToDropdown(configControls.trinketSlot)
         configControls.trinketSlot:SetPoint("TOPLEFT", configControls.macroVariant, "TOPRIGHT", 8, 0)
         configControls.trinketSlot:SetLabel("Trinket", accent)
         configControls.trinketSlot:SetItems(ns.TRINKET_OPTIONS)
@@ -1432,7 +1584,6 @@ function ns.CreateConfigPanel()
         local QUALITY_W = CONTENT_W - POTION_W - 8
 
         configControls.combatPotion = UI.CreateDropdown(p, POTION_W, 8)
-        ns.ApplyVoidAccentToDropdown(configControls.combatPotion)
         configControls.combatPotion:SetPoint("TOPLEFT", configControls.macroVariant, "BOTTOMLEFT", 0, -34)
         configControls.combatPotion:SetLabel("Combat Potion", accent)
         configControls.combatPotion:SetItems(ns.COMBAT_POTION_OPTIONS)
@@ -1443,7 +1594,6 @@ function ns.CreateConfigPanel()
         end)
 
         configControls.combatPotionQuality = UI.CreateDropdown(p, QUALITY_W, 4)
-        ns.ApplyVoidAccentToDropdown(configControls.combatPotionQuality)
         configControls.combatPotionQuality:SetPoint("TOPLEFT", configControls.combatPotion, "TOPRIGHT", 8, 0)
         configControls.combatPotionQuality:SetLabel("Potion Priority", accent)
         configControls.combatPotionQuality:SetItems(ns.COMBAT_POTION_QUALITY_OPTIONS)
@@ -1464,7 +1614,6 @@ function ns.CreateConfigPanel()
                 ns.RequestMacroUpdate()
                 ns.RefreshConfigPanel()
             end)
-        ns.ApplyVoidAccentToCheckButton(configControls.potionBeforeTrinket)
         configControls.potionBeforeTrinket:SetPoint("TOPLEFT", configControls.combatPotion, "BOTTOMLEFT", 0, -14)
 
         -- Created for everyone, shown only to characters that have one of the
@@ -1477,7 +1626,6 @@ function ns.CreateConfigPanel()
                 ns.RequestMacroUpdate()
                 ns.RefreshConfigPanel()
             end)
-        ns.ApplyVoidAccentToCheckButton(configControls.includeRacial)
         configControls.includeRacial:SetPoint("TOPLEFT", configControls.potionBeforeTrinket, "BOTTOMLEFT", 0, -14)
 
         configControls.announceTarget = UI.CreateCheckButton(p,
@@ -1485,7 +1633,6 @@ function ns.CreateConfigPanel()
             function(checked)
                 ns.GetEditedProfile().announceTarget = checked and true or false
             end)
-        ns.ApplyVoidAccentToCheckButton(configControls.announceTarget)
 
         -- The position for a character without a racial. The refresh moves it
         -- below the racial checkbox when there is one -- but it needs an anchor
@@ -1622,7 +1769,6 @@ function ns.CreateConfigPanel()
                     ns.CheckContentProfile()
                 end
             end)
-        ns.ApplyVoidAccentToCheckButton(configControls.autoSwitchProfiles)
         configControls.autoSwitchProfiles:SetPoint("TOPLEFT", secAuto, "BOTTOMLEFT", 0, -14)
 
         -- Five mappings in two columns to stay inside the panel height.
@@ -1635,7 +1781,6 @@ function ns.CreateConfigPanel()
             local rowIdx = math.floor((index - 1) / 2)
 
             local dropdown = UI.CreateDropdown(p, MAP_W, 4)
-            ns.ApplyVoidAccentToDropdown(dropdown)
             -- -32 for the first row, same as every other dropdown under a
             -- heading: the label is drawn 6px above the box and at -20 it ran
             -- into the checkbox above.
@@ -2068,7 +2213,6 @@ function ns.CreateConfigPanel()
                 offset = 0
                 ns.RefreshConfigPanel()
             end)
-        ns.ApplyVoidAccentToCheckButton(configControls.priorityFilter)
         configControls.priorityFilter:SetPoint("TOPLEFT", configControls.priorityHint, "BOTTOMLEFT", 0, -10)
 
         -- Changes what /pa auto picks, not just what the table shows, which is
@@ -2081,7 +2225,6 @@ function ns.CreateConfigPanel()
                 offset = 0
                 ns.RefreshConfigPanel()
             end)
-        ns.ApplyVoidAccentToCheckButton(configControls.priorityMetric)
         configControls.priorityMetric:SetPoint("TOPLEFT", configControls.priorityFilter, "BOTTOMLEFT", 0, -8)
 
         configControls.priorityBest = UI.CreateFontString(p, "", "text", "FONT_SMALL")
