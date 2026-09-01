@@ -335,15 +335,18 @@ ns.DEFAULTS = {
     -- the specialisation, and a position that changed with the content profile
     -- would be baffling to drag.
     buddyFrame = {
+        -- Off until asked for. Everything below is what it looks like once it
+        -- is on: no names and the icons close together, but the glow on -- that
+        -- one is the signal rather than decoration.
         enabled = false,
         locked = false,
         scale = 1,
-        showOwnName = true,
-        showTargetName = true,
+        showOwnName = false,
+        showTargetName = false,
 
         -- Pixels between the two icons. Used to fall out of the column width by
         -- accident; now it is the number it looks like.
-        spacing = 42,
+        spacing = 10,
 
         -- framed | frameless | compact
         --
