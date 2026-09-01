@@ -12,7 +12,9 @@
 
   Neither half reads anything it is not allowed to. Since 12.0 an addon cannot look at another player's auras during an encounter, and since 12.1 the same is true of your own cooldown in seconds — so both halves ask the game for a handle and let it draw the numbers instead.
 
-- Cooldowns are known for all 26 damage specialisations, though two of them are unproven. Assassination is read from Kingsbane, which may turn out to sit on the target rather than the rogue, and Destruction only works with the Hellcaller talent, because Summon Infernal puts no buff on its caster at all.
+- Cooldowns are known for 25 of the 26 damage specialisations. Frost Mage is the exception and cannot be done: since Icy Veins was removed its damage comes from Shatter procs rather than from a cooldown, so there is no window on the mage to watch for.
+
+  Several specialisations are read from a buff that runs alongside the cooldown rather than from the cooldown itself, because the cooldown lands on the enemy or summons something. Assassination is read from Finish the Job and Destruction from Crashing Chaos, which lasts longer than the burst it marks.
 
   Where a specialisation has more than one candidate — Affliction can be read from Summon Darkglare or from Malevolence — both are watched.
 

@@ -57,7 +57,15 @@ ns.BUDDY_COOLDOWNS = {
     -- Mage
     [62]  = { 365362 },           -- Arcane        Arcane Surge, cast is 365350
     [63]  = { 190319 },           -- Fire          Combustion, seen in game
-    [64]  = { 12472 },            -- Frost         Icy Veins
+    -- Frost is absent on purpose. Icy Veins was removed in Midnight, and what
+    -- replaced it puts nothing on the mage: Ray of Frost has one effect, a
+    -- periodic damage aura on the enemy, and Freezing is a stacking debuff on
+    -- the target as well. The spec's damage comes from Shatter procs rather than
+    -- from a personal window, so there is no moment to line an infusion up with.
+    --
+    -- 12472 was in this table for a while. It is a real Wowhead page with a
+    -- convincing tooltip -- for a spell no mage can learn any more. Wowhead
+    -- keeps what the game removes.
 
     -- Druid
     [102] = { 194223 },           -- Balance       Celestial Alignment
@@ -122,7 +130,14 @@ ns.BUDDY_COOLDOWNS = {
                                   --               icon, which is the aura's own
                                   --               art and cannot be replaced
                                   --               without losing the lit state
-    [267] = { 442726 },           -- Destruction   Malevolence, Hellcaller only
+    [267] = { 417282, 442726 },   -- Destruction   Crashing Chaos, Malevolence.
+                                  --               Summon Infernal has no aura
+                                  --               of its own, so both entries
+                                  --               are talent buffs that run
+                                  --               alongside it. Crashing Chaos
+                                  --               is first because its art is
+                                  --               an Infernal, which is what a
+                                  --               priest will recognise
 }
 
 local ICON = 44

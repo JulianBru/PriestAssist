@@ -30,7 +30,7 @@ local _, ns = ...
 -- DD/MM/YYYY, shown in the Damage Gain tab.
 -- Taken from the sheet's own changelog: what matters is how old the
 -- simulations are, not when someone last pressed a button.
-ns.SPEC_PRIORITY_UPDATED = "25/08/2026"
+ns.SPEC_PRIORITY_UPDATED = "29/08/2026"
 
 -- The same day as a sortable integer, YYYYMMDD. Priests running the addon
 -- exchange this so one of them can be picked to compute a shared assignment,
@@ -40,11 +40,11 @@ ns.SPEC_PRIORITY_UPDATED = "25/08/2026"
 -- equal even if their numbers differ. That is exactly as precise as the date
 -- above ever was, and inventing a finer counter would suggest an accuracy the
 -- source does not have.
-ns.SPEC_PRIORITY_VERSION = 20260825
+ns.SPEC_PRIORITY_VERSION = 20260829
 
 ns.SPEC_PRIORITY = {
     healer = {
-        { specID =  265, gain = 4.86, heroes = { { name = "Hellcaller", id = 58, gain = 5.77, dps = 12724 }, { name = "Soul Harvester", id = 57, gain = 4.86, dps = 10834 } } },  -- Aff Wlock
+        { specID =  265, gain = 4.92, heroes = { { name = "Hellcaller", id = 58, gain = 6.25, dps = 14418 }, { name = "Soul Harvester", id = 57, gain = 4.92, dps = 11485 } } },  -- Aff Wlock
         { specID =  263, gain = 4.68, heroes = { { name = "Totemic", id = 54, gain = 4.70, dps = 10312 }, { name = "Stormbringer", id = 55, gain = 4.68, dps = 10677 } } },  -- Enh Shaman
         { specID =   63, gain = 4.65, heroes = { { name = "Sunfury", id = 39, gain = 4.87, dps = 10523 }, { name = "Frostfire", id = 41, gain = 4.65, dps = 9687 } } },  -- Fire Mage
         { specID =  259, gain = 4.51, heroes = { { name = "Fatebound", id = 52, gain = 4.52, dps = 10702 }, { name = "Deathstalker", id = 53, gain = 4.51, dps = 10925 } } },  -- Assa Rogue
@@ -73,7 +73,7 @@ ns.SPEC_PRIORITY = {
     },
     shadow = {
         { specID =  259, gain = 5.60, heroes = { { name = "Fatebound", id = 52, gain = 5.76, dps = 13635 }, { name = "Deathstalker", id = 53, gain = 5.60, dps = 13569 } } },  -- Assa Rogue
-        { specID =  265, gain = 4.50, heroes = { { name = "Hellcaller", id = 58, gain = 5.31, dps = 11710 }, { name = "Soul Harvester", id = 57, gain = 4.50, dps = 10036 } } },  -- Aff Wlock
+        { specID =  265, gain = 4.54, heroes = { { name = "Hellcaller", id = 58, gain = 5.91, dps = 13631 }, { name = "Soul Harvester", id = 57, gain = 4.54, dps = 10597 } } },  -- Aff Wlock
         { specID =  263, gain = 4.36, heroes = { { name = "Totemic", id = 54, gain = 4.70, dps = 10311 }, { name = "Stormbringer", id = 55, gain = 4.36, dps = 9954 } } },  -- Enh Shaman
         { specID =  266, gain = 4.15, heroes = { { name = "Diabolist", id = 59, gain = 4.33, dps = 9271 }, { name = "Soul Harvester", id = 57, gain = 4.15, dps = 9090 } } },  -- Demo Wlock
         { specID =  269, gain = 3.67, heroes = { { name = "Shado-Pan", id = 65, gain = 3.93, dps = 9239 }, { name = "Conduit", id = 64, gain = 3.67, dps = 8549 } } },  -- WW Monk
