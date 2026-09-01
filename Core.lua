@@ -163,6 +163,50 @@ end
 SLASH_PRIESTASSIST1 = "/pa"
 SlashCmdList["PRIESTASSIST"] = ns.HandleSlashCommand
 
+-- ─── Key bindings ────────────────────────────────────────────────────────────
+--
+-- Global on purpose, and the only global this addon defines besides its saved
+-- variables: Bindings.xml runs in the global environment and cannot see `ns`.
+--
+-- Each entry does exactly what its slash command does, so there is one
+-- behaviour per action rather than two that drift.
+PriestAssistBinding = {
+    -- What a bare /pa does: take whoever you have targeted.
+    SetTarget = function()
+        ns.RequestMacroUpdate(true)
+    end,
+
+    AutoAssign = function()
+        ns.AutoAssignBestTarget()
+    end,
+
+    ToggleBuddyFrame = function()
+        ns.ToggleBuddyFrame()
+    end,
+
+    OpenSettings = function()
+        ns.OpenConfigPanel()
+    end,
+}
+
+-- The keybinding window reads these globals when it draws, so they have to
+-- exist by then and they have to be translated. Set from PLAYER_LOGIN, after
+-- ns.ApplyLocale has chosen the catalogue -- at file load it has not.
+function ns.ApplyBindingNames()
+    BINDING_HEADER_PRIESTASSIST = ns.L("Priest Assist")
+
+    -- What the binding does, not what the spell does. These assign a target;
+    -- nothing here casts anything. And no caveat about combat in the name --
+    -- pressing it under lockdown queues the macro write and says so, which is
+    -- the moment the caveat is worth reading.
+    BINDING_NAME_PRIESTASSIST_SET_TARGET =
+        ns.L("Set your Power Infusion target")
+    BINDING_NAME_PRIESTASSIST_AUTO_ASSIGN =
+        ns.L("Choose the best target automatically")
+    BINDING_NAME_PRIESTASSIST_TOGGLE_BUDDY = ns.L("Toggle the buddy frame")
+    BINDING_NAME_PRIESTASSIST_OPEN = ns.L("Open PriestAssist")
+end
+
 local eventFrame = CreateFrame("Frame")
 eventFrame:RegisterEvent("PLAYER_LOGIN")
 eventFrame:RegisterEvent("LOADING_SCREEN_DISABLED")
@@ -250,6 +294,7 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
         -- chosen before anything is built, because translation happens where
         -- text meets a widget and never again afterwards.
         ns.ApplyLocale()
+        ns.ApplyBindingNames()
         ns.ApplyVoidTheme()
         ns.CreateReminderFrame()
         ns.CreateConfigPanel()

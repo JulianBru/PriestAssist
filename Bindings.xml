@@ -1,0 +1,31 @@
+<Bindings>
+    <!--
+        Not listed in the .toc: the client loads Bindings.xml from an addon
+        folder on its own, and listing it there does nothing.
+
+        The Lua below runs in the global environment, which is why every action
+        goes through the PriestAssistBinding table rather than reaching into the
+        addon's own namespace. Core.lua owns that table and its four entries.
+
+        Two of these cannot finish during combat. Assigning a target ends in
+        writing a macro, and EditMacro is forbidden under lockdown, so the addon
+        queues the write and prints why. That message is where the limitation
+        belongs; the display names say what the action does and leave it out.
+    -->
+
+    <Binding name="PRIESTASSIST_SET_TARGET" category="BINDING_HEADER_PRIESTASSIST">
+        PriestAssistBinding.SetTarget();
+    </Binding>
+
+    <Binding name="PRIESTASSIST_AUTO_ASSIGN" category="BINDING_HEADER_PRIESTASSIST">
+        PriestAssistBinding.AutoAssign();
+    </Binding>
+
+    <Binding name="PRIESTASSIST_TOGGLE_BUDDY" category="BINDING_HEADER_PRIESTASSIST">
+        PriestAssistBinding.ToggleBuddyFrame();
+    </Binding>
+
+    <Binding name="PRIESTASSIST_OPEN" category="BINDING_HEADER_PRIESTASSIST">
+        PriestAssistBinding.OpenSettings();
+    </Binding>
+</Bindings>

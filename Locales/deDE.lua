@@ -382,3 +382,12 @@ L["No Power Infusion target set"] = "Kein Ziel für Seele der Macht gesetzt"
 L["%s is not in the raid"] = "%s ist nicht im Raid"
 L["%s is offline"] = "%s ist offline"
 L["%s is not in the instance"] = "%s ist nicht in der Instanz"
+
+-- ─── Key bindings ────────────────────────────────────────────────────────────
+--
+-- Two of them say "before the pull" because they cannot finish in combat: they
+-- end in writing a macro, and that is forbidden under lockdown.
+
+L["Set your Power Infusion target"] = "Ziel für Seele der Macht setzen"
+L["Choose the best target automatically"] = "Bestes Ziel automatisch wählen"
+L["Toggle the buddy frame"] = "Buddy-Fenster umschalten"

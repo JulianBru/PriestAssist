@@ -1,6 +1,22 @@
 # Priest Assist
 
-## [1.9-alpha5](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha5) (2026-08-31)
+## [1.9-alpha6](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha6) (2026-09-01)
+
+### Added
+
+- German. The settings panel, its explanations, the reminder and everything the addon prints in chat. Anything not yet translated falls back to English on its own, so nothing is missing, only English.
+
+  Where German players say the English word, the English word stays: Glow, Cooldown, Ready Check, Reminder, Raid, Frame Strata, Damage Gain.
+
+- Key bindings, in their own Priest Assist category: set your Power Infusion target, choose the best target automatically, toggle the buddy frame, open the settings.
+
+  The first two end in writing a macro, and the game does not allow that during combat. Pressing them mid-fight queues the change and says so, as `/pa` has always done.
+
+### Changed
+
+- Chat sent to other players stays English whatever your own language is, because there is no way to know what the people reading it use. Only what the addon shows you is translated.
+
+- Nothing translated is ever saved. Profiles still store `raid`, dropdowns still store their value rather than their label, so switching language leaves every setting exactly where it was.
 
 ### Added
 
