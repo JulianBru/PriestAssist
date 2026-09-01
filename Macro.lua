@@ -200,8 +200,11 @@ function ns.GetProfileDisplayName(key)
     return ns.PROFILE_NAMES[key] or tostring(key)
 end
 
+--- The name a profile is shown under. CONTENT_NAMES keeps English, because the
+--- key is what the database stores and what the panel dispatches on -- only the
+--- way out to a widget is translated.
 function ns.GetContentDisplayName(contentType)
-    return ns.CONTENT_NAMES[contentType] or tostring(contentType)
+    return ns.L(ns.CONTENT_NAMES[contentType] or tostring(contentType))
 end
 
 -- Solo Shuffle and Battleground Blitz (Solo RBG in the API) run on arena and
@@ -822,14 +825,14 @@ function ns.CheckAssignedTargetPresence()
         return false
     end
 
-    if status ~= "none" then
-        headline = headline:format(targetName)
-    end
+    -- Translated here rather than in STATUS_MESSAGES: the table is the source
+    -- for both the reminder and the chat line, and its keys stay English.
+    headline = (status ~= "none") and ns.Lf(headline, targetName) or ns.L(headline)
 
     local icon = ns.POWER_INFUSION_ICON
-    ns.ShowReminder(true, ns.ADDON_DISPLAY_NAME .. "\n" .. icon .. " " .. headline ..
-        ", use /pa " .. icon)
-    ns.Print(headline .. ". Assign someone with /pa.", "F8C300")
+    ns.ShowReminder(true, ns.Lf("%s\n%s %s, use /pa %s",
+        ns.ADDON_DISPLAY_NAME, icon, headline, icon))
+    ns.Print(ns.Lf("%s. Assign someone with /pa.", headline), "F8C300")
 
     return true
 end

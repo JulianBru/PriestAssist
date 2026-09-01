@@ -42,10 +42,12 @@ function ns.GetReminderPreviewText()
         return state.reminderMessage
     end
 
-    local preview = ns.DEFAULT_REMINDER_TEXT .. "\n" .. ns.POWER_INFUSION_ICON .. " Set a target and use /pa " .. ns.POWER_INFUSION_ICON
+    local icon = ns.POWER_INFUSION_ICON
+    local preview = ns.Lf("%s\n%s Set a target and use /pa %s",
+        ns.L(ns.DEFAULT_REMINDER_TEXT), icon, icon)
 
     if ns.IsEditModeActive() then
-        preview = preview .. "\nDrag to move, click to configure."
+        preview = preview .. "\n" .. ns.L("Drag to move, click to configure.")
     end
 
     return preview
@@ -183,12 +185,10 @@ function ns.CheckInstanceReminder()
             local text = ns.STATUS_MESSAGES[reason]
             local icon = ns.POWER_INFUSION_ICON
 
-            if reason ~= "none" then
-                text = text:format(targetName)
-            end
+            text = (reason ~= "none") and ns.Lf(text, targetName) or ns.L(text)
 
-            ns.ShowReminder(false, ns.ADDON_DISPLAY_NAME .. "\n" ..
-                icon .. " " .. text .. ", use /pa " .. icon)
+            ns.ShowReminder(false, ns.Lf("%s\n%s %s, use /pa %s",
+                ns.ADDON_DISPLAY_NAME, icon, text, icon))
         end
 
         -- Same moment, different question: the reminder asks whether a target

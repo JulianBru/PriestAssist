@@ -358,3 +358,27 @@ L["Custom lines removed from \"%s\"."] =
     "Eigene Zeilen aus \"%s\" entfernt."
 L["Custom lines saved to \"%s\"."] =
     "Eigene Zeilen in \"%s\" gespeichert."
+
+-- ─── Content profiles ────────────────────────────────────────────────────────
+--
+-- Display names only. The database stores the key -- world, raid, pvp -- so a
+-- language change can never reach a saved value.
+
+L["Open World"] = "Offene Welt"
+L["Delves"] = "Tiefen"
+L["Dungeon"] = "Dungeon"
+L["PvP"] = "PvP"
+
+-- ─── Reminder text ───────────────────────────────────────────────────────────
+
+L["Priest Assist Ready"] = "Priest Assist bereit"
+L["%s\n%s Set a target and use /pa %s"] = "%s\n%s Setz ein Ziel und benutze /pa %s"
+L["Drag to move, click to configure."] = "Zum Verschieben ziehen, zum Einstellen klicken."
+L["%s\n%s %s, use /pa %s"] = "%s\n%s %s, benutze /pa %s"
+L["%s\n%s %s also has %s %s"] = "%s\n%s %s hat ebenfalls %s %s"
+L["%s. Assign someone with /pa."] = "%s. Weise jemanden mit /pa zu."
+
+L["No Power Infusion target set"] = "Kein Ziel für Seele der Macht gesetzt"
+L["%s is not in the raid"] = "%s ist nicht im Raid"
+L["%s is offline"] = "%s ist offline"
+L["%s is not in the instance"] = "%s ist nicht in der Instanz"

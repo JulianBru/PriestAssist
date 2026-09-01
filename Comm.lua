@@ -212,8 +212,8 @@ function ns.CheckAssignmentCollision()
     end
 
     local icon = ns.POWER_INFUSION_ICON
-    ns.ShowReminder(true, ns.ADDON_DISPLAY_NAME .. "\n" .. icon .. " " ..
-        collision.name .. " also has " .. collision.target .. " " .. icon)
+    ns.ShowReminder(true, ns.Lf("%s\n%s %s also has %s %s",
+        ns.ADDON_DISPLAY_NAME, icon, collision.name, collision.target, icon))
 
     return true
 end

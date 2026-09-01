@@ -569,7 +569,7 @@ function UI.CreateDropdown(parent, width, maxSlots)
             dd.selectedValue = value
             for _, item in ipairs(dd.items) do
                 if item.value == value then
-                    dd.button.text:SetText(item.text)
+                    dd.button.text:SetText(L(item.text))
                     break
                 end
             end
@@ -605,7 +605,7 @@ function UI.CreateDropdown(parent, width, maxSlots)
         if self.selectedValue ~= nil then
             self:SetSelectedValue(self.selectedValue)
         elseif self.items[1] then
-            self.button.text:SetText(self.items[1].text)
+            self.button.text:SetText(L(self.items[1].text))
         else
             self.button.text:SetText("")
         end
@@ -616,7 +616,7 @@ function UI.CreateDropdown(parent, width, maxSlots)
         self.selectedValue = v
         for _, item in ipairs(self.items) do
             if item.value == v then
-                self.button.text:SetText(item.text)
+                self.button.text:SetText(L(item.text))
                 return
             end
         end
