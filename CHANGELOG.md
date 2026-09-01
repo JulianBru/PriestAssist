@@ -1,5 +1,33 @@
 # Priest Assist
 
+## [1.9-alpha5](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha5) (2026-08-31)
+
+### Added
+
+- A Buddy tab in the settings. The frame can be switched on, locked, scaled and reset from there, the two names turned off separately, and the space between the icons set as a number rather than being whatever the layout happened to produce.
+
+- Three styles. Framed is what it looked like before, Frameless drops the outer box and keeps the icons, and Target only shows the person you are infusing without your own Power Infusion beside it.
+
+  Unlocked, the frame keeps its box and ignores the visibility rule whatever the style says, so it can always be found and moved.
+
+- A rule for when the frame appears at all: always, only in a group, only in dungeons and raids, or only in combat.
+
+- An Info button listing what is watched for each of the twenty-five specialisations, with the spell's own tooltip on hover. Five entries carry a note, because the aura being watched is not the cooldown anybody would name — Assassination is read from Finish the Job rather than from Deathmark, which lands on the enemy.
+
+- The left icon now shows how long your own Power Infusion is still running, not only when it comes back. It reads the buff off yourself, which works because Twins of the Sun Priestess grants you the effect when you infuse somebody else; without that talent the duration simply does not appear and the cooldown still does.
+
+### Changed
+
+- New defaults: names off, icons close together, and the frame still off until you ask for it.
+
+- Nothing runs while the frame is switched off. The events it needs are registered when it is turned on and dropped when it is turned off, so a feature nobody uses no longer wakes several times a second in combat.
+
+- Damage Gain data resimulated on 29 August.
+
+### Fixed
+
+- Your Power Infusion icon was greyed out from login until the first time you cast it, whether or not it was on cooldown. It had been asking the game for an active cooldown and treating any answer as one, and a known spell answers either way.
+
 ## [1.9-alpha4](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha4) (2026-08-31)
 
 ### Added

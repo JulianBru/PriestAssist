@@ -1,5 +1,5 @@
 ## Interface: 120000, 120001, 120005, 120007, 120100
-## Version: 1.9-alpha4
+## Version: 1.9-alpha5
 ## Title: Priest Assist
 ## Author: Julsanity (CheersItsJulian)
 ## SavedVariables: PriestAssistDB
