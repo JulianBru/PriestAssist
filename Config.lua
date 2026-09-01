@@ -182,7 +182,16 @@ function ns.RefreshConfigPanel()
         -- Target only has no left half, so there is no own name to show. The
         -- box stays where it is and goes grey rather than disappearing, so the
         -- tab does not change height when the style changes.
-        cc.buddyOwnName:SetEnabled((buddy.style or "framed") ~= "compact")
+        cc.buddySpacing:SetValue(buddy.spacing or 42)
+
+        -- Target only has no left half, so neither the own name nor the space
+        -- between two icons has anything to act on. They stay in place and go
+        -- grey rather than disappearing, so the tab keeps its height.
+        local twoColumns = (buddy.style or "framed") ~= "compact"
+
+        cc.buddyOwnName:SetEnabled(twoColumns)
+        cc.buddySpacing:SetAlpha(twoColumns and 1.0 or 0.4)
+        cc.buddySpacing:EnableMouse(twoColumns)
     end
     if cc.previewName then
         local view = ns.GetAssignmentOverview()
@@ -704,6 +713,155 @@ end
 -- The exact shape of the line is the one thing about the note feature that
 -- cannot be guessed, so it is offered as copyable text rather than described.
 local NOTE_EXAMPLE = "Power Infusion\nPI: PriestName TargetName"
+
+-- Which classes appear in which order. Specialisation IDs sort numerically into
+-- nonsense, and grouping by class is how anybody reading this thinks about it.
+local BUDDY_HELP_ORDER = {
+    62, 63,                 -- Mage
+    102, 103,               -- Druid
+    251, 252,               -- Death Knight
+    577, 1480,              -- Demon Hunter
+    1467, 1473,             -- Evoker
+    253, 254, 255,          -- Hunter
+    269,                    -- Monk
+    70,                     -- Paladin
+    259, 260, 261,          -- Rogue
+    262, 263,               -- Shaman
+    265, 266, 267,          -- Warlock
+    71, 72,                 -- Warrior
+}
+
+--- One line per specialisation: its icon and name in class colour on the left,
+--- the aura being watched on the right, with the game's own tooltip on hover.
+---
+--- The spell name comes from the client rather than from a string in the table,
+--- so it cannot drift out of date and it arrives in the player's language. Where
+--- the watched aura is not the cooldown anybody would name -- Assassination is
+--- read from a talent buff, not from Deathmark -- the entry carries a note and
+--- it is printed underneath.
+local function BuildBuddyHelpRow(build, specID, entry)
+    local specName, specIcon, classFile = ns.GetSpecDisplay(specID)
+    local row = CreateFrame("Frame", nil, build.parent)
+    row:SetSize(build.inner, 22)
+
+    local icon = row:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(18, 18)
+    icon:SetPoint("LEFT", 0, 0)
+    icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    icon:SetTexture(specIcon)
+
+    local name = UI.CreateFontString(row, specName, "text", "FONT_SMALL")
+    name:SetPoint("LEFT", icon, "RIGHT", 6, 0)
+
+    local classColor = classFile and C_ClassColor and C_ClassColor.GetClassColor
+        and C_ClassColor.GetClassColor(classFile)
+
+    if classColor then
+        name:SetTextColor(classColor.r, classColor.g, classColor.b, 1)
+    end
+
+    -- The right half is a button purely so it can own a tooltip. Anchored from
+    -- the right edge, so long spell names grow towards the middle instead of
+    -- pushing anything off the row.
+    local spellID = entry[1]
+    local info = spellID and C_Spell and C_Spell.GetSpellInfo
+        and C_Spell.GetSpellInfo(spellID)
+
+    local hit = CreateFrame("Button", nil, row)
+    hit:SetPoint("RIGHT", 0, 0)
+    hit:SetSize(math.floor(build.inner * 0.52), 20)
+
+    local spellIcon = hit:CreateTexture(nil, "ARTWORK")
+    spellIcon:SetSize(18, 18)
+    spellIcon:SetPoint("LEFT", 0, 0)
+    spellIcon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    spellIcon:SetTexture(info and info.iconID or ns.MACRO_ICON_ID)
+
+    local spellName = UI.CreateFontString(hit,
+        info and info.name or ("Spell " .. tostring(spellID)), "textDim", "FONT_SMALL")
+    spellName:SetPoint("LEFT", spellIcon, "RIGHT", 6, 0)
+    spellName:SetPoint("RIGHT", 0, 0)
+    spellName:SetJustifyH("LEFT")
+    spellName:SetWordWrap(false)
+
+    hit:SetScript("OnEnter", function(self)
+        if not spellID then return end
+
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        GameTooltip:SetSpellByID(spellID)
+
+        -- The second entry is the talent alternative, and it is the answer to
+        -- "why does this never light up for me".
+        if entry[2] then
+            local other = C_Spell.GetSpellInfo(entry[2])
+            GameTooltip:AddLine(" ")
+            GameTooltip:AddLine("Also watched: " .. (other and other.name or entry[2]),
+                0.65, 0.65, 0.67, true)
+        end
+
+        GameTooltip:Show()
+    end)
+
+    hit:SetScript("OnLeave", function() GameTooltip:Hide() end)
+
+    return row
+end
+
+function ns.ShowBuddySpellHelp()
+    local frame, build = InfoWindow("buddySpellHelp", "Tracked cooldowns", 520, 560)
+
+    if build then
+        build.add("The right icon watches for one aura on the player you are set "
+            .. "to infuse. These are the auras it knows, one per specialisation.", "text")
+
+        local previous = build.anchor()
+
+        -- Each element is anchored to the one above it, so an indent is
+        -- inherited by everything that follows unless it is cancelled here. The
+        -- notes sit 24 in; without this the list walked steadily to the right.
+        local NOTE_INDENT = 24
+        local indent = 0
+
+        for _, specID in ipairs(BUDDY_HELP_ORDER) do
+            local entry = ns.BUDDY_COOLDOWNS[specID]
+
+            if entry then
+                local row = BuildBuddyHelpRow(build, specID, entry)
+                row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", -indent, -6)
+                build.setAnchor(row, 22)
+                previous, indent = row, 0
+
+                if entry.note then
+                    local note = build.add(entry.note, "textDim", 2)
+                    note:SetPoint("TOPLEFT", row, "BOTTOMLEFT", NOTE_INDENT, -2)
+
+                    -- build.add sizes to the full width, which overflows the
+                    -- window by exactly the indent.
+                    note:SetWidth(build.inner - NOTE_INDENT)
+                    previous, indent = note, NOTE_INDENT
+                end
+            end
+        end
+
+        -- heading() anchors to whatever came last, so the indent has to be gone
+        -- before it runs or the whole closing section inherits it.
+        if indent > 0 then
+            local spacer = build.add(" ", "textDim", 0)
+            spacer:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", -indent, 0)
+        end
+
+        build.heading("Not tracked")
+        build.add("Frost Mage has no cooldown to watch. Since Icy Veins was "
+            .. "removed its damage comes from Shatter procs rather than from a "
+            .. "window, so there is no moment to line an infusion up with.")
+        build.add("Anyone whose specialisation the addon has not heard yet shows "
+            .. "an empty box. That arrives over the addon channel, so it only "
+            .. "works for group members running an addon that broadcasts it.")
+    end
+
+    frame:Show()
+    frame:Raise()
+end
 
 function ns.ShowNoteHelp()
     local frame, build = InfoWindow("noteHelp", "Raid note format", 450, 300)
@@ -1319,12 +1477,26 @@ function ns.CreateConfigPanel()
         local HALF = math.floor((CONTENT_W - 10) / 2)
         local sec = SectionHeader(p, "Buddy Frame")
 
+        -- Which spell each specialisation is watched for is the one thing about
+        -- this feature nobody can guess, and the answer is twenty-five rows
+        -- long. It goes behind a button rather than into the tab.
+        -- On the header line rather than below it. Below it is where the other
+        -- tabs put theirs, but they have nothing beside it -- here the first row
+        -- of checkboxes runs the full width, and the checkbox is created later
+        -- so it sat on top and swallowed every click meant for this button.
+        configControls.buddySpellHelp = UI.CreateButton(p, "Info", accent, 70, 20)
+        configControls.buddySpellHelp:SetIcon(ns.INFO_ICON_PATH, 14)
+        configControls.buddySpellHelp:SetPoint("TOPRIGHT", sec, "TOPRIGHT", 0, 4)
+        configControls.buddySpellHelp:SetFrameLevel(p:GetFrameLevel() + 5)
+        configControls.buddySpellHelp:SetOnClick(function() ns.ShowBuddySpellHelp() end)
+
         configControls.buddyEnabled = UI.CreateCheckButton(p,
             "Show the buddy frame",
             function(checked)
                 ns.GetDB().buddyFrame.enabled = checked and true or false
                 ns.ApplyBuddyFrameSettings()
             end)
+        configControls.buddyEnabled:SetClickWidth(HALF - 8)
         configControls.buddyEnabled:SetPoint("TOPLEFT", sec, "BOTTOMLEFT", 0, -10)
 
         configControls.buddyLocked = UI.CreateCheckButton(p,
@@ -1333,6 +1505,7 @@ function ns.CreateConfigPanel()
                 ns.GetDB().buddyFrame.locked = checked and true or false
                 ns.ApplyBuddyFrameSettings()
             end)
+        configControls.buddyLocked:SetClickWidth(HALF - 8)
         configControls.buddyLocked:SetPoint("TOPLEFT", configControls.buddyEnabled,
             "TOPLEFT", HALF, 0)
 
@@ -1342,6 +1515,7 @@ function ns.CreateConfigPanel()
                 ns.GetDB().buddyFrame.showOwnName = checked and true or false
                 ns.ApplyBuddyFrameSettings()
             end)
+        configControls.buddyOwnName:SetClickWidth(HALF - 8)
         configControls.buddyOwnName:SetPoint("TOPLEFT", configControls.buddyEnabled,
             "BOTTOMLEFT", 0, -6)
 
@@ -1351,6 +1525,7 @@ function ns.CreateConfigPanel()
                 ns.GetDB().buddyFrame.showTargetName = checked and true or false
                 ns.ApplyBuddyFrameSettings()
             end)
+        configControls.buddyTargetName:SetClickWidth(HALF - 8)
         configControls.buddyTargetName:SetPoint("TOPLEFT", configControls.buddyOwnName,
             "TOPLEFT", HALF, 0)
 
@@ -1407,8 +1582,19 @@ function ns.CreateConfigPanel()
 
         -- Not "Reset Position": the panel footer already has a button by that
         -- name, and the two do different things.
+        configControls.buddySpacing = UI.CreateSlider(p, "Icon Spacing", CONTENT_W - 2,
+            0, 120, 2, false, true)
+        configControls.buddySpacing.label:SetColor(accent)
+        configControls.buddySpacing:SetPoint("TOPLEFT", configControls.buddyScale,
+            "BOTTOMLEFT", 0, -34)
+        configControls.buddySpacing:SetOnValueChanged(function(value)
+            ns.GetDB().buddyFrame.spacing = value
+            ns.ApplyBuddyFrameSettings()
+        end)
+        configControls.buddySpacing:EnableMouseWheel(true)
+
         configControls.buddyReset = UI.CreateButton(p, "Reset Buddy Position", accent, 160, 22)
-        configControls.buddyReset:SetPoint("TOPLEFT", configControls.buddyScale,
+        configControls.buddyReset:SetPoint("TOPLEFT", configControls.buddySpacing,
             "BOTTOMLEFT", -1, -28)
         configControls.buddyReset:SetScript("OnClick", function()
             ns.ResetBuddyFramePosition()

@@ -341,6 +341,10 @@ ns.DEFAULTS = {
         showOwnName = true,
         showTargetName = true,
 
+        -- Pixels between the two icons. Used to fall out of the column width by
+        -- accident; now it is the number it looks like.
+        spacing = 42,
+
         -- framed | frameless | compact
         --
         -- compact drops your own Power Infusion and shows only the target, so

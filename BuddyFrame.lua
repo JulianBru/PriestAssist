@@ -70,7 +70,10 @@ ns.BUDDY_COOLDOWNS = {
 
     -- Druid
     [102] = { 194223 },           -- Balance       Celestial Alignment
-    [103] = { 391528 },           -- Feral         Convoke the Spirits
+    -- Feral: Berserk, or Incarnation where it replaces it. Convoke the
+    -- Spirits was here and came out again -- Blizzard lists it first, but it
+    -- is optional, and Berserk or Incarnation is on every build.
+    [103] = { 106951, 102543 },   -- Feral         Berserk, Incarnation
 
     -- Hunter
     [253] = { 19574 },            -- Beast Mastery Bestial Wrath
@@ -98,10 +101,9 @@ ns.BUDDY_COOLDOWNS = {
     -- the damage multiplier and looks caster-side (100 yd range, no "suffering"
     -- wording, the same signature as Demonic Power), but that is inference, not
     -- something anyone has seen.
-    [259] = { 1249810 },          -- Assassination Finish the Job. Deathmark
-                                  --               itself is a debuff on the
-                                  --               enemy; this talent buff runs
-                                  --               with it, 16 s, on the rogue
+    -- Assassination: Finish the Job, 16 s, the length of Deathmark.
+    [259] = { 1249810,
+              note = "Deathmark itself lands on the enemy. This talent buff runs with it." },
     [260] = { 13750 },            -- Outlaw        Adrenaline Rush
     [261] = { 121471 },           -- Subtlety      Shadow Blades
 
@@ -117,33 +119,31 @@ ns.BUDDY_COOLDOWNS = {
 
     -- Evoker
     [1467] = { 375087 },          -- Devastation   Dragonrage
-    [1473] = { 404977 },          -- Augmentation  Time Skip -- see the note in
-                                  --               the doc; Breath of Eons may
-                                  --               be the better window
+    -- Augmentation: Breath of Eons rather than the Time Skip Blizzard lists
+    -- first. Its aura runs only for the flight, six seconds, not for the ten
+    -- the Temporal Wounds take to pay out -- but it marks the right moment,
+    -- and Time Skip is a two-second cooldown accelerator.
+    [1473] = { 403631,
+               note = "Only the flight carries an aura, so it shows for about six seconds." },
 
     -- Warlock. The summons were wrongly written off as untrackable: Darkglare
     -- carries its own aura and the Tyrant applies a separate one. Only Summon
     -- Infernal really has none -- no Apply Aura effect, 250 ms duration and a
     -- No Aura Icon flag -- so Destruction rests on the Hellcaller talent alone.
-    [265] = { 205180, 442726 },   -- Affliction    Summon Darkglare, Malevolence
-    [266] = { 265273 },           -- Demonology    Demonic Power, cast is 265187.
-                                  --               Drawn with an achievement
-                                  --               icon, which is the aura's own
-                                  --               art and cannot be replaced
-                                  --               without losing the lit state
-    [267] = { 417282, 442726 },   -- Destruction   Crashing Chaos, Malevolence.
-                                  --               Summon Infernal has no aura
-                                  --               of its own, so both entries
-                                  --               are talent buffs that run
-                                  --               alongside it. Crashing Chaos
-                                  --               is first because its art is
-                                  --               an Infernal, which is what a
-                                  --               priest will recognise
+    -- Affliction: Summon Darkglare, or Malevolence on Hellcaller.
+    [265] = { 205180, 442726,
+              note = "Malevolence is the Hellcaller alternative." },
+    -- Demonology: Demonic Power, applied by Summon Demonic Tyrant (265187).
+    [266] = { 265273,
+              note = "Applied by Summon Demonic Tyrant, and drawn with its own odd icon." },
+    -- Destruction: Crashing Chaos first, because its art is an Infernal and
+    -- that is what a priest will recognise. Malevolence is the Hellcaller one.
+    [267] = { 417282, 442726,
+              note = "Summon Infernal buffs nobody, so a talent that comes with it is used." },
 }
 
 local ICON = 44
 local COLUMN = 76        -- a twelve-character name fits without being cut
-local GAP = 10
 local PAD = 8
 local NAME_H = 13
 local NAME_GAP = 3
@@ -151,7 +151,6 @@ local TITLE_H = 18
 local STRIPE = 2
 local STRIPE_GAP = 2
 
-local CONTENT_H = NAME_H + NAME_GAP + ICON + STRIPE_GAP + STRIPE
 
 -- The same two-colour box the Current Target row in the config panel is built
 -- from. Borrowed deliberately: a HUD element stands on the game world rather
@@ -320,11 +319,46 @@ end
 
 -- The title bar is the only thing the lock changes, and the box has to shrink
 -- with it or there is a hole where it was.
+--- Where everything sits, recomputed from the settings each time.
+---
+--- The rows are measured rather than assumed. CONTENT_H used to be a constant
+--- that always reserved a name row, so hiding the names left their space behind
+--- -- twenty-four pixels above the icon against twelve below it, which reads as
+--- a crooked box the moment there is only one icon to look at.
+local function Measure(db, compact)
+    local names = (db.showTargetName ~= false)
+        or (not compact and db.showOwnName ~= false)
+
+    local nameRow = names and (NAME_H + NAME_GAP) or 0
+    local spacing = db.spacing or 42
+    local icons = compact and ICON or (ICON * 2 + spacing)
+
+    -- Names need more room than icons do, so the box widens for them rather
+    -- than letting two twelve-character names collide over narrow spacing.
+    local width = names and math.max(icons, compact and COLUMN or COLUMN * 2 + 8)
+        or icons
+
+    return {
+        nameRow = nameRow,
+        spacing = spacing,
+        width   = width,
+
+        -- The stripe is not counted. It hangs below the icon and fits inside
+        -- the bottom padding, so leaving it out of the height is what makes the
+        -- icon sit evenly between the edges -- with the names off, Target only
+        -- comes out an actual square. Counting it cost four pixels at the
+        -- bottom that nothing balanced at the top.
+        height  = nameRow + ICON,
+        column  = compact and width or (width - spacing) / 2,
+    }
+end
+
 local function ApplyChrome()
     local frame = frames.buddyFrame
     local db = ns.GetDB().buddyFrame
     local style = db.style or "framed"
     local compact = style == "compact"
+    local m = Measure(db, compact)
 
     -- Unlocked, the box and the title bar are always there whatever the style
     -- says: they are the handle. A frameless frame you cannot grab would be a
@@ -342,17 +376,37 @@ local function ApplyChrome()
         frame:SetBackdropBorderColor(br, bg, bb, showBox and 1 or 0)
     end
 
-    -- Compact drops the left half entirely, so the frame is one column narrower
-    -- and the right column moves over to where the left one was.
+    -- Compact drops the left half entirely.
     frame.own:SetShown(not compact)
     frame.ownName:SetShown(not compact and db.showOwnName ~= false)
     frame.buddyName:SetShown(db.showTargetName ~= false)
 
+    frame.content:SetHeight(m.height)
+
+    -- Both names span their half of the box, so a long one is cut rather than
+    -- reaching into the other column.
+    frame.ownName:SetWidth(m.column)
+    frame.buddyName:SetWidth(m.column)
+
+    frame.ownName:ClearAllPoints()
+    -- Positions and sizes are all set by ApplyChrome, which runs before the
+    -- frame is ever shown. What happens here is creation and parenting only.
+
     frame.buddyName:ClearAllPoints()
     frame.buddyName:SetPoint(compact and "TOPLEFT" or "TOPRIGHT")
 
-    frame:SetWidth(PAD * 2 + COLUMN + (compact and 0 or COLUMN + GAP))
-    frame:SetHeight(PAD * 2 + CONTENT_H + (db.locked and 0 or TITLE_H))
+    -- Anchored to the content rather than to the names, so hiding a name moves
+    -- the icon up instead of leaving a hole where the name was.
+    frame.own:ClearAllPoints()
+    frame.own:SetPoint("TOPLEFT", frame.content, "TOPLEFT",
+        (m.column - ICON) / 2, -m.nameRow)
+
+    frame.buddy:ClearAllPoints()
+    frame.buddy:SetPoint("TOPRIGHT", frame.content, "TOPRIGHT",
+        -(m.column - ICON) / 2, -m.nameRow)
+
+    frame:SetWidth(PAD * 2 + m.width)
+    frame:SetHeight(PAD * 2 + m.height + (db.locked and 0 or TITLE_H))
 end
 
 --- Whether the frame may be on screen at all, before anything about the target
@@ -781,7 +835,7 @@ function ns.CreateBuddyFrame()
     local frame = CreateFrame("Frame", "PriestAssistBuddyFrame", UIParent,
         BackdropTemplateMixin and "BackdropTemplate" or nil)
 
-    frame:SetSize(PAD * 2 + COLUMN * 2 + GAP, PAD * 2 + CONTENT_H)
+    frame:SetSize(PAD * 2 + COLUMN * 2, PAD * 2 + ICON)
     frame:SetMovable(true)
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
@@ -836,14 +890,12 @@ function ns.CreateBuddyFrame()
     frame.content = CreateFrame("Frame", nil, frame)
     frame.content:SetPoint("BOTTOMLEFT", PAD, PAD)
     frame.content:SetPoint("BOTTOMRIGHT", -PAD, PAD)
-    frame.content:SetHeight(CONTENT_H)
 
     -- Left: our own Power Infusion.
     frame.ownName = BuildName(frame.content)
     frame.ownName:SetPoint("TOPLEFT")
 
     frame.own = BuildIcon(frame)
-    frame.own:SetPoint("TOP", frame.ownName, "BOTTOM", 0, -NAME_GAP)
 
     local icon = frame.own:CreateTexture(nil, "ARTWORK")
     AnchorInsideBorder(icon)
@@ -872,10 +924,8 @@ function ns.CreateBuddyFrame()
 
     -- Right: the target's cooldown, drawn by the engine.
     frame.buddyName = BuildName(frame.content)
-    frame.buddyName:SetPoint("TOPRIGHT")
 
     frame.buddy = BuildIcon(frame)
-    frame.buddy:SetPoint("TOP", frame.buddyName, "BOTTOM", 0, -NAME_GAP)
 
     -- Behind the container, and never hidden by us: while the aura runs, the
     -- engine's own opaque icon covers it. That matters because we cannot ask

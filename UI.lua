@@ -295,6 +295,17 @@ function UI.CreateCheckButton(parent, label, onCheck)
     --- Greyed out and unclickable, for a setting that exists but has nothing to
     --- act on. The hit area is a local button, so this is the only way in from
     --- outside; without it a disabled checkbox would still toggle itself.
+    --- Constrain the clickable area to an explicit width.
+    ---
+    --- By default the hit rect runs 180 pixels past the container so a long
+    --- label stays clickable. That is invisible until two of these sit side by
+    --- side, at which point the left one swallows every click meant for the
+    --- right one -- and the label under the cursor is not the box that toggles.
+    function container:SetClickWidth(width)
+        self:SetWidth(width)
+        hit:SetHitRectInsets(0, 0, 0, 0)
+    end
+
     function container:SetEnabled(enabled)
         enabled = enabled ~= false
         self._enabled = enabled
