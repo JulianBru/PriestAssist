@@ -11,6 +11,9 @@ Libs\LibStub\LibStub.lua
 Libs\LibSpecialization\LibSpecialization.lua
 Libs\LibPriestAssist\LibPriestAssist.lua
 
+Locales\Locale.lua
+Locales\deDE.lua
+
 PriestAssist.lua
 UI.lua
 Data.lua

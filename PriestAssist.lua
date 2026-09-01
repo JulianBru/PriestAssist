@@ -45,6 +45,11 @@ function ns.Print(text, color)
         return
     end
 
+    -- Chat output goes through the catalogue too. Messages assembled from
+    -- pieces will not match a key, which is what ns.Lf is for -- see
+    -- Locales/Locale.lua.
+    text = ns.L and ns.L(text) or text
+
     local messageColor = color or "FFFFFF"
     print("\124cffFFD700" .. ns.ADDON_DISPLAY_NAME .. ": \124r\124cff" .. messageColor .. text .. "\124r")
 end

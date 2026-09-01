@@ -575,7 +575,7 @@ function ns.CheckNoteAssignment(force)
     end
 
     ns.SetAssignedTarget(target, "note")
-    ns.Print("Power Infusion target from the raid note: " .. target, "90EE90")
+    ns.Print(ns.Lf("Power Infusion target from the raid note: %s", target), "90EE90")
     ns.RequestMacroUpdate()
     return true
 end
@@ -1735,8 +1735,8 @@ function ns.AutoAssignBestTarget()
     ns.CheckNoteAssignment()
 
     if ns.GetAssignedTargetSource() == "note" then
-        ns.Print("The raid note assigns " .. ns.GetAssignedTarget() ..
-            ", which takes priority. Use /pa to override it yourself.", "F8C300")
+        ns.Print(ns.Lf("The raid note assigns %s, which takes priority. Use /pa to override it yourself.",
+            ns.GetAssignedTarget()), "F8C300")
         return false
     end
 
@@ -1759,9 +1759,9 @@ function ns.AutoAssignBestTarget()
         if #members == 0 then
             ns.Print("No one else is in your group.", "F8C300")
         elseif unknown >= #members then
-            ns.Print("No specialisations known yet. " .. unknown .. " of " .. #members ..
-                " report nothing - they need an addon that uses LibSpecialization, " ..
-                "such as BigWigs or WeakAuras.", "F8C300")
+            ns.Print(ns.Lf("No specialisations known yet. %s of %s report nothing - they need an addon "
+                .. "that uses LibSpecialization, such as BigWigs or WeakAuras.",
+                unknown, #members), "F8C300")
         else
             ns.Print("No one present matches the priority list." ..
                 (unknown > 0 and (" " .. unknown .. " member(s) report no specialisation.") or ""), "F8C300")
@@ -1911,12 +1911,12 @@ function ns.MaintainAssignment()
     ns.SetAssignedTarget(name, "auto")
 
     if released then
-        ns.Print(released .. " is no longer in your group - Power Infusion target set to " ..
-            detail .. ".", "F8C300")
+        ns.Print(ns.Lf("%s is no longer in your group - Power Infusion target set to %s.",
+            released, detail), "F8C300")
     elseif current == "" then
-        ns.Print("Power Infusion target set automatically: " .. detail .. ".", "90EE90")
+        ns.Print(ns.Lf("Power Infusion target set automatically: %s.", detail), "90EE90")
     else
-        ns.Print("Power Infusion target moved to " .. detail .. ".", "90EE90")
+        ns.Print(ns.Lf("Power Infusion target moved to %s.", detail), "90EE90")
     end
 
     ns.RequestMacroUpdate()
@@ -1940,15 +1940,15 @@ function ns.ReportNoteAssignment()
     local playerName = UnitName("player")
     local target, sawAnyAssignment, ambiguous = ns.ParsePowerInfusionAssignment(note, playerName)
 
-    ns.Print("Note is " .. string.len(note) .. " characters. Your character: " ..
-        tostring(playerName) .. ".", "A5AAD9")
+    ns.Print(ns.Lf("Note is %s characters. Your character: %s.",
+        string.len(note), tostring(playerName)), "A5AAD9")
 
     if not sawAnyAssignment then
         ns.Print("No \"PI:\" lines with two names found at all.", "F8C300")
     elseif not target then
         ns.Print("Found PI lines, but none naming you.", "F8C300")
     else
-        ns.Print("Match: " .. target, "61EE96")
+        ns.Print(ns.Lf("Match: %s", target), "61EE96")
     end
 
     if ambiguous then
@@ -1963,8 +1963,8 @@ function ns.ReportNoteAssignment()
     end
 
     if contentType ~= "raid" then
-        ns.Print("You are in " .. ns.GetContentDisplayName(contentType) ..
-            ", so nothing is applied. Raid only.", "F8C300")
+        ns.Print(ns.Lf("You are in %s, so nothing is applied. Raid only.",
+            ns.GetContentDisplayName(contentType)), "F8C300")
         return
     end
 
@@ -2337,11 +2337,11 @@ function ns.ClearAssignedTarget()
     -- so beats having the target reappear a second later and look like the
     -- command did not work.
     if ns.GetDB().autoAssignTarget then
-        ns.Print("Power Infusion target cleared (" .. previous ..
-            "). A new one is picked automatically once your group is known.", "A5AAD9")
+        ns.Print(ns.Lf("Power Infusion target cleared (%s). A new one is picked automatically once your group is known.",
+            previous), "A5AAD9")
     else
-        ns.Print("Power Infusion target cleared (" .. previous ..
-            "). Set one with /pa, or /pa auto to pick the best.", "A5AAD9")
+        ns.Print(ns.Lf("Power Infusion target cleared (%s). Set one with /pa, or /pa auto to pick the best.",
+            previous), "A5AAD9")
     end
 
     return true
@@ -2665,9 +2665,8 @@ function ns.EnsureMacroCapacity(needed)
 
     if used + needed > maximum then
         local missing = used + needed - maximum
-        ns.Print("Your " .. (isCharacterMacro and "character" or "general") ..
-            " macro tab needs " .. missing .. " more free slot(s) (" .. maximum ..
-            " total). Please delete some macros and try again.", "F82C00")
+        ns.Print(ns.Lf("Your %s macro tab needs %s more free slot(s) (%s total). Please delete some macros and try again.",
+            isCharacterMacro and ns.L("character") or ns.L("general"), missing, maximum), "F82C00")
         return false
     end
 
@@ -2683,8 +2682,8 @@ function ns.RemoveLegacyMacro()
     end
 
     DeleteMacro(legacyIndex)
-    ns.Print("Removed the old \"" .. ns.LEGACY_MACRO_NAME ..
-        "\" macro. It has been replaced by one macro per variant.", "F8C300")
+    ns.Print(ns.Lf("Removed the old \"%s\" macro. It has been replaced by one macro per variant.",
+        ns.LEGACY_MACRO_NAME), "F8C300")
 
     return true
 end
@@ -2885,13 +2884,13 @@ function ns.UpdateMacro(reportAssignment)
     end
 
     if createdCount > 0 then
-        ns.Print(createdCount .. " macro(s) created in your " .. tabName ..
-            " macro tab. Drag them onto your action bar.", "61EE96")
+        ns.Print(ns.Lf("%s macro(s) created in your %s macro tab. Drag them onto your action bar.",
+            createdCount, tabName), "61EE96")
     end
 
     if movedCount > 0 then
-        ns.Print(movedCount .. " macro(s) moved to your " .. tabName ..
-            " macro tab. Please drag them back onto your action bar.", "F8C300")
+        ns.Print(ns.Lf("%s macro(s) moved to your %s macro tab. Please drag them back onto your action bar.",
+            movedCount, tabName), "F8C300")
     end
 
     -- Only a deliberate assignment reports the target or announces it.
@@ -2957,9 +2956,9 @@ function ns.SetAdditionalMacroText(text)
     ns.SetUserAdded(variant, userAdded)
 
     if userAdded == "" then
-        ns.Print("Custom lines removed from \"" .. ns.GetMacroNameForVariant(variant) .. "\".")
+        ns.Print(ns.Lf("Custom lines removed from \"%s\".", ns.GetMacroNameForVariant(variant)))
         return
     end
 
-    ns.Print("Custom lines saved to \"" .. ns.GetMacroNameForVariant(variant) .. "\".", "A5AAD9")
+    ns.Print(ns.Lf("Custom lines saved to \"%s\".", ns.GetMacroNameForVariant(variant)), "A5AAD9")
 end

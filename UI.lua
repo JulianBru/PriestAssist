@@ -2,6 +2,13 @@ local _, ns = ...
 
 local UI = {}
 ns.UI = UI
+
+-- Every string on its way to a widget passes through here. See
+-- Locales/Locale.lua for why the translation sits at this boundary rather than
+-- at the call sites, and why player names deliberately go around it.
+local function L(text)
+    return ns.L and ns.L(text) or text
+end
 UI.UIParent = UIParent
 
 -- ─── Skin palette ─────────────────────────────────────────────────────────────
@@ -132,7 +139,7 @@ end
 local function NewFS(parent, text, color, size, flags, layer)
     local fs = parent:CreateFontString(nil, layer or "OVERLAY")
     fs:SetFont(GetFont(), size or 12, flags)
-    fs:SetText(text or "")
+    fs:SetText(L(text) or "")
     local c = Resolve(color or "text")
     fs:SetTextColor(c[1], c[2], c[3], c[4] or 1.0)
     function fs:SetColor(n)
@@ -276,7 +283,7 @@ function UI.CreateCheckButton(parent, label, onCheck)
     -- For labels that are only known at runtime, such as the name of whichever
     -- racial this character happens to have.
     function container:SetLabel(text)
-        self.label:SetText(text or "")
+        self.label:SetText(L(text) or "")
     end
 
     local hit = CreateFrame("Button", nil, container)
@@ -535,7 +542,7 @@ function UI.CreateDropdown(parent, width, maxSlots)
             local item = dd.items[dd.offset + i]
             if item then
                 btn.itemValue = item.value
-                btn.text:SetText(item.text)
+                btn.text:SetText(L(item.text))
                 btn:Show()
             else
                 btn.itemValue = nil
@@ -585,7 +592,7 @@ function UI.CreateDropdown(parent, width, maxSlots)
             self.label = UI.CreateFontString(self, text or "", colorName or "text", "FONT_TITLE")
             self.label:SetPoint("BOTTOMLEFT", self.button, "TOPLEFT", 0, 6)
         end
-        self.label:SetText(text or "")
+        self.label:SetText(L(text) or "")
         self.label:SetColor(colorName or "text")
     end
 
@@ -720,7 +727,7 @@ function UI.CreateEditBox(parent, width, height)
     end
 
     function container:SetLabel(text, color)
-        self.label:SetText(text or "")
+        self.label:SetText(L(text) or "")
         if color then self.label:SetColor(color) end
         self.label:SetShown((text or "") ~= "")
     end

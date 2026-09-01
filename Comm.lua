@@ -177,14 +177,13 @@ function ns.ResolveAssignmentConflict()
     end)
 
     if not name then
-        ns.Print(blocking.name .. " has Power Infusion on " .. previous ..
-            " as well, and no one else is left to pick. Use /pa to choose yourself.", "F8C300")
+        ns.Print(ns.Lf("%s has Power Infusion on %s as well, and no one else is left to pick. Use /pa to choose yourself.",
+            blocking.name, previous), "F8C300")
         return false
     end
 
     ns.SetAssignedTarget(name, "auto")
-    ns.Print(blocking.name .. " already has " .. previous ..
-        " - switched to " .. name .. ".", "F8C300")
+    ns.Print(ns.Lf("%s already has %s - switched to %s.", blocking.name, previous, name), "F8C300")
     ns.RequestMacroUpdate()
     return true
 end
@@ -280,7 +279,7 @@ function ns.ReportAssignments(onlyIfShared)
     local collision = ns.IsPriest() and ns.GetCollision()
 
     if collision then
-        ns.Print("  " .. collision.name .. " has the same target as you.", "F8C300")
+        ns.Print(ns.Lf("  %s has the same target as you.", collision.name), "F8C300")
     end
 end
 

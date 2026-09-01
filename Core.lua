@@ -87,7 +87,36 @@ function ns.HandleSlashCommand(msg)
         return
     end
 
-    -- Prototype, no settings tab yet.
+    -- Undocumented, and meant to stay that way: it exists so a translation can
+    -- be read on a client that is not in that language. Not in /pa help, not in
+    -- the readme, and no setting for it.
+    --
+    -- A reload is not a nicety here. Text is translated when a widget is built,
+    -- so the panel that already exists keeps whatever language it was born in.
+    if command == "lang" then
+        local wanted = rest:lower():gsub("%s+", "")
+        local db = ns.GetDB()
+
+        if wanted == "" then
+            local locale, overridden = ns.GetLocaleState()
+            ns.Print("Language: " .. tostring(locale)
+                .. (overridden and " (forced)" or " (from the client)"), "A5AAD9")
+            return
+        end
+
+        if wanted ~= "de" and wanted ~= "dede" and wanted ~= "en"
+            and wanted ~= "enus" and wanted ~= "off" then
+            ns.Print("Usage: /pa lang de | en", "F82C00")
+            return
+        end
+
+        db.localeOverride = (wanted == "de" or wanted == "dede") and "deDE" or nil
+        ns.ApplyLocale()
+        ns.Print("Language set to " .. (db.localeOverride or "the client's")
+            .. ". Type /reload -- the panel keeps the language it was built in.", "A5AAD9")
+        return
+    end
+
     if command == "buddy" then
         if rest:lower() == "lock" then
             ns.ToggleBuddyFrameLock()
@@ -216,6 +245,11 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
 
     if event == "PLAYER_LOGIN" then
         ns.InitializeDatabase()
+
+        -- Between the database and the first widget: the catalogue has to be
+        -- chosen before anything is built, because translation happens where
+        -- text meets a widget and never again afterwards.
+        ns.ApplyLocale()
         ns.ApplyVoidTheme()
         ns.CreateReminderFrame()
         ns.CreateConfigPanel()

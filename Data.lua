@@ -300,6 +300,11 @@ ns.DEFAULTS = {
     macroScope = "general",
     -- The player you assigned with /pa. Kept so that changing a setting
     -- rebuilds the macros without silently reassigning them.
+    -- Overrides the client language for the interface. There is no setting for
+    -- this and no command in the help: it exists so a translation can be seen
+    -- without a client in that language. nil means follow the client.
+    localeOverride = nil,
+
     assignedTarget = "",
     assignedTargetSource = "",
     -- "percent" or "absolute", which number the Damage Gain tab ranks by.
