@@ -469,13 +469,20 @@ local function UpdateOwnCooldown()
         frame.own.cooldown:SetCooldownFromDurationObject(duration)
     end
 
-    -- Whether the call returned anything, never what it returned. The function
-    -- is documented MayReturnNothing and gives back "the active cooldown
-    -- duration", so its mere presence is the state -- and presence is something
-    -- we are allowed to know about a value we may not read.
-    if frame.own.icon then
-        frame.own.icon:SetDesaturated(duration ~= nil)
-    end
+    -- The greying is deliberately not decided here.
+    --
+    -- It used to test whether this call returned anything, on the reading that
+    -- "the active cooldown duration" would be absent when there is none. It is
+    -- not: a known spell hands back an object either way, so the icon was grey
+    -- from login until the first cast -- after which OnCooldownDone brightened
+    -- it and the fault looked fixed.
+    --
+    -- Nor can the widget be asked. GetCooldownTimes, GetCooldownDuration and
+    -- GetCooldownDisplayDuration all carry SecretReturnsForAspect Cooldown, so
+    -- reading any of them is closed in exactly the content this frame is for.
+    --
+    -- So the state comes from the two moments instead: the cast, and the
+    -- widget's own OnCooldownDone.
 end
 
 -- ─── Right: the target's major cooldown ──────────────────────────────────────
@@ -991,6 +998,9 @@ local FREQUENT_EVENTS = {
     "ZONE_CHANGED_NEW_AREA",
 }
 
+-- Filtered to the player, so somebody else's cast never reaches the handler.
+local CAST_EVENT = "UNIT_SPELLCAST_SUCCEEDED"
+
 local frequentEventsOn = false
 
 local function SetFrequentEvents(on)
@@ -1009,12 +1019,34 @@ local function SetFrequentEvents(on)
             events:UnregisterEvent(event)
         end
     end
+
+    if on then
+        events:RegisterUnitEvent(CAST_EVENT, "player")
+    else
+        events:UnregisterEvent(CAST_EVENT)
+    end
 end
 
-events:SetScript("OnEvent", function()
-    if ns.GetDB and ns.GetDB() and ns.GetDB().buddyFrame then
-        ns.UpdateBuddyFrame()
+events:SetScript("OnEvent", function(_, event, _, _, spellID)
+    if not (ns.GetDB and ns.GetDB() and ns.GetDB().buddyFrame) then
+        return
     end
+
+    -- The one moment we know a cooldown has begun. Everything else about it is
+    -- unreadable, so this is where the icon goes grey; the widget's
+    -- OnCooldownDone is where it comes back.
+    if event == CAST_EVENT then
+        local frame = frames.buddyFrame
+
+        if spellID == ns.POWER_INFUSION_SPELL_ID and frame and frame.own
+            and frame.own.icon then
+            frame.own.icon:SetDesaturated(true)
+        end
+
+        return
+    end
+
+    ns.UpdateBuddyFrame()
 end)
 
 --- Rebuild what the frame watches. Cheap enough to call from any refresh.
