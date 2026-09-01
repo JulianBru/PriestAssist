@@ -353,6 +353,28 @@ local function Measure(db, compact)
     }
 end
 
+-- What ApplyChrome last laid out for. Compared field by field rather than as a
+-- concatenated key: this runs on every refresh, and a string built to avoid
+-- twelve widget calls is not much of a saving.
+local lastLocked, lastStyle, lastScale
+local lastOwnName, lastTargetName, lastSpacing
+
+local function ChromeUnchanged(db)
+    return lastLocked == db.locked
+        and lastStyle == (db.style or "framed")
+        and lastScale == (db.scale or 1)
+        and lastOwnName == (db.showOwnName ~= false)
+        and lastTargetName == (db.showTargetName ~= false)
+        and lastSpacing == (db.spacing or 42)
+end
+
+local function RememberChrome(db)
+    lastLocked, lastStyle, lastScale = db.locked, db.style or "framed", db.scale or 1
+    lastOwnName = db.showOwnName ~= false
+    lastTargetName = db.showTargetName ~= false
+    lastSpacing = db.spacing or 42
+end
+
 local function ApplyChrome()
     local frame = frames.buddyFrame
     local db = ns.GetDB().buddyFrame
@@ -496,6 +518,32 @@ local watchedSpells, watchedUnit
 -- overview that walks the priority list, so this is not work to repeat per event.
 local styledFor
 
+-- The unit token, remembered until the roster changes. ns.UnitForName walks the
+-- raid and normalises a name per member, so calling it per event was up to
+-- forty UnitName lookups and forty string.match calls a second at twenty
+-- players -- to answer a question whose answer changes when somebody joins or
+-- leaves, and at no other time.
+--
+-- A nil result is cached too. Somebody who is not in the group is exactly the
+-- case that would otherwise walk the whole roster every time and find nothing.
+local rosterGeneration = 0
+local cachedFor, cachedGeneration, cachedUnit = nil, -1, nil
+
+local function ResolveUnit(target)
+    if not target or target == "" then
+        return nil
+    end
+
+    if cachedGeneration == rosterGeneration and cachedFor == target then
+        return cachedUnit
+    end
+
+    cachedFor, cachedGeneration = target, rosterGeneration
+    cachedUnit = ns.UnitForName(target)
+
+    return cachedUnit
+end
+
 --- The spell list to watch for the current target, and the target itself.
 ---
 --- The list is the table straight out of BUDDY_COOLDOWNS, never a copy, so
@@ -597,7 +645,7 @@ local function UpdateBuddySlot()
     -- Resolved fresh, never remembered. A token is only true for this instant:
     -- raid7 becomes a different player when the raid reorders, and a remembered
     -- one would quietly point the container at a stranger.
-    local unit = target and target ~= "" and ns.UnitForName(target) or nil
+    local unit = ResolveUnit(target)
 
     UpdateBuddyStyle(target, spells, unit)
 
@@ -1022,6 +1070,7 @@ function ns.CreateBuddyFrame()
 
     ApplyPoint()
     ApplyChrome()
+    RememberChrome(ns.GetDB().buddyFrame)
     frame:SetScale(ns.GetDB().buddyFrame.scale or 1)
     frame:Hide()
 
@@ -1079,6 +1128,26 @@ local function SetFrequentEvents(on)
     end
 end
 
+-- Roster events arrive in a burst when a raid fills: thirty in two seconds,
+-- each one otherwise a full refresh. Half a second of collection turns that
+-- into one, and half a second is nothing against a target that has not been
+-- assigned yet.
+local rosterPending = false
+
+local function RefreshAfterRoster()
+    if rosterPending then
+        return
+    end
+
+    rosterPending = true
+
+    C_Timer.After(0.5, function()
+        rosterPending = false
+        rosterGeneration = rosterGeneration + 1
+        ns.UpdateBuddyFrame()
+    end)
+end
+
 events:SetScript("OnEvent", function(_, event, _, _, spellID)
     if not (ns.GetDB and ns.GetDB() and ns.GetDB().buddyFrame) then
         return
@@ -1095,6 +1164,29 @@ events:SetScript("OnEvent", function(_, event, _, _, spellID)
             frame.own.icon:SetDesaturated(true)
         end
 
+        return
+    end
+
+    -- Our own cooldown is all this one can say anything about. Sending it
+    -- through the full refresh meant walking the raid for a unit token twice a
+    -- second, to re-answer a question the roster had not touched.
+    if event == "SPELL_UPDATE_COOLDOWN" then
+        -- The only thing here a cooldown change can move is the left half, and
+        -- the compact style has no left half. Same condition as the full path;
+        -- if the two ever disagree, this is the one that runs hundreds of times
+        -- a fight.
+        local frame = frames.buddyFrame
+
+        if frame and frame:IsShown()
+            and (ns.GetDB().buddyFrame.style or "framed") ~= "compact" then
+            UpdateOwnCooldown()
+        end
+
+        return
+    end
+
+    if event == "GROUP_ROSTER_UPDATE" then
+        RefreshAfterRoster()
         return
     end
 
@@ -1129,7 +1221,14 @@ function ns.UpdateBuddyFrame()
 
     local frame = frames.buddyFrame
 
-    ApplyChrome()
+    -- Only when a setting actually moved. Nothing here reacts to the target or
+    -- the roster, so re-running it per event was twelve widget calls to arrive
+    -- at the layout that was already on screen.
+    if not ChromeUnchanged(db) then
+        ApplyChrome()
+        RememberChrome(db)
+    end
+
     frame:SetShown(AllowedByVisibility())
 
     if not frame:IsShown() then
@@ -1165,6 +1264,14 @@ function ns.RebuildBuddyFrame()
 
     frames.buddyFrame = nil
     watchedSpells, watchedUnit, styledFor = nil, nil, nil
+
+    -- The layout memory described a frame that no longer exists. Leaving it
+    -- would have the next refresh decide nothing had changed and skip laying
+    -- out the new one -- which happens to be harmless today only because
+    -- CreateBuddyFrame lays out once itself.
+    lastLocked, lastStyle, lastScale = nil, nil, nil
+    lastOwnName, lastTargetName, lastSpacing = nil, nil, nil
+    cachedFor, cachedGeneration, cachedUnit = nil, -1, nil
 
     ns.UpdateBuddyFrame()
 end
