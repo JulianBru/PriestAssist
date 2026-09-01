@@ -664,14 +664,14 @@ local function UpdateBuddySlot()
     end
 end
 
-local function BuildBuddyContainer(parent)
+local function BuildAuraContainer(parent)
     if not C_AddOns.IsAddOnLoaded("Blizzard_AuraContainer") then
         C_AddOns.LoadAddOn("Blizzard_AuraContainer")
     end
 
     -- Through pcall: the intrinsic and the template both come from
     -- Blizzard_AuraContainer, and on a client that does not have them this
-    -- errors. Losing the right half is better than taking the file down.
+    -- errors. Losing a half is better than taking the file down.
     local ok, container = pcall(CreateFrame, "AuraContainer", nil, parent,
         "CustomAuraContainerTemplate")
 
@@ -776,19 +776,65 @@ local function BuildBuddyContainer(parent)
         end,
     })
 
+    return container
+end
+
+--- The right half: whatever the assignment's specialisation is watched for.
+--- Left disabled until UpdateBuddySlot has a unit and a spell to give it.
+local function BuildBuddyContainer(parent)
+    local container = BuildAuraContainer(parent)
+
+    if not container then
+        return nil
+    end
+
     -- The intrinsic starts enabled (a KeyValue in Blizzard_AuraContainer.xml),
-    -- and at this point it has a unit of nothing and a filter of nothing. Off
-    -- until UpdateBuddySlot decides there is something to watch.
+    -- and at this point it has a unit of nothing and a filter of nothing.
     if container.SetEnabled then
         container:SetEnabled(false)
     end
 
-    -- Unit last: assignment re-evaluates the event registrations, and those are
-    -- gated on the container having slots. Set before, and UNIT_AURA is never
-    -- registered.
     return container
 end
 
+--- The left half's own container: our Power Infusion buff, watched on ourselves.
+---
+--- Bound to "player" once and never rebound, which is what makes this the easy
+--- half -- the unit always resolves, needs no name lookup and does not change
+--- with the assignment.
+---
+--- It works because of Twins of the Sun Priestess: Power Infusion "also grants
+--- you its effect" when cast on an ally, so the priest carries aura 10060 too.
+--- Without that talent nothing lands on us and this stays empty -- the swipe and
+--- the countdown underneath still work, so the half degrades rather than breaks.
+---
+--- Nothing here needs state. The button exists only while the buff runs, and it
+--- sits above the icon and the cooldown, so the three phases the frame shows --
+--- ready, running, on cooldown -- fall out of the stacking on their own.
+local function BuildOwnContainer(parent)
+    local container = BuildAuraContainer(parent)
+
+    if not container then
+        return nil
+    end
+
+    container:SetUnit("player")
+    container:SetAuraSlotCandidateFilters("cd",
+        { includeSpellIDs = { [ns.POWER_INFUSION_SPELL_ID] = true } })
+
+    if container.SetEnabled then
+        container:SetEnabled(true)
+    end
+
+    return container
+end
+
+--- One container with one aura slot, ready to be pointed at a unit and a spell.
+---
+--- Both halves of the frame use this: the right one follows the assignment, the
+--- left one is nailed to the player. The visual half is identical, which is the
+--- reason it is shared -- the marching border, the swipe and the countdown all
+--- have to be created inside the same one-time window.
 -- ─── Assembly ────────────────────────────────────────────────────────────────
 
 local function BuildIcon(parent)
@@ -928,6 +974,12 @@ function ns.CreateBuddyFrame()
     frame.own.cooldown:SetScript("OnCooldownDone", function()
         frame.own.icon:SetDesaturated(false)
     end)
+
+    -- Last on this half, so it stacks above the icon and the cooldown. While the
+    -- buff runs the engine draws over both with its own icon, its own countdown
+    -- and the marching border; when it ends the button goes and the swipe
+    -- underneath is what is left. The three phases need no state of ours.
+    frame.own.container = BuildOwnContainer(frame.own)
 
     -- Right: the target's cooldown, drawn by the engine.
     frame.buddyName = BuildName(frame.content)
