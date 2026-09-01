@@ -168,107 +168,6 @@ local HOLDER_BACKDROP = {
 -- registering one. SetCountdownFont takes the global name, not the object.
 local COUNTDOWN_FONT = "PriestAssistBuddyCountdown"
 
--- ─── Marching ants ───────────────────────────────────────────────────────────
---
--- A dashed border that scrolls around the icon while the aura is up. The
--- approach is EllesmereUI's, from EllesmereUI_Glows.lua, and it exists because
--- the obvious libraries do not work here: LibCustomGlow's PixelGlow drives
--- itself from an OnUpdate that reads IsShown() every frame, and that read is
--- forbidden on an aura button's subtree, so it freezes mid-march.
---
--- Everything below is therefore C-side. Four Translation animations, started
--- once inside the creation window, then never touched again -- no per-frame Lua
--- to be blocked, in restricted content or out of it.
-local DASH_H = "Interface\\AddOns\\PriestAssist\\Media\\glow-dash-h.tga"
-local DASH_V = "Interface\\AddOns\\PriestAssist\\Media\\glow-dash-v.tga"
-local DASH_MASK = "Interface\\Buttons\\WHITE8X8"
-
--- Glow colours the panel offers. They are palette names, so the value stored in
--- the database is looked up rather than trusted -- an unknown one falls back to
--- gold instead of colouring the border with whatever GetColorRGB makes of it.
---
--- "accent" used to be here and was removed: the theme registers white over the
--- palette's accent, so it had become a second White.
-local GLOW_COLORS = {
-    gold   = true,
-    white  = true,
-    danger = true,
-}
-
-local ANT_COUNT = 8      -- dashes distributed around the whole perimeter
-local ANT_THICKNESS = 2
-local ANT_PERIOD = 4     -- seconds for one full lap
-
--- Each edge gets a strip one dash-cycle longer than the edge itself, a mask
--- clipping it back to the edge, and a translation of exactly one cycle. The
--- strip snaps back where the pattern repeats, so the loop is invisible and the
--- march is seamless.
---
--- The per-edge texture coordinates carry the running perimeter position, which
--- is what keeps the dashes continuous around the corners instead of each edge
--- starting its own pattern.
-local function StartMarchingAnts(host, size, r, g, b)
-    local perimeter = 4 * size
-    local cycle = perimeter / ANT_COUNT       -- pixels per dash
-    local step = ANT_PERIOD / ANT_COUNT       -- seconds per dash
-    local span = (size + cycle) / cycle       -- strip length in texture repeats
-
-    -- Clockwise from the top. `base` is where this edge sits along the
-    -- perimeter, measured in dashes.
-    local edges = {
-        { tex = DASH_H, dx =  cycle, dy = 0,      vertical = false, base = 0 },
-        { tex = DASH_V, dx = 0,      dy = -cycle, vertical = true,  base = size / cycle },
-        { tex = DASH_H, dx = -cycle, dy = 0,      vertical = false, base = 2 * size / cycle },
-        { tex = DASH_V, dx = 0,      dy =  cycle, vertical = true,  base = 3 * size / cycle },
-    }
-
-    for index, edge in ipairs(edges) do
-        local mask = host:CreateMaskTexture()
-        mask:SetTexture(DASH_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-
-        local strip = host:CreateTexture(nil, "OVERLAY", nil, 7)
-        strip:SetTexture(edge.tex, "REPEAT", "REPEAT")
-        strip:SetVertexColor(r, g, b, 1)
-        strip:AddMaskTexture(mask)
-
-        if edge.vertical then
-            mask:SetSize(ANT_THICKNESS, size)
-            strip:SetSize(ANT_THICKNESS, size + cycle)
-            strip:SetTexCoord(0, 1, edge.base, edge.base + span)
-
-            if index == 2 then
-                mask:SetPoint("TOPRIGHT")
-                strip:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, cycle)
-            else
-                mask:SetPoint("BOTTOMLEFT")
-                strip:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, -cycle)
-            end
-        else
-            mask:SetSize(size, ANT_THICKNESS)
-            strip:SetSize(size + cycle, ANT_THICKNESS)
-            strip:SetTexCoord(edge.base, edge.base + span, 0, 1)
-
-            if index == 1 then
-                mask:SetPoint("TOPLEFT")
-                strip:SetPoint("TOPLEFT", host, "TOPLEFT", -cycle, 0)
-            else
-                mask:SetPoint("BOTTOMLEFT")
-                strip:SetPoint("BOTTOMLEFT")
-            end
-        end
-
-        local group = strip:CreateAnimationGroup()
-        group:SetLooping("REPEAT")
-
-        local translation = group:CreateAnimation("Translation")
-        translation:SetSmoothing("NONE")
-        translation:SetOffset(edge.dx, edge.dy)
-        translation:SetDuration(step)
-
-        group:Play()
-    end
-end
-
 local function EnsureCountdownFont()
     local font = _G[COUNTDOWN_FONT] or CreateFont(COUNTDOWN_FONT)
 
@@ -469,7 +368,7 @@ end
 
 -- ─── Left: our own Power Infusion ────────────────────────────────────────────
 
-local function UpdateOwnCooldown()
+function ns.UpdateOwnCooldown()
     local frame = frames.buddyFrame
 
     if not (frame and type(frame.own) == "table" and frame.own.cooldown) then
@@ -526,7 +425,11 @@ local styledFor
 --
 -- A nil result is cached too. Somebody who is not in the group is exactly the
 -- case that would otherwise walk the whole roster every time and find nothing.
-local rosterGeneration = 0
+--
+-- The generation is not ours. ns.RosterGeneration is bumped by every roster
+-- invalidation in the addon, so this token expires on the same events the
+-- shared overview does -- one counter, one owner, rather than a second opinion
+-- here about when the group last changed.
 local cachedFor, cachedGeneration, cachedUnit = nil, -1, nil
 
 local function ResolveUnit(target)
@@ -534,11 +437,13 @@ local function ResolveUnit(target)
         return nil
     end
 
-    if cachedGeneration == rosterGeneration and cachedFor == target then
+    local generation = ns.RosterGeneration()
+
+    if cachedGeneration == generation and cachedFor == target then
         return cachedUnit
     end
 
-    cachedFor, cachedGeneration = target, rosterGeneration
+    cachedFor, cachedGeneration = target, generation
     cachedUnit = ns.UnitForName(target)
 
     return cachedUnit
@@ -801,8 +706,8 @@ local function BuildAuraContainer(parent)
             local settings = ns.GetDB().buddyFrame
 
             if settings.glow ~= false then
-                StartMarchingAnts(glow, ICON - 2,
-                    ns.UI.GetColorRGB(GLOW_COLORS[settings.glowColor] and settings.glowColor
+                ns.StartMarchingAnts(glow, ICON - 2,
+                    ns.UI.GetColorRGB(ns.GLOW_COLORS[settings.glowColor] and settings.glowColor
                         or "gold"))
             end
 
@@ -1077,122 +982,6 @@ function ns.CreateBuddyFrame()
     return frame
 end
 
--- Events the frame needs are registered here rather than in Core.lua: they are
--- nobody else's business, and a prototype should be removable by deleting one
--- file and one .toc line.
---
--- PLAYER_ENTERING_WORLD is the only one registered unconditionally, and it is
--- what turns the rest on at login. Everything else exists only while the frame
--- does: SPELL_UPDATE_COOLDOWN fires several times a second in combat, and a
--- switched-off feature has no business waking for it all night.
---
--- The last three serve the visibility rule -- entering and leaving combat, and
--- changing zone, are when "only in combat" and "only in dungeons" flip.
-local events = CreateFrame("Frame")
-events:RegisterEvent("PLAYER_ENTERING_WORLD")
-
-local FREQUENT_EVENTS = {
-    "SPELL_UPDATE_COOLDOWN",
-    "GROUP_ROSTER_UPDATE",
-    "PLAYER_REGEN_ENABLED",
-    "PLAYER_REGEN_DISABLED",
-    "ZONE_CHANGED_NEW_AREA",
-}
-
--- Filtered to the player, so somebody else's cast never reaches the handler.
-local CAST_EVENT = "UNIT_SPELLCAST_SUCCEEDED"
-
-local frequentEventsOn = false
-
-local function SetFrequentEvents(on)
-    on = on and true or false
-
-    if on == frequentEventsOn then
-        return
-    end
-
-    frequentEventsOn = on
-
-    for _, event in ipairs(FREQUENT_EVENTS) do
-        if on then
-            events:RegisterEvent(event)
-        else
-            events:UnregisterEvent(event)
-        end
-    end
-
-    if on then
-        events:RegisterUnitEvent(CAST_EVENT, "player")
-    else
-        events:UnregisterEvent(CAST_EVENT)
-    end
-end
-
--- Roster events arrive in a burst when a raid fills: thirty in two seconds,
--- each one otherwise a full refresh. Half a second of collection turns that
--- into one, and half a second is nothing against a target that has not been
--- assigned yet.
-local rosterPending = false
-
-local function RefreshAfterRoster()
-    if rosterPending then
-        return
-    end
-
-    rosterPending = true
-
-    C_Timer.After(0.5, function()
-        rosterPending = false
-        rosterGeneration = rosterGeneration + 1
-        ns.UpdateBuddyFrame()
-    end)
-end
-
-events:SetScript("OnEvent", function(_, event, _, _, spellID)
-    if not (ns.GetDB and ns.GetDB() and ns.GetDB().buddyFrame) then
-        return
-    end
-
-    -- The one moment we know a cooldown has begun. Everything else about it is
-    -- unreadable, so this is where the icon goes grey; the widget's
-    -- OnCooldownDone is where it comes back.
-    if event == CAST_EVENT then
-        local frame = frames.buddyFrame
-
-        if spellID == ns.POWER_INFUSION_SPELL_ID and frame and frame.own
-            and frame.own.icon then
-            frame.own.icon:SetDesaturated(true)
-        end
-
-        return
-    end
-
-    -- Our own cooldown is all this one can say anything about. Sending it
-    -- through the full refresh meant walking the raid for a unit token twice a
-    -- second, to re-answer a question the roster had not touched.
-    if event == "SPELL_UPDATE_COOLDOWN" then
-        -- The only thing here a cooldown change can move is the left half, and
-        -- the compact style has no left half. Same condition as the full path;
-        -- if the two ever disagree, this is the one that runs hundreds of times
-        -- a fight.
-        local frame = frames.buddyFrame
-
-        if frame and frame:IsShown()
-            and (ns.GetDB().buddyFrame.style or "framed") ~= "compact" then
-            UpdateOwnCooldown()
-        end
-
-        return
-    end
-
-    if event == "GROUP_ROSTER_UPDATE" then
-        RefreshAfterRoster()
-        return
-    end
-
-    ns.UpdateBuddyFrame()
-end)
-
 --- Rebuild what the frame watches. Cheap enough to call from any refresh.
 ---
 --- Switched off, this function is the only thing left of the feature: one table
@@ -1202,7 +991,7 @@ function ns.UpdateBuddyFrame()
     local db = ns.GetDB().buddyFrame
 
     if not (db.enabled and ns.IsPriest()) then
-        SetFrequentEvents(false)
+        ns.SetFrequentEvents(false)
 
         -- Hiding is what releases the container: its OnHide drops the unit
         -- registrations, so nothing of ours is left listening to UNIT_AURA.
@@ -1217,7 +1006,7 @@ function ns.UpdateBuddyFrame()
         ns.CreateBuddyFrame()
     end
 
-    SetFrequentEvents(true)
+    ns.SetFrequentEvents(true)
 
     local frame = frames.buddyFrame
 
@@ -1237,7 +1026,7 @@ function ns.UpdateBuddyFrame()
 
     -- Nothing to update on the left half when the style has removed it.
     if (db.style or "framed") ~= "compact" then
-        UpdateOwnCooldown()
+        ns.UpdateOwnCooldown()
     end
 
     UpdateBuddySlot()

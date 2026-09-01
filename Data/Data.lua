@@ -29,10 +29,44 @@ ns.RACIAL_SPELL_IDS = {
 }
 ns.VOIDFORM_SPELL_ID = 228260
 -- One macro per variant. WoW allows 16 characters for a macro name.
-ns.MACRO_NAMES = {
-    standalone = "PriestAssist PI",
-    voidform   = "PriestAssist VF",
+-- ─── The macro catalogue ─────────────────────────────────────────────────────
+-- One entry per macro the addon writes. See docs/MACRO_FACTORY.md.
+--
+-- `id` is the storage key and never changes; `name` is what the client is asked
+-- for by GetMacroIndexByName, so a rename orphans whatever sits on an action
+-- bar. Both stay English for the same reason every stored value does.
+--
+-- `spec` is which specialisation *owns* the macro and therefore which profile
+-- builds it. It is not a condition on whether the macro is written: every
+-- priest gets all six, because a macro that vanishes on a spec change leaves an
+-- empty bar slot that does not come back.
+--
+-- `spellID` is resolved to a name at build time, so the body is correct in
+-- every client language without a translated string. Voidform has no spellID
+-- because its two lines are a `[known:]` construction that has no business in
+-- the generic path -- it brings its own `build` instead.
+ns.MACRO_CATALOGUE = {
+    { id = "standalone", spec = nil, name = "PriestAssist PI", spellID = 10060 },
+    -- The spellID is for the label and the icon only: `build` is checked first,
+    -- so the body is still the two-line [known:] construction and not a plain
+    -- /cast. Without it the config row would have to say "PriestAssist VF".
+    { id = "voidform",   spec = 258, name = "PriestAssist VF", spellID = 228260,
+      build = "voidform" },
+    { id = "penitence",  spec = 256, name = "PriestAssist UP", spellID = 421453 },
+    { id = "evangelism", spec = 256, name = "PriestAssist EV", spellID = 472433,
+      mouseover = true },
+    { id = "hymn",       spec = 257, name = "PriestAssist HY", spellID = 64843 },
+    { id = "apotheosis", spec = 257, name = "PriestAssist AP", spellID = 200183 },
 }
+
+-- id -> entry, built once. Every lookup goes through here rather than through a
+-- string comparison, so an unknown id is nil instead of silently becoming the
+-- default -- which is what ns.ResolveMacroVariant used to do.
+ns.MACRO_BY_ID = {}
+
+for _, entry in ipairs(ns.MACRO_CATALOGUE) do
+    ns.MACRO_BY_ID[entry.id] = entry
+end
 
 -- Name used before the addon split the macro per variant.
 ns.LEGACY_MACRO_NAME = "PriestAssist"
@@ -40,13 +74,21 @@ ns.LEGACY_MACRO_NAME = "PriestAssist"
 ns.MACRO_ICON_ID = 135939
 ns.AUTO_MACRO_ICON_ID = 134400
 
-ns.MACRO_ICONS = {
+-- Voidform keeps an explicit icon: the others resolve theirs from the spell,
+-- but this one deliberately does not use the Voidform spell icon.
+ns.MACRO_ICON_OVERRIDES = {
     standalone = ns.MACRO_ICON_ID,
     voidform   = ns.AUTO_MACRO_ICON_ID,
 }
 
 -- Fixed order so both macros are always processed the same way.
-ns.MACRO_VARIANT_ORDER = { "standalone", "voidform" }
+-- Kept as the order macros are written in. Derived rather than typed, so a new
+-- catalogue entry cannot be forgotten here.
+ns.MACRO_VARIANT_ORDER = {}
+
+for _, entry in ipairs(ns.MACRO_CATALOGUE) do
+    ns.MACRO_VARIANT_ORDER[#ns.MACRO_VARIANT_ORDER + 1] = entry.id
+end
 ns.ADDON_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\icon.tga"
 ns.POWER_INFUSION_ICON = "|TInterface\\Icons\\Spell_Holy_PowerInfusion:0|t"
 ns.DEFAULT_REMINDER_TEXT = "Priest Assist Ready"
@@ -201,10 +243,11 @@ ns.SPEC_PROFILE_FALLBACK = "other"
 --   nil or 0   flat, before 1.2
 --   1          profiles[content], 1.2 through 1.8
 --   2          profiles[spec][content]
+--   3          profile.macros[id], one entry per catalogue macro
 --
 -- Needed because the shape stopped identifying the version at 2: the old guard
 -- asked `type(profiles) == "table"`, and a nested table is also a table.
-ns.DB_VERSION = 2
+ns.DB_VERSION = 3
 
 -- One profile per content type, so the two lists line up.
 ns.PROFILE_ORDER = { "world", "delve", "dungeon", "raid", "pvp" }
@@ -251,12 +294,40 @@ ns.PVP_DIFFICULTY_IDS = {
 }
 
 -- Settings that live inside a profile.
+-- Per macro rather than per profile, because a healer wants the trinket with
+-- one cooldown on this pull and another on the next. See MACRO_FACTORY.md
+-- section 5 for why the potion is the exception and stays profile-wide.
+--
+-- `trinket` is the slot itself, not a yes or no: "none" already says no, so a
+-- separate checkbox would be a second way to say the same thing.
+--
+-- A default prescribes nothing. Everything here is off, so there is nothing to
+-- configure away -- the only exceptions are the two macros whose whole purpose
+-- is the line in question.
+local function MacroDefaults()
+    local macros = {}
+
+    for _, entry in ipairs(ns.MACRO_CATALOGUE) do
+        macros[entry.id] = {
+            userAdded = "",
+            trinket = "none",
+            racial = false,
+            -- The PI macro *is* the Power Infusion; the Voidform macro has
+            -- carried it since the option existed. Nowhere else is it a guess
+            -- the addon may make for the player.
+            powerInfusion = (entry.id == "standalone" or entry.id == "voidform"),
+            mouseover = false,
+        }
+    end
+
+    return macros
+end
+
 ns.PROFILE_DEFAULTS = {
-    userAddedByVariant = {
-        standalone = "",
-        voidform   = "",
-    },
-    macroVariant = "standalone",
+    macros = MacroDefaults(),
+    -- Consumed rather than put on cooldown, so unlike the trinket it cannot be
+    -- allowed to sit in two macros at once: one profile, one macro, one potion.
+    potionMacro = "standalone",
     combatPotion = "none",
     combatPotionQuality = 2,
     -- Which of the two fires first is not something the addon can work out: it
@@ -264,9 +335,17 @@ ns.PROFILE_DEFAULTS = {
     -- buffs something the trinket scales off. Off by default, which is the
     -- order every earlier version produced.
     potionBeforeTrinket = false,
+    announceTarget = false,
+
+    -- Read once by the migration and never again. Left in place because
+    -- removing them buys nothing and breaks a downgrade.
+    userAddedByVariant = {
+        standalone = "",
+        voidform   = "",
+    },
+    macroVariant = "standalone",
     trinketSlot = "13",
     includeRacial = false,
-    announceTarget = false,
 }
 
 -- Note: `profiles` is intentionally absent here. It is built per profile key in
@@ -620,6 +699,61 @@ local function MigrateToSpecProfiles(existingData)
     ns.pendingSpecProfileNotice = true
 end
 
+-- One entry per catalogue macro, from the three fields that used to describe a
+-- single primary macro. See MACRO_FACTORY.md section 6.
+--
+-- Runs before CopyDefaults, so nothing here is fighting a default that has
+-- already been written -- what this leaves unset, CopyDefaults fills in.
+--
+-- Step 2 is the only one that reads rather than copies, and the only one that
+-- can be got wrong: inheriting the trinket on the wrong macro moves it off the
+-- button somebody has been pressing for a year.
+local function MigrateToMacroTable(existingData)
+    if (existingData.dbVersion or 1) >= 3 then
+        return
+    end
+
+    if type(existingData.profiles) ~= "table" then
+        return
+    end
+
+    for _, set in pairs(existingData.profiles) do
+        if type(set) == "table" then
+            for _, profile in pairs(set) do
+                if type(profile) == "table" and type(profile.macros) ~= "table" then
+                    local primary = profile.macroVariant
+
+                    if not ns.MACRO_BY_ID[primary] then
+                        primary = "standalone"
+                    end
+
+                    local userAdded = profile.userAddedByVariant or {}
+                    local macros = {}
+
+                    for _, entry in ipairs(ns.MACRO_CATALOGUE) do
+                        local isPrimary = (entry.id == primary)
+
+                        macros[entry.id] = {
+                            userAdded = userAdded[entry.id] or "",
+                            trinket = isPrimary and (profile.trinketSlot or "none") or "none",
+                            racial = isPrimary and (profile.includeRacial and true or false) or false,
+                            -- Voidform carried the Power Infusion line exactly
+                            -- when it was primary; the standalone macro is the
+                            -- Power Infusion.
+                            powerInfusion = (entry.id == "standalone")
+                                or (entry.id == "voidform" and primary == "voidform"),
+                            mouseover = false,
+                        }
+                    end
+
+                    profile.macros = macros
+                    profile.potionMacro = primary
+                end
+            end
+        end
+    end
+end
+
 local function MigrateProfiles(existingData)
     -- Held after `/pa reset profiles`, so a reload does not immediately undo the
     -- restore it was asked for. Cleared by `/pa reset profiles cancel`.
@@ -640,6 +774,9 @@ local function MigrateProfiles(existingData)
     else
         existingData.profiles = SpecProfilesFrom(existingData.profiles)
     end
+
+    -- After the spec split, so it walks the shape it expects either way.
+    MigrateToMacroTable(existingData)
 
     existingData.dbVersion = ns.DB_VERSION
 end

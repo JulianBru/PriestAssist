@@ -5,7 +5,7 @@ The generator checks the sheet; this checks the result. It executes the Lua so a
 syntax error fails here rather than in someone's client, then asserts the
 invariants the addon relies on.
 
-    python3 tools/check_spec_priority.py [--file SpecPriority.lua] [--against old.lua]
+    python3 tools/check_spec_priority.py [--file Data/SpecPriority.lua] [--against old.lua]
 
 With --against it also prints what moved, which is what makes the pull request
 worth reading.
@@ -163,7 +163,7 @@ def compare(old: dict, new: dict) -> tuple[list[str], list[str]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--file", default="SpecPriority.lua")
+    parser.add_argument("--file", default="Data/SpecPriority.lua")
     parser.add_argument("--against", help="previous version, to report what moved")
     parser.add_argument("--summary", help="write the change summary here, for a PR body")
     args = parser.parse_args()

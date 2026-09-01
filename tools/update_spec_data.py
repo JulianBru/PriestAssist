@@ -39,7 +39,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TARGET = ROOT / "SpecPriority.lua"
+TARGET = ROOT / "Data" / "SpecPriority.lua"
 HEALER_KEY = "SPEC_SHEET_HEALER_URL"
 SHADOW_KEY = "SPEC_SHEET_SHADOW_URL"
 

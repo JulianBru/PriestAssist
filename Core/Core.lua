@@ -395,6 +395,11 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
         -- The Damage Gain tab lists who is in the group, so it goes stale when
         -- somebody joins or leaves.
         if event == "GROUP_ROSTER_UPDATE" then
+            -- Before anything below reads the group: the cached overview
+            -- describes the roster as it was, and everything from the delayed
+            -- assignment to the panel refresh goes through it.
+            ns.InvalidateRoster()
+
             -- Specialisations arrive one at a time after a change, so give them
             -- a moment before deciding who the best target is.
             ns.DelayAssignment()
@@ -444,6 +449,11 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
         if frames.reminderFrame then
             ns.ScheduleInstanceReminder()
         end
+
+        -- Our own zone is one half of every "is this player here with me"
+        -- comparison in the overview, so crossing an instance line flips that
+        -- answer for the whole group without a single roster event.
+        ns.InvalidateRoster()
 
         -- A loading screen means the group around us may look different by the
         -- time everyone has reported in.

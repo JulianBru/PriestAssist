@@ -26,38 +26,18 @@ ns.state = ns.state or {
     -- and deliberately separate from recommendFor above: that one answers whose
     -- numbers you are reading, this one whose settings you are changing.
     editSpec = nil,
+    -- Which macro's text the Macro tab is showing. Session only, like editSpec:
+    -- it is where you are looking, not a setting.
+    editMacro = nil,
 }
 
 ns.frames = ns.frames or {
     configControls = {},
 }
 
--- Every line the addon says goes through here, which is what makes muting a
--- single condition rather than a flag checked in fifty places.
---
--- GetDB is guarded because this can be reached before the database exists --
--- an error during login would otherwise be swallowed by the very thing meant to
--- report it.
-function ns.Print(text, color)
-    local db = ns.GetDB and ns.GetDB()
-
-    if db and db.muteChat then
-        return
-    end
-
-    -- Chat output goes through the catalogue too. Messages assembled from
-    -- pieces will not match a key, which is what ns.Lf is for -- see
-    -- Locales/Locale.lua.
-    text = ns.L and ns.L(text) or text
-
-    local messageColor = color or "FFFFFF"
-    print("\124cffFFD700" .. ns.ADDON_DISPLAY_NAME .. ": \124r\124cff" .. messageColor .. text .. "\124r")
-end
-
-function ns.Trim(text)
-    return (text or ""):match("^%s*(.-)%s*$")
-end
-
+-- Unused. Kept rather than deleted with the Utils/ move, because removing a
+-- public function is a separate decision from relocating one -- and it did not
+-- go into Utils/ because there is no other number helper to keep it company.
 function ns.Clamp(value, minValue, maxValue)
     if value < minValue then
         return minValue
@@ -68,20 +48,4 @@ function ns.Clamp(value, minValue, maxValue)
     end
 
     return value
-end
-
-function ns.CopyDefaults(defaults, target)
-    if type(target) ~= "table" then
-        target = {}
-    end
-
-    for key, value in pairs(defaults) do
-        if type(value) == "table" then
-            target[key] = ns.CopyDefaults(value, target[key])
-        elseif target[key] == nil then
-            target[key] = value
-        end
-    end
-
-    return target
 end
