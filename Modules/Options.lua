@@ -17,10 +17,7 @@ local COMMANDS = {
     { "/pa comm", "who else is infusing whom" },
     { "/pa version", "what everyone is running" },
     { "/pa show", "show the reminder frame" },
-    { "/pa mode", "powerinfusion | voidform, picks the primary macro" },
-    { "/pa add", "append your own line to the macro" },
     { "/pa reset", "clear the Power Infusion target" },
-    { "/pa reset macro", "drop your own macro lines" },
     { "/pa reset profiles", "put the profiles back on the pre-1.9 layout" },
     { "/pa help", "the same list, in chat" },
 }

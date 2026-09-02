@@ -256,12 +256,17 @@ end
 
 -- ─── UI.CreateCheckButton ─────────────────────────────────────────────────────
 
+local CHECK_BOX_W     = 14
+local CHECK_LABEL_GAP = 6
+
 function UI.CreateCheckButton(parent, label, onCheck)
+    -- Sized to its own label at the end of this function, so the width below is
+    -- only what the frame holds until then.
     local container = CreateFrame("Frame", nil, parent)
     container:SetSize(240, 20)
 
     local box = CreateFrame("Frame", nil, container, BackdropTemplateMixin and "BackdropTemplate" or nil)
-    box:SetSize(14, 14)
+    box:SetSize(CHECK_BOX_W, CHECK_BOX_W)
     box:SetPoint("LEFT", 0, 0)
     StyleFrame(box, C.bgWidget, C.border)
 
@@ -276,20 +281,21 @@ function UI.CreateCheckButton(parent, label, onCheck)
     container._checked         = false
 
     local lbl = NewFS(container, label, "text", 12)
-    lbl:SetPoint("LEFT", box, "RIGHT", 6, 0)
+    lbl:SetPoint("LEFT", box, "RIGHT", CHECK_LABEL_GAP, 0)
     lbl:SetJustifyH("LEFT")
     container.label = lbl
 
     -- For labels that are only known at runtime, such as the name of whichever
-    -- racial this character happens to have.
+    -- racial this character happens to have. Re-measured, or the widget would
+    -- keep the clickable area of whatever it said before.
     function container:SetLabel(text)
         self.label:SetText(L(text) or "")
+        self:FitToLabel()
     end
 
     local hit = CreateFrame("Button", nil, container)
     hit:SetPoint("TOPLEFT",     container, "TOPLEFT",     0, 0)
     hit:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", 0, 0)
-    hit:SetHitRectInsets(0, -180, 0, 0)
 
     local function Apply(v)
         container._checked = v
@@ -299,19 +305,33 @@ function UI.CreateCheckButton(parent, label, onCheck)
     function container:SetChecked(v) Apply(v and true or false) end
     function container:GetChecked()  return container._checked   end
 
+    --- The clickable area is the box plus its label, and nothing beyond it.
+    ---
+    --- Until 1.10 it was a 240px container with the hit rect stretched 180px
+    --- further right, so that a long label stayed clickable. Both numbers were
+    --- guesses and neither had anything to do with the text, which left every
+    --- checkbox 420 pixels wide however short its label. Two of them in columns
+    --- 274 apart -- the General tab -- meant the left one swallowed every click
+    --- meant for the right one, its box included. Where nothing sat alongside,
+    --- the same 420px turned empty panel into a toggle.
+    ---
+    --- Measuring has no number in it that can be wrong. GetStringWidth is the
+    --- rendered width, so it also follows the client's font and locale.
+    function container:FitToLabel()
+        local text = self.label:GetStringWidth() or 0
+
+        self:SetWidth(CHECK_BOX_W + CHECK_LABEL_GAP + math.max(text, 1))
+    end
+
+    --- A deliberately wider target than the label needs, for a checkbox that
+    --- should fill its column rather than end where its text does.
+    function container:SetClickWidth(width)
+        self:SetWidth(width)
+    end
+
     --- Greyed out and unclickable, for a setting that exists but has nothing to
     --- act on. The hit area is a local button, so this is the only way in from
     --- outside; without it a disabled checkbox would still toggle itself.
-    --- Constrain the clickable area to an explicit width.
-    ---
-    --- By default the hit rect runs 180 pixels past the container so a long
-    --- label stays clickable. That is invisible until two of these sit side by
-    --- side, at which point the left one swallows every click meant for the
-    --- right one -- and the label under the cursor is not the box that toggles.
-    function container:SetClickWidth(width)
-        self:SetWidth(width)
-        hit:SetHitRectInsets(0, 0, 0, 0)
-    end
 
     function container:SetEnabled(enabled)
         enabled = enabled ~= false
@@ -357,6 +377,8 @@ function UI.CreateCheckButton(parent, label, onCheck)
     container:HookScript("OnShow", function()
         if container._checked then fill:Show() else fill:Hide() end
     end)
+
+    container:FitToLabel()
 
     return container
 end

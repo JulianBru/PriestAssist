@@ -14,51 +14,28 @@ function ns.HandleSlashCommand(msg)
     local command, rest = commandText:match("^(%S+)%s*(.-)$")
     command = command and command:lower()
 
-    if command == "add" then
-        if rest == "" then
-            ns.Print("Usage: /pa add /cast SpellName", "F82C00")
-            return
-        end
-
-        ns.SetAdditionalMacroText(rest)
-        ns.RequestMacroUpdate()
-        return
-    end
-
-    -- Bare /pa reset clears the target, which is what people reach for after a
-    -- pull went to the wrong player. The old meaning -- dropping your own macro
-    -- lines -- moved to /pa reset macro.
+    -- /pa add and /pa reset macro were removed in 1.10. The macro factory writes
+    -- six macros rather than one, so a command with no macro in it had to guess
+    -- which one it meant -- it used the profile's "primary" macro, a notion the
+    -- factory does away with. The Macro tab's text field is the one place that
+    -- always knows which macro is being edited, so it is now the only way in.
     --
-    -- Both explicit forms exist so the bare one is a shorthand rather than
-    -- implicitly one of two destructive things. Redefining a command is worth
-    -- doing carefully: somebody with the old /pa reset in a macro now clears a
-    -- target instead of their custom lines, which is recoverable -- their lines
-    -- are untouched -- but they should not have to guess what happened.
+    -- Bare /pa reset clears the target, which is what people reach for after a
+    -- pull went to the wrong player.
     if command == "reset" then
         local what = rest:lower()
 
-        if what == "macro" or what == "macros" then
-            ns.SetAdditionalMacroText("")
-            ns.RequestMacroUpdate()
-        elseif what == "profiles cancel" then
+        if what == "profiles cancel" then
             ns.CancelMigrationHold()
         elseif what == "profiles" then
             ns.RestoreLegacyProfiles()
         elseif what == "" or what == "target" then
             ns.ClearAssignedTarget()
         else
-            ns.Print("Usage: /pa reset (clears the target), /pa reset macro " ..
-                "(drops your own macro lines) or /pa reset profiles " ..
-                "(puts the profiles back on the older layout)", "F82C00")
+            ns.Print("Usage: /pa reset (clears the target) or /pa reset " ..
+                "profiles (puts the profiles back on the older layout)", "F82C00")
         end
 
-        return
-    end
-
-    if command == "mode" then
-        if ns.SetMacroVariant(rest:lower()) then
-            ns.RequestMacroUpdate()
-        end
         return
     end
 
@@ -153,11 +130,23 @@ function ns.HandleSlashCommand(msg)
     end
 
     if command == "help" then
-        ns.Print("Commands: /pa, /pa open (settings), /pa auto (pick by specialisation), /pa reset (clear the target), /pa add ..., /pa reset macro (drop your own macro lines), /pa mode powerinfusion|voidform (picks the primary macro), /pa show, /pa note (check the raid note), /pa comm (who else has a Power Infusion target), /pa top X (best targets and who should take whom), /pa note top (the same as raid note lines), /pa version (what everyone is running). Others can ask with !pa top in chat.", "A5AAD9")
+        ns.PrintSlashHelp()
         return
     end
 
-    ns.RequestMacroUpdate(true)
+    -- Anything unrecognised prints the help rather than falling through to the
+    -- assignment. It used to fall through, which meant a typo silently assigned
+    -- whoever you had targeted -- and after 1.10 removed /pa add and /pa mode,
+    -- the two commands most likely to still be sitting in somebody's action bar
+    -- would have done exactly that.
+    --
+    -- Bare /pa is unaffected: it returns at the top, before there is a command
+    -- to recognise.
+    ns.PrintSlashHelp()
+end
+
+function ns.PrintSlashHelp()
+    ns.Print("Commands: /pa, /pa open (settings), /pa auto (pick by specialisation), /pa reset (clear the target), /pa show, /pa note (check the raid note), /pa comm (who else has a Power Infusion target), /pa top X (best targets and who should take whom), /pa note top (the same as raid note lines), /pa version (what everyone is running). Others can ask with !pa top in chat. Custom macro lines are edited in the Macro tab.", "A5AAD9")
 end
 
 SLASH_PRIESTASSIST1 = "/pa"

@@ -635,7 +635,7 @@ function ns.SuggestMacroTrim(variant, profile)
     local userAdded = ns.GetUserAdded(variant, profile)
 
     if userAdded and userAdded ~= "" and fits({}) then
-        return "Your own lines are what pushes it over -- /pa reset macro clears them."
+        return "Your own lines are what pushes it over -- clear the text field in the Macro tab."
     end
 
     local options = {
@@ -810,34 +810,11 @@ function ns.RequestMacroUpdate(assignTarget)
     return true
 end
 
--- Applies to the selected profile.
-function ns.SetMacroVariant(variant)
-    if variant == "powerinfusion" then
-        variant = "standalone"
-    end
-
-    if variant ~= "standalone" and variant ~= "voidform" then
-        ns.Print("Usage: /pa mode powerinfusion|voidform", "F82C00")
-        return false
-    end
-
-    ns.GetActiveProfile().macroVariant = variant
-    ns.Print("\"" .. ns.GetMacroNameForVariant(variant) .. "\" is now the primary macro of profile \"" ..
-        ns.GetProfileDisplayName(ns.GetActiveProfileKey()) .. "\".", "61EE96")
-    return true
-end
-
--- Applies to the variant currently selected for editing.
-function ns.SetAdditionalMacroText(text)
-    local variant = ns.ResolveMacroVariant()
-    local userAdded = ns.NormalizeUserAdded(text)
-
-    ns.SetUserAdded(variant, userAdded)
-
-    if userAdded == "" then
-        ns.Print(ns.Lf("Custom lines removed from \"%s\".", ns.GetMacroNameForVariant(variant)))
-        return
-    end
-
-    ns.Print(ns.Lf("Custom lines saved to \"%s\".", ns.GetMacroNameForVariant(variant)), "A5AAD9")
-end
+-- ns.SetMacroVariant and ns.SetAdditionalMacroText lived here until 1.10, behind
+-- /pa mode and /pa add. Both are gone with the commands.
+--
+-- The factory is why. Both worked on "the profile's primary macro" -- one set
+-- it, the other wrote to it -- and there are now six macros with no primary
+-- among them. Every remaining caller of the build path names the macro it
+-- means; the Macro tab's text field names the one being edited. Neither could
+-- have kept guessing.

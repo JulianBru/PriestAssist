@@ -81,9 +81,9 @@ Supported: Light's Potential, Draught of Rampant Abandon, Potion of Recklessness
 
 ### Edit the macro right in the config
 
-The Macro tab shows your primary macro in an editable field. Add your own lines at the bottom, click away, and they're applied — no need to remember `/pa add`. A live counter tracks how much of WoW's 255-character budget is left.
+The Macro tab shows the macro you pick in an editable field. Add your own lines at the bottom, click away, and they're applied. A live counter tracks how much of WoW's 255-character budget is left.
 
-Each macro keeps its own additions, which matters because the primary one has far less of that budget to spare. Your lines survive every rebuild until you clear them with `/pa reset macro`; the generated lines above them stay under addon control.
+Each macro keeps its own additions, which matters because the ones carrying a trinket, a racial and a potion have far less of that budget to spare. Your lines survive every rebuild until you clear the field yourself; the generated lines above them stay under addon control.
 
 ***
 
@@ -123,12 +123,8 @@ Off by default, and set per profile — announce in raids, stay quiet in the ope
 | <code>/pa open</code>  |Open the settings panel                     |
 | <code>/pa top X</code> |Best targets, and who should take whom      |
 | <code>/pa note top</code> |The same assignment as raid note lines to copy |
-| <code>/pa add &lt;text&gt;</code> |Append custom lines to your primary macro |
 | <code>/pa reset</code> |Clear the Power Infusion target |
-| <code>/pa reset macro</code> |Remove custom lines from your primary macro |
 | <code>/pa reset profiles</code> |Put the profiles back on the pre-1.9 layout |
-| <code>/pa mode powerinfusion</code> |Make <code>PriestAssist PI</code> the primary macro |
-| <code>/pa mode voidform</code> |Make <code>PriestAssist VF</code> the primary macro |
 | <code>/pa note</code>  |Report what the raid note says              |
 | <code>/pa comm</code>  |Who else has a Power Infusion target        |
 | <code>/pa version</code> |What everyone in the group is running     |

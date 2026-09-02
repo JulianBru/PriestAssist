@@ -11,7 +11,18 @@ local configControls = frames.configControls
 -- Widened in 1.6 so the General tab's checkboxes fit in two columns without
 -- shortening their labels. The Damage Gain table gets the difference too, which
 -- gives the player column back the width the absolute-gain column cost it.
-local W          = 600
+-- Raised from 600 in 1.10. The macro factory put one row per macro in the Macro
+-- tab, and the widest of them -- Evangelism on a Discipline priest whose race
+-- has an on-use racial -- carries a trinket dropdown plus "Power Infusion",
+-- "Mouseover" and the racial's own name. That last one ran off the edge.
+--
+-- 670 rather than 620, because 620 was measured against the wrong row. That row
+-- needs 632px of content and had 590. It is also the worst case that exists:
+-- ns.RACIAL_SPELL_IDS holds four spells and "Ancestral Call" is the longest of
+-- them, so nothing wider can appear -- in English. A locale whose translation
+-- runs longer would clip again, and the fix then is the racial's icon alone
+-- with the name in the tooltip, which it already has.
+local W          = 670
 -- Raised in 1.2: the Macro tab gained the profile selector and the announce
 -- checkbox, which left the text field without usable height at 490.
 -- Raised again in 1.6 for the current-target preview, then brought back down
@@ -25,7 +36,10 @@ local HEADER_END = 37   -- y-offset where header ends (px from panel top)
 local TAB_H      = 28
 local FOOTER_H   = 46
 local PAD        = 14
-local CONTENT_W  = W - 2 - PAD * 2   -- 488px
+-- The comment here read "488px" until 1.10, which was the answer for a panel
+-- 518 wide. Everything since has been reasoned against a number that was two
+-- window widths out of date.
+local CONTENT_W  = W - 2 - PAD * 2   -- 640px
 
 -- y-offset of content frames from panel TOPLEFT
 local CONTENT_Y = -(HEADER_END + TAB_H + 1 + PAD)   -- -80

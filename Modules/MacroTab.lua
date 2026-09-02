@@ -66,7 +66,20 @@ ns.RegisterConfigModule({
 
         local NAME_W = 132
         local TRINKET_W = 116
+        local EXTRA_X = NAME_W + TRINKET_W + 20
 
+        -- Column captions once, above the rows. Labelling each dropdown the way
+        -- the old single-macro tab did would cost a line of height per macro,
+        -- and three rows of "Trinket" says no more than one.
+        local headTrinket = ns.UI.CreateFontString(p, "Trinket", "textDim", "FONT_SMALL")
+        headTrinket:SetPoint("TOPLEFT", secMacros, "BOTTOMLEFT", NAME_W + 8, -8)
+
+        local headExtras = ns.UI.CreateFontString(p, "Also in this macro",
+            "textDim", "FONT_SMALL")
+        headExtras:SetPoint("TOPLEFT", secMacros, "BOTTOMLEFT", EXTRA_X, -8)
+
+        controls.macroRowsHeader = headTrinket
+        controls.macroExtraX = EXTRA_X
         controls.macroRows = {}
 
         for _, entry in ipairs(ns.MACRO_CATALOGUE) do
@@ -76,12 +89,12 @@ ns.RegisterConfigModule({
             -- The spell's own name, so the row says what it casts rather than
             -- repeating the macro's two-letter suffix. Falls back to the macro
             -- name before the spell database is ready.
-            row.label = ns.UI.CreateFontString(p, entry.name, "text")
+            row.label = ns.UI.CreateFontString(row, entry.name, "text")
             row.label:SetPoint("LEFT", row, "LEFT", 0, 0)
             row.label:SetWidth(NAME_W)
             row.label:SetJustifyH("LEFT")
 
-            row.trinket = ns.UI.CreateDropdown(p, TRINKET_W, 4)
+            row.trinket = ns.UI.CreateDropdown(row, TRINKET_W, 4)
             row.trinket:SetPoint("LEFT", row, "LEFT", NAME_W + 8, 0)
             row.trinket:SetItems(ns.TRINKET_OPTIONS)
             row.trinket:SetOnSelect(function(value)
@@ -90,37 +103,45 @@ ns.RegisterConfigModule({
                 ns.RefreshConfigPanel()
             end)
 
-            row.racial = ns.UI.CreateCheckButton(p, "Racial", function(checked)
+            row.racial = ns.UI.CreateCheckButton(row, "Racial", function(checked)
                 ns.GetProfileForEditedMacro(entry.id).macros[entry.id].racial =
                     checked and true or false
                 ns.RequestMacroUpdate()
                 ns.RefreshConfigPanel()
             end)
-            row.racial:SetPoint("LEFT", row, "LEFT", NAME_W + TRINKET_W + 20, 0)
-
             -- The Power Infusion macro's own spell is Power Infusion, so there
             -- is nothing to opt into; every other macro may carry the line.
             if entry.id ~= "standalone" then
-                row.powerInfusion = ns.UI.CreateCheckButton(p, "PI", function(checked)
-                    ns.GetProfileForEditedMacro(entry.id).macros[entry.id].powerInfusion =
-                        checked and true or false
-                    ns.RequestMacroUpdate()
-                    ns.RefreshConfigPanel()
-                end)
-                row.powerInfusion:SetPoint("LEFT", row.racial, "RIGHT", 84, 0)
+                row.powerInfusion = ns.UI.CreateCheckButton(row, "Power Infusion",
+                    function(checked)
+                        ns.GetProfileForEditedMacro(entry.id).macros[entry.id].powerInfusion =
+                            checked and true or false
+                        ns.RequestMacroUpdate()
+                        ns.RefreshConfigPanel()
+                    end)
             end
 
             -- Declared in the catalogue, not offered everywhere: only Evangelism
             -- lands on you and wastes itself when nothing is targeted.
             if entry.mouseover then
-                row.mouseover = ns.UI.CreateCheckButton(p, "Mouseover", function(checked)
-                    ns.GetProfileForEditedMacro(entry.id).macros[entry.id].mouseover =
-                        checked and true or false
-                    ns.RequestMacroUpdate()
-                    ns.RefreshConfigPanel()
-                end)
-                row.mouseover:SetPoint("LEFT", row.racial, "RIGHT", 84, 0)
+                row.mouseover = ns.UI.CreateCheckButton(row, "Mouseover",
+                    function(checked)
+                        ns.GetProfileForEditedMacro(entry.id).macros[entry.id].mouseover =
+                            checked and true or false
+                        ns.RequestMacroUpdate()
+                        ns.RefreshConfigPanel()
+                    end)
             end
+
+            -- Positions come from the refresh, not from here: which of the three
+            -- is present depends on the macro and on the character's race, and
+            -- fixed columns either leave a hole or run off the edge.
+
+            -- Anchored and hidden from the start. A frame with no position at
+            -- all leaves its children nowhere in particular, and the refresh is
+            -- the first thing to give it one.
+            row:SetPoint("TOPLEFT", secMacros, "BOTTOMLEFT", 0, -28)
+            row:Hide()
 
             controls.macroRows[entry.id] = row
         end
@@ -171,14 +192,20 @@ ns.RegisterConfigModule({
                 ns.RequestMacroUpdate()
                 ns.RefreshConfigPanel()
             end)
-        controls.potionBeforeTrinket:SetPoint("TOPLEFT", controls.potionMacro, "BOTTOMLEFT", 0, -14)
+        -- Beside the dropdown rather than below it. That row's right half was
+        -- empty, and the macro text field at the bottom needs every line back
+        -- it can get -- see the anchor comment there.
+        controls.potionBeforeTrinket:SetPoint("LEFT", controls.potionMacro, "RIGHT", 12, -2)
 
         controls.announceTarget = ns.UI.CreateCheckButton(p,
             "Announce target in party or raid chat",
             function(checked)
                 ns.GetEditedProfile().announceTarget = checked and true or false
             end)
-        controls.announceTarget:SetPoint("TOPLEFT", controls.potionBeforeTrinket, "BOTTOMLEFT", 0, -14)
+        -- Left column, below the dropdown. Putting it under the checkbox beside
+        -- it would leave it in the right half with the notice running under it.
+        controls.announceTarget:SetPoint("TOPLEFT", controls.potionMacro,
+            "BOTTOMLEFT", 0, -14)
 
         -- Warnings (shown only when relevant, height follows the content)
         controls.macroNotice = ns.UI.CreateNotice(p, ctx.CONTENT_W, ns.WARNING_ICON_PATH)
@@ -193,9 +220,11 @@ ns.RegisterConfigModule({
         controls.macroTextSection = secText
         controls.macroTab = p
 
-        controls.macroTextPick = ns.UI.CreateDropdown(p, POTION_W, 4)
-        controls.macroTextPick:SetPoint("TOPLEFT", secText, "BOTTOMLEFT", 0, -30)
-        controls.macroTextPick:SetLabel("Editing macro", accent)
+        -- On the header's own line, at the right. A labelled dropdown below it
+        -- cost a full row, and this tab has none to spare -- the same trick the
+        -- specialisation segments use beside "Editing" at the top.
+        controls.macroTextPick = ns.UI.CreateDropdown(p, 170, 4)
+        controls.macroTextPick:SetPoint("BOTTOMRIGHT", secText, "BOTTOMRIGHT", 0, -2)
         controls.macroTextPick:SetOnSelect(function(value)
             ns.state.editMacro = value
             ns.RefreshConfigPanel()
@@ -204,9 +233,14 @@ ns.RegisterConfigModule({
         controls.macroText = ns.UI.CreateEditBox(p, ctx.CONTENT_W, 120)
         controls.macroText:SetAccent(accent)
         controls.macroText:SetMaxLetters(ns.MACRO_MAX_LENGTH)
-        controls.macroText:SetPoint("TOPLEFT",  controls.macroTextPick, "BOTTOMLEFT",  0, -10)
-        controls.macroText:SetPoint("TOPRIGHT", secText, "BOTTOMRIGHT", 0, -74)
-        controls.macroText:SetHeight(110)
+        -- One top anchor, and the bottom pinned to the tab rather than a fixed
+        -- height. Two top anchors at different offsets skewed the frame and it
+        -- grew down through the footer buttons; the tab's own bottom edge
+        -- already clears them, so anchoring there cannot.
+        controls.macroText:SetPoint("TOPLEFT",  secText, "BOTTOMLEFT",  0, -10)
+        controls.macroText:SetPoint("TOPRIGHT", secText, "BOTTOMRIGHT", 0, -10)
+        -- Room for the hint and the character counter underneath.
+        controls.macroText:SetPoint("BOTTOM", p, "BOTTOM", 0, 20)
 
         controls.macroTextHint = ns.UI.CreateFontString(p,
             "Click away to apply. Generated lines are rebuilt automatically.",
@@ -286,6 +320,32 @@ ns.RegisterConfigModule({
 
             if row.mouseover then
                 row.mouseover:SetChecked(settings.mouseover and true or false)
+            end
+
+            -- Packed left to right, in the order they matter: the two that
+            -- belong to this macro first, the character-wide racial last.
+            --
+            -- Fixed columns cannot do this. Three of them are only sometimes
+            -- present -- the racial depends on the race, the mouseover on the
+            -- spell -- so a fixed layout either leaves a gap where nothing is
+            -- or runs past the right edge on the one row that has all three.
+            --
+            -- The step comes from the checkbox itself. It measured its own label
+            -- when it was built, and the racial measured its again a few lines
+            -- up when SetLabel gave it this character's spell -- so its width is
+            -- the width of what is on screen, and the spacing here and the
+            -- clickable area cannot drift apart.
+            local x = cc.macroExtraX
+
+            for _, part in ipairs({ "powerInfusion", "mouseover", "racial" }) do
+                local box = row[part]
+
+                if box and box:IsShown() then
+                    box:ClearAllPoints()
+                    box:SetPoint("LEFT", row, "LEFT", x, 0)
+
+                    x = x + (box:GetWidth() or 20) + 18
+                end
             end
         end
 
