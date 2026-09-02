@@ -46,9 +46,11 @@ ns.RegisterConfigModule({
         controls.macroSpecSegments = ctx.MakeSpecSegments(p, ctx.EditedSpecGroups(),
             function(specID) ns.SetEditedSpecKey(specID) end, 22)
 
-        local SPEC_SEG_W = controls.macroSpecSegments.width
-
-        controls.profileSelect = ns.UI.CreateDropdown(p, ctx.CONTENT_W - SPEC_SEG_W - 8, 4)
+        -- A starting width only. The segments carry specialisation names now,
+        -- and those arrive from the client after the panel is built, so the
+        -- strip grows and the refresh below hands back what it took.
+        controls.profileSelect = ns.UI.CreateDropdown(p,
+            ctx.CONTENT_W - controls.macroSpecSegments.width - 8, 4)
         controls.profileSelect:SetPoint("TOPLEFT", secProf, "BOTTOMLEFT", 0, -32)
 
         controls.macroSpecSegments:SetPoint("TOPRIGHT", secProf, "BOTTOMRIGHT", 0, -32)
@@ -267,6 +269,15 @@ ns.RegisterConfigModule({
         local db, cc = view.db, view.cc
         local profile, profileKey = view.profile, view.profileKey
         local UpdateMacroTextCounter = view.UpdateMacroTextCounter
+
+        -- The segments share this row and were just laid out against the
+        -- specialisation names, which the client answers later than the panel
+        -- is built. Whatever they take, the selector gives back -- otherwise
+        -- the two overlap on the first refresh after the names arrive.
+        if cc.profileSelect and cc.macroSpecSegments then
+            cc.profileSelect:SetWidth(
+                view.CONTENT_W - cc.macroSpecSegments.width - 8)
+        end
 
         if cc.profileSelect  then cc.profileSelect:SetSelectedValue(profileKey) end
         if cc.announceTarget then cc.announceTarget:SetChecked(profile.announceTarget and true or false) end

@@ -224,18 +224,107 @@ end
 --- that always reserved a name row, so hiding the names left their space behind
 --- -- twenty-four pixels above the icon against twelve below it, which reads as
 --- a crooked box the moment there is only one icon to look at.
-local function Measure(db, compact)
+--- How wide a name column has to be for the names actually on the frame.
+---
+--- COLUMN is the worst case: twelve characters. Reserving it whatever the names
+--- say is where the dead space came from -- a nine-character name left sixteen
+--- pixels of nothing on each side of its icon, and the icons could not be
+--- brought closer than forty because two full-width columns would have
+--- overlapped. Measuring instead means short names give the space back and the
+--- floor drops with them.
+---
+--- Still clamped at both ends. Below ICON there is nothing to gain, since the
+--- icon is the wider of the two; above COLUMN the box would grow without limit
+--- for a name nobody can read at a glance anyway, and the font string cuts it.
+--- What a name needs, ignoring the width it has been given.
+---
+--- GetStringWidth answers with what is *drawn*, and these font strings carry a
+--- width -- so it can never report more than the column they are already in.
+--- Measuring the column from it is then a one-way street: once something has
+--- narrowed the strings, every later measurement agrees with the narrowing and
+--- the column can never grow back.
+---
+--- Turning the names off does exactly that. With them off the column is half
+--- the icon box, 44, and it is written to both strings whether they are shown
+--- or not. Turn them back on and the widest name measures 44, because that is
+--- all it is allowed to draw -- so the column stays at 44 and every name is cut
+--- to "Aniat...", for the rest of the session.
+local function NaturalWidth(fs)
+    if not fs then
+        return 0
+    end
+
+    if fs.GetUnboundedStringWidth then
+        return fs:GetUnboundedStringWidth() or 0
+    end
+
+    -- No such call on an older client: drop the constraint, measure, put it
+    -- back. Zero means "no fixed width" rather than "no width".
+    local width = fs:GetWidth()
+
+    fs:SetWidth(0)
+    local natural = fs:GetStringWidth() or 0
+    fs:SetWidth(width)
+
+    return natural
+end
+
+local function NameColumn(frame)
+    if not frame then
+        return COLUMN
+    end
+
+    local widest = math.max(NaturalWidth(frame.ownName),
+                            NaturalWidth(frame.buddyName))
+
+    return math.max(ICON, math.min(COLUMN, widest))
+end
+
+local function Measure(db, compact, column)
     local names = (db.showTargetName ~= false)
         or (not compact and db.showOwnName ~= false)
 
     local nameRow = names and (NAME_H + NAME_GAP) or 0
     local spacing = db.spacing or 42
-    local icons = compact and ICON or (ICON * 2 + spacing)
 
-    -- Names need more room than icons do, so the box widens for them rather
-    -- than letting two twelve-character names collide over narrow spacing.
-    local width = names and math.max(icons, compact and COLUMN or COLUMN * 2 + 8)
-        or icons
+    -- The slider is called "Icon Spacing" and used not to be one once the names
+    -- were on: the box was widened to fit them, and the extra went half to the
+    -- outer edges and half between the icons. At the default 42 the icons ended
+    -- up 57 apart. `column` made it worse by dividing with `spacing` while
+    -- `width` had been budgeted with 8, so each name got 59 pixels of the 76 it
+    -- is supposed to have.
+    --
+    -- Both come from one formula now. The icons sit centred in their columns,
+    -- so the gap between them is
+    --
+    --     width - 2*((column - ICON)/2) - 2*ICON  =  width - column - ICON
+    --
+    -- and setting that equal to `spacing` gives the width below. It holds at
+    -- every slider value, and the icons stay under their names.
+    --
+    -- Only a laid-out pair of names claims a column of its own. Everything else
+    -- falls through to half the box, which is what a lone icon needs to be
+    -- centred in. `column` comes from NameColumn and is therefore the width of
+    -- the names on screen, not of the longest name there could be.
+    column = (names and not compact) and (column or COLUMN) or nil
+
+    -- Two names of that width cannot be closer than `column - ICON`. Below that
+    -- they would overlap, so the slider stops moving the icons there rather
+    -- than letting the names run into each other -- plus 8 so they do not
+    -- touch. The floor drops as the names get shorter, and with the names off
+    -- there is nothing to collide and the full range works.
+    if column then
+        spacing = math.max(spacing, column - ICON + 8)
+    end
+
+    local width
+    if compact then
+        width = names and math.max(ICON, COLUMN) or ICON
+    elseif column then
+        width = column + ICON + spacing
+    else
+        width = ICON * 2 + spacing
+    end
 
     return {
         nameRow = nameRow,
@@ -248,7 +337,10 @@ local function Measure(db, compact)
         -- comes out an actual square. Counting it cost four pixels at the
         -- bottom that nothing balanced at the top.
         height  = nameRow + ICON,
-        column  = compact and width or (width - spacing) / 2,
+
+        -- With the names off the column is only what the icon is centred in,
+        -- and half the box is the right answer for that.
+        column  = compact and width or (column or (width - spacing) / 2),
     }
 end
 
@@ -256,8 +348,11 @@ end
 -- concatenated key: this runs on every refresh, and a string built to avoid
 -- twelve widget calls is not much of a saving.
 local lastLocked, lastStyle, lastScale
-local lastOwnName, lastTargetName, lastSpacing
+local lastOwnName, lastTargetName, lastSpacing, lastColumn
 
+-- The column is in here because it is no longer a constant: it follows the
+-- names, and the target's name changes without any setting moving. Left out,
+-- the box would keep the width it had for the previous target.
 local function ChromeUnchanged(db)
     return lastLocked == db.locked
         and lastStyle == (db.style or "framed")
@@ -265,6 +360,7 @@ local function ChromeUnchanged(db)
         and lastOwnName == (db.showOwnName ~= false)
         and lastTargetName == (db.showTargetName ~= false)
         and lastSpacing == (db.spacing or 42)
+        and lastColumn == NameColumn(frames.buddyFrame)
 end
 
 local function RememberChrome(db)
@@ -272,14 +368,31 @@ local function RememberChrome(db)
     lastOwnName = db.showOwnName ~= false
     lastTargetName = db.showTargetName ~= false
     lastSpacing = db.spacing or 42
+    lastColumn = NameColumn(frames.buddyFrame)
 end
 
-local function ApplyChrome()
+-- Declared here so EnsureChrome below can name it; defined further down, where
+-- the constants it measures with are in scope.
+local ApplyChrome
+
+--- Lay the frame out again if anything it is laid out from has moved.
+---
+--- This used to be the if-statement written out at its one call site. There are
+--- two now that the names are measured: one before the frame is shown, and one
+--- after a new target's name has been written into it.
+local function EnsureChrome(db)
+    if not ChromeUnchanged(db) then
+        ApplyChrome()
+        RememberChrome(db)
+    end
+end
+
+function ApplyChrome()
     local frame = frames.buddyFrame
     local db = ns.GetDB().buddyFrame
     local style = db.style or "framed"
     local compact = style == "compact"
-    local m = Measure(db, compact)
+    local m = Measure(db, compact, NameColumn(frame))
 
     -- Unlocked, the box and the title bar are always there whatever the style
     -- says: they are the handle. A frameless frame you cannot grab would be a
@@ -309,9 +422,15 @@ local function ApplyChrome()
     frame.ownName:SetWidth(m.column)
     frame.buddyName:SetWidth(m.column)
 
+    -- Always TOPLEFT, unlike the buddy name below: our own half is the left one
+    -- and is hidden outright in compact, so there is no second case.
+    --
+    -- The SetPoint went missing in the buddy frame's first commit, leaving a
+    -- ClearAllPoints with nothing after it and a comment about the *creation*
+    -- function sitting in the gap. A font string with no point is not drawn, so
+    -- "Show own name" reserved its column, set its text, and displayed nothing.
     frame.ownName:ClearAllPoints()
-    -- Positions and sizes are all set by ApplyChrome, which runs before the
-    -- frame is ever shown. What happens here is creation and parenting only.
+    frame.ownName:SetPoint("TOPLEFT")
 
     frame.buddyName:ClearAllPoints()
     frame.buddyName:SetPoint(compact and "TOPLEFT" or "TOPRIGHT")
@@ -492,6 +611,12 @@ local function UpdateBuddyStyle(target, spells, unit)
     styledFor = key
 
     frame.buddyName:SetTextSafe(ShortName(target))
+
+    -- The box is measured from the names, so a new target can change its width.
+    -- Here rather than in ns.UpdateBuddyFrame: that runs its chrome check before
+    -- this point, so a name arriving now would first be laid out on the next
+    -- refresh, in the previous target's column.
+    EnsureChrome(ns.GetDB().buddyFrame)
 
     local info = spellID and C_Spell and C_Spell.GetSpellInfo
         and C_Spell.GetSpellInfo(spellID)
@@ -1010,13 +1135,9 @@ function ns.UpdateBuddyFrame()
 
     local frame = frames.buddyFrame
 
-    -- Only when a setting actually moved. Nothing here reacts to the target or
-    -- the roster, so re-running it per event was twelve widget calls to arrive
-    -- at the layout that was already on screen.
-    if not ChromeUnchanged(db) then
-        ApplyChrome()
-        RememberChrome(db)
-    end
+    -- Only when something it lays out from actually moved. Re-running it per
+    -- event was twelve widget calls to arrive at the layout already on screen.
+    EnsureChrome(db)
 
     frame:SetShown(AllowedByVisibility())
 

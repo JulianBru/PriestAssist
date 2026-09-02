@@ -521,8 +521,18 @@ function UI.CreateDropdown(parent, width, maxSlots)
     dd.offset       = 0
     dd.selectedValue = nil
 
+    -- Anchored on both sides rather than given a width, so the button is the
+    -- dropdown's width by construction and cannot drift from it.
+    --
+    -- It carried its own copy of `width` until 1.10. Identical at build, and
+    -- nothing resized a dropdown afterwards, so the two never disagreed -- but
+    -- dd:SetWidth() moved the frame and left the button where it was, which
+    -- looks like it worked until you open the list. The spec selector needs a
+    -- width that follows its labels, and the dropdown beside it has to give
+    -- that width back.
     dd.button = UI.CreateButton(dd, "", "accent_hover", width or 300, 22)
     dd.button:SetPoint("TOPLEFT", 0, 0)
+    dd.button:SetPoint("TOPRIGHT", 0, 0)
     dd.button.text:ClearAllPoints()
     dd.button.text:SetPoint("LEFT", 8, 0)
     dd.button.text:SetJustifyH("LEFT")
@@ -574,8 +584,14 @@ function UI.CreateDropdown(parent, width, maxSlots)
     end
 
     for i = 1, dd.maxSlots do
+        -- Both sides again, and for the same reason as dd.button: this was the
+        -- third place holding a copy of `width`, and the one I missed when the
+        -- other two were fixed. The list took its width at open, the rows kept
+        -- the one from login, and the highlight under the cursor ran past the
+        -- right edge of the list it was inside.
         local itemBtn = UI.CreateButton(dd.list, "", "accent_transparent", (width or 300) - 4, 20)
         itemBtn:SetPoint("TOPLEFT", 2, -2 - (i - 1) * 22)
+        itemBtn:SetPoint("TOPRIGHT", -2, -2 - (i - 1) * 22)
         itemBtn.text:ClearAllPoints()
         itemBtn.text:SetPoint("LEFT", 8, 0)
         itemBtn.text:SetJustifyH("LEFT")
@@ -651,6 +667,10 @@ function UI.CreateDropdown(parent, width, maxSlots)
         end
         UI.CloseDropdown()
         dd.list:ClearAllPoints()
+        -- Taken at open rather than at build, for the same reason the button is
+        -- anchored instead of sized: the dropdown may be narrower now than it
+        -- was at login.
+        dd.list:SetWidth(dd:GetWidth())
         dd.list:SetPoint("TOPLEFT", dd.button, "BOTTOMLEFT", 0, -2)
         dd.list:SetFrameLevel((dd:GetFrameLevel() or 1) + 50)
         Refresh()

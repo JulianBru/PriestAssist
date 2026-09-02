@@ -201,6 +201,10 @@ function ns.RefreshConfigPanel()
         cc = cc,
         profile = profile,
         profileKey = profileKey,
+        -- Already on the build context. Here too because a refresh that
+        -- re-sizes anything needs the same number, and reading it from a
+        -- second place is how two answers start to exist.
+        CONTENT_W = CONTENT_W,
         SetPreviewIcon = SetPreviewIcon,
         UpdateMacroTextCounter = UpdateMacroTextCounter,
     }
@@ -649,26 +653,39 @@ end
 --
 -- @param groups a list of { value = any, specs = { specID, … } }
 -- @param onSelect called with the chosen value
--- @return the frame, with :SetActive(value) and a `width` field
+-- @return the frame, with :SetActive(value), :Layout() and a `width` field.
+--         `width` is only true as of the last Layout -- a group of one spec
+--         carries that spec's name, and the client answers with a placeholder
+--         until it has the data. Anything sharing the row has to re-read it.
 local function MakeSpecSegments(parent, groups, onSelect, height)
     local SEG_H, ICON, SEG_PAD, ICON_GAP, GROUP_GAP = height or 26, 18, 7, 3, 6
+    -- Between the last icon of a group and that group's name.
+    local LABEL_GAP = 5
 
     local ar, ag, ab = UI.GetColorRGB(ns.GetThemeAccentName())
     local sr, sg, sb = UI.GetColorRGB("separator")
 
-    local function GroupWidth(specs)
-        return #specs * ICON + (#specs - 1) * ICON_GAP + SEG_PAD * 2
-    end
+    --- Icons, their gaps, the padding, and the name if there is one.
+    ---
+    --- Only a group of exactly one specialisation gets a name: with two, the
+    --- honest label is whatever the two have in common, and this control has no
+    --- notion of that. Both callers pass one spec per group.
+    local function GroupWidth(specs, labelWidth)
+        local width = #specs * ICON + (#specs - 1) * ICON_GAP + SEG_PAD * 2
 
-    local total = 0
+        if labelWidth and labelWidth > 0 then
+            width = width + LABEL_GAP + labelWidth
+        end
 
-    for index, group in ipairs(groups) do
-        total = total + GroupWidth(group.specs) + (index > 1 and GROUP_GAP or 0)
+        return width
     end
 
     local segments = CreateFrame("Frame", nil, parent)
-    segments:SetSize(total, SEG_H)
-    segments.width = total
+    segments:SetSize(GroupWidth({ 1 }) * #groups, SEG_H)
+    -- A starting value, not the answer. Layout() below sets the real one as
+    -- soon as there is a name to measure, which is usually after login rather
+    -- than during it.
+    segments.width = GroupWidth({ 1 }) * #groups
 
     local buttons = {}
     local previous
@@ -711,6 +728,19 @@ local function MakeSpecSegments(parent, groups, onSelect, height)
             btn.icons[index] = tex
         end
 
+        -- The name is data from the client, not interface text, so it is set
+        -- through SetTextSafe rather than through the widget builders --
+        -- Locale.lua's rule is to translate the pixels and never the data, and
+        -- GetSpecializationInfoByID already answers in the client's language.
+        if #group.specs == 1 then
+            -- Built empty and filled in Layout: at login the client often has
+            -- no specialisation data yet, and what it hands back then is a
+            -- placeholder, not a name.
+            btn.label = UI.CreateFontString(btn, "", "text", "FONT_SMALL")
+            btn.label:SetPoint("LEFT", previousIcon, "RIGHT", LABEL_GAP, 0)
+            btn.label:SetJustifyH("LEFT")
+        end
+
         btn:SetScript("OnClick", function()
             onSelect(btn.value)
         end)
@@ -719,7 +749,46 @@ local function MakeSpecSegments(parent, groups, onSelect, height)
         buttons[#buttons + 1] = btn
     end
 
+    --- Names, widths and the total, from what the client can answer right now.
+    ---
+    --- Separate from the icons for one reason: a name changes the width and an
+    --- icon does not. `GetSpecDisplay` returns "Spec 256" until the client has
+    --- specialisation data, which is usually a moment after the panel is built,
+    --- so a width measured once at build is measured off a placeholder. Running
+    --- this on every refresh means the strip follows whatever is on it, and the
+    --- placeholder stops being a special case and becomes a passing state.
+    ---
+    --- Returns whether the total changed, so a caller that has to give the room
+    --- back knows to do it.
+    function segments:Layout()
+        local total = 0
+
+        for index, btn in ipairs(buttons) do
+            local labelWidth = 0
+
+            if btn.label then
+                local name = ns.GetSpecDisplay(btn.specs[1])
+                btn.label:SetTextSafe(name or "")
+                labelWidth = btn.label:GetStringWidth() or 0
+            end
+
+            local width = GroupWidth(btn.specs, labelWidth)
+            btn:SetSize(width, SEG_H)
+
+            total = total + width + (index > 1 and GROUP_GAP or 0)
+        end
+
+        local changed = total ~= self.width
+
+        self:SetSize(total, SEG_H)
+        self.width = total
+
+        return changed
+    end
+
     function segments:SetActive(value)
+        self:Layout()
+
         for _, btn in ipairs(buttons) do
             local on = btn.value == value
 
