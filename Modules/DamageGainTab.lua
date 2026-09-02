@@ -12,6 +12,14 @@ ns.RegisterConfigModule({
         local accent = ns.GetThemeAccentName()
         local controls = ns.frames.configControls
 
+        -- The panel's own colours, derived here rather than inherited.
+        -- These were upvalues of ns.CreateConfigPanel until 6.7 moved the
+        -- tab out; the extraction rewrote UI. and configControls. and left
+        -- them behind as nil globals, which SetBackdropBorderColor then
+        -- refused with "bad argument #1".
+        local ar, ag, ab = ns.UI.GetColorRGB(accent)
+        local sr, sg, sb = ns.UI.GetColorRGB("separator")
+
         local sec = ctx.SectionHeader(p, "List")
 
         controls.prioritySubtitle = ns.UI.CreateFontString(p, "", "textDim", "FONT_SMALL")
