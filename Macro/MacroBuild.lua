@@ -22,24 +22,12 @@ local state = ns.state
 
 -- The line builders and the two name helpers, from the top of what used
 -- to be Macro.lua. Every caller is in this file.
-function ns.NormalizeUserAdded(text)
-    local normalized = ns.Trim(text)
-
-    if normalized == "" then
-        return ""
-    end
-
-    normalized = normalized:gsub("\r\n", "\n")
-    normalized = normalized:gsub("\r", "\n")
-    normalized = normalized:gsub("/", "\n/")
-    normalized = normalized:gsub("^\n+", "")
-
-    if normalized:sub(1, 1) ~= "\n" then
-        normalized = "\n" .. normalized
-    end
-
-    return normalized
-end
+--
+-- ns.NormalizeUserAdded stood here until 1.10 and went with /pa add, its only
+-- caller. It split the text on slashes, so that one typed line became several
+-- macro lines. ns.NormalizeUserAddedLines is the one the text field uses: it
+-- keeps the newlines the player typed and does not invent any, which is the
+-- only sensible reading of a multi-line field.
 
 -- Class-colours the assigned name, but only while that player is still the
 -- current target -- the class is only available for a live unit.
@@ -423,8 +411,9 @@ function ns.BuildMacroBody(variant, profile)
     return body, targetName
 end
 
--- Normalizes text that already contains real line breaks, unlike
--- ns.NormalizeUserAdded which has to split a single /pa add line on slashes.
+-- Normalizes text that already contains real line breaks, which since 1.10 is
+-- the only kind there is: the text field is where custom lines are written, and
+-- it keeps the newlines the player typed.
 function ns.NormalizeUserAddedLines(text)
     local normalized = (text or ""):gsub("\r\n", "\n"):gsub("\r", "\n")
 
@@ -611,48 +600,117 @@ end
 ---
 --- Rebuilds the macro without each optional part in turn and reports the first
 --- one that would bring it under the limit, so the advice is "this is enough"
---- rather than "try something". Named in the order that costs the least: your
---- own lines before anything the addon manages, and the racial before the
---- potion, which is usually worth more.
+--- rather than "try something".
+---
+--- Rewritten for the factory. It used to try `includeRacial`, `trinketSlot` and
+--- `macroVariant` on the profile, all three of which the factory moved into
+--- `profile.macros[id]` or did away with. Setting a key nothing reads produced
+--- an identical body, so `fits` answered the same for every option and the loop
+--- always fell through to the generic closing line. It failed toward a harmless
+--- sentence, which is why it went unnoticed.
+---
+--- Named in the order that costs the least. The racial first, then the Power
+--- Infusion line -- dropping that one is cheaper than it sounds, because the
+--- standalone "PriestAssist PI" macro exists on every priest and still casts
+--- it, so the cost is a second keypress rather than a lost cooldown. Then the
+--- potion, which is consumed and paid for, and the second trinket last.
 function ns.SuggestMacroTrim(variant, profile)
-    profile = profile or ns.GetActiveProfile()
+    profile = profile or ns.GetProfileForMacro(variant)
 
-    local function fits(changes)
+    local userAdded = ns.GetUserAdded(variant, profile)
+
+    --- A profile the build path can be run against without writing through to
+    --- the real one.
+    ---
+    --- The copy used to be flat. That was harmless only by accident: every
+    --- option it tried set a profile key nothing read any more, so nothing ever
+    --- reached the shared `macros` table. Now that the options are per macro, a
+    --- flat copy would turn the player's racial off for real while asking a
+    --- question about it.
+    local function probeWith(profileChanges, macroChanges)
         local probe = {}
 
         for key, value in pairs(profile) do
             probe[key] = value
         end
 
-        for key, value in pairs(changes) do
+        for key, value in pairs(profileChanges or {}) do
             probe[key] = value
         end
 
+        -- Only this macro's settings are copied deeply. The build path reads
+        -- the others for nothing but the potion's owner, which is a profile
+        -- key, and it never writes.
+        local macros = {}
+
+        for id, settings in pairs(profile.macros or {}) do
+            macros[id] = settings
+        end
+
+        local mine = {}
+
+        for key, value in pairs(macros[variant] or {}) do
+            mine[key] = value
+        end
+
+        for key, value in pairs(macroChanges or {}) do
+            mine[key] = value
+        end
+
+        macros[variant] = mine
+        probe.macros = macros
+
+        return probe
+    end
+
+    --- Measured the way ns.BuildMacroBody measures: the fallback potion rank
+    --- goes if that is what it takes, and the player's own lines count.
+    ---
+    --- Asking about the generated block alone -- which is what this did -- calls
+    --- a change enough while the custom lines that actually overflow it are
+    --- still sitting there.
+    local function fits(profileChanges, macroChanges)
+        local probe = probeWith(profileChanges, macroChanges)
         local body = ns.BuildGeneratedMacroBody(variant, probe)
-        return body:len() <= ns.MACRO_MAX_LENGTH
+
+        if #body + #userAdded > ns.MACRO_MAX_LENGTH then
+            body = ns.BuildGeneratedMacroBody(variant, probe, true)
+        end
+
+        return #body + #userAdded <= ns.MACRO_MAX_LENGTH
     end
 
-    local userAdded = ns.GetUserAdded(variant, profile)
+    -- Blame the player's own lines only when everything the addon generates
+    -- fits without them, at the smallest the addon is willing to make it.
+    if userAdded ~= "" then
+        local generated = ns.BuildGeneratedMacroBody(variant, profile, true)
 
-    if userAdded and userAdded ~= "" and fits({}) then
-        return "Your own lines are what pushes it over -- clear the text field in the Macro tab."
+        if #generated <= ns.MACRO_MAX_LENGTH then
+            return "Your own lines are what pushes it over -- clear the text field in the Macro tab."
+        end
     end
 
+    -- An option whose setting is already off rebuilds the same body and cannot
+    -- fit, so it drops out of the list on its own. No need to ask first.
     local options = {
-        { changes = { includeRacial = false }, text = "Turning the racial off is enough." },
-        { changes = { combatPotion = "none" }, text = "Turning the combat potion off is enough." },
-        { changes = { trinketSlot = "13" }, text = "Using one trinket slot instead of both is enough." },
-        { changes = { macroVariant = "standalone" },
-          text = "Making Power Infusion the primary macro instead of Voidform is enough." },
+        { macro = { racial = false },
+          text = "Turning the racial off for this macro is enough." },
+        { macro = { powerInfusion = false },
+          text = "Taking Power Infusion out of this macro is enough -- the " ..
+                 "\"PriestAssist PI\" macro still casts it." },
+        { profile = { combatPotion = "none" },
+          text = "Turning the combat potion off is enough." },
+        { macro = { trinket = "13" },
+          text = "Using one trinket slot instead of both is enough." },
     }
 
     for _, option in ipairs(options) do
-        if fits(option.changes) then
+        if fits(option.profile, option.macro) then
             return option.text
         end
     end
 
-    return "Turn off the combat potion, the racial or the second trinket in the Macro tab."
+    return "Turn off the combat potion, the racial or the second trinket for this macro in the Macro tab."
 end
 
 -- reportAssignment: true only for deliberate assignments (/pa, the minimap
@@ -728,7 +786,11 @@ function ns.UpdateMacro(reportAssignment)
                 ((existing and existing > 0)
                     and "It was left as it was, so it still works but no longer follows your target. "
                     or "It was not created. ") ..
-                ns.SuggestMacroTrim(variant, profile), "F82C00")
+                -- Was `profile`, which is not a local anywhere in this function
+                -- -- a global read, so nil, so the suggestion fell back to the
+                -- active profile. That is the wrong one for any macro a
+                -- different specialisation owns.
+                ns.SuggestMacroTrim(variant, ns.GetProfileForMacro(variant)), "F82C00")
         else
             -- Indices shift whenever a macro is deleted, so resolve them freshly.
             local index = GetMacroIndexByName(macroName)

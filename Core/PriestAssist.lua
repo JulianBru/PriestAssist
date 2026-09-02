@@ -34,18 +34,3 @@ ns.state = ns.state or {
 ns.frames = ns.frames or {
     configControls = {},
 }
-
--- Unused. Kept rather than deleted with the Utils/ move, because removing a
--- public function is a separate decision from relocating one -- and it did not
--- go into Utils/ because there is no other number helper to keep it company.
-function ns.Clamp(value, minValue, maxValue)
-    if value < minValue then
-        return minValue
-    end
-
-    if value > maxValue then
-        return maxValue
-    end
-
-    return value
-end

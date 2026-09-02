@@ -879,9 +879,10 @@ function ns.InitializeDatabase()
         end
     end
 
-    -- Stored text already contains real line breaks, so it must not go through
-    -- ns.NormalizeUserAdded — that one splits on slashes and would insert an
-    -- extra blank line on every login.
+    -- Stored text already contains real line breaks, so it goes through the
+    -- line-preserving normalizer. The slash-splitting one this used to warn
+    -- against -- ns.NormalizeUserAdded, which would have inserted an extra blank
+    -- line on every login -- went with /pa add in 1.10.
     for _, set in pairs(PriestAssistDB.profiles) do
         for _, key in ipairs(ns.PROFILE_ORDER) do
             local profile = set[key]
