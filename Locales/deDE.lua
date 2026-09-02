@@ -83,11 +83,9 @@ L["Show minimap button"] = "Minimap-Button anzeigen"
 -- ─── Macro ───────────────────────────────────────────────────────────────────
 
 L["Macro Tab"] = "Makro-Tab"
-L["Primary Macro"] = "Hauptmakro"
 L["Trinket"] = "Schmuckstück"
 L["Combat Potion"] = "Kampftrank"
 L["Potion Priority"] = "Trankreihenfolge"
-L["Include racial"] = "Volksfähigkeit einbeziehen"
 L["Max rank first"] = "Höchster Rang zuerst"
 L["Rank 1 first"] = "Rang 1 zuerst"
 L["Top slot (13)"] = "Oberer Platz (13)"
@@ -125,7 +123,6 @@ L["Power Infusion assignments are only shared inside a group."] =
 -- ─── Tabs and section headings ───────────────────────────────────────────────
 
 L["GENERAL"] = "Allgemein"
-L["SETTINGS"] = "Einstellungen"
 L["DISPLAY"] = "Anzeige"
 L["APPEARANCE"] = "Aussehen"
 L["TIMING"] = "Zeitverhalten"
@@ -148,13 +145,12 @@ L["Show raid and dungeon reminder"] = "Reminder in Raid und Dungeon anzeigen"
 L["Announce target in party or raid chat"] = "Ziel im Gruppen- oder Raidchat ansagen"
 L["Silence chat messages from PriestAssist"] = "Chatnachrichten von PriestAssist unterdrücken"
 L["Use the potion before the trinket"] = "Trank vor dem Schmuckstück benutzen"
-L["Turning the racial off is enough."] = "Die Volksfähigkeit abzuschalten genügt."
+L["Turning the racial off for this macro is enough."] =
+    "Die Volksfähigkeit für dieses Makro abzuschalten genügt."
 L["No Power Infusion target was set."] = "Es wurde kein Ziel für Seele der Macht gesetzt."
 L["Found PI lines, but none naming you."] = "PI-Zeilen gefunden, aber keine nennt dich."
 L["Macro update queued until combat ends."] = "Makroaktualisierung wartet bis zum Kampfende."
 L["The migration is not being held."] = "Die Migration wird nicht zurückgehalten."
-L["Usage: /pa mode powerinfusion|voidform"] = "Verwendung: /pa mode powerinfusion|voidform"
-L["Usage: /pa add /cast SpellName"] = "Verwendung: /pa add /cast Zaubername"
 
 -- ─── Buddy frame messages ────────────────────────────────────────────────────
 
@@ -287,8 +283,8 @@ L["Hold lifted. Your profiles migrate again on the next reload."] =
     "Sperre aufgehoben. Deine Profile migrieren beim nächsten Reload wieder."
 L["The migration is not being held."] =
     "Die Migration wird nicht zurückgehalten."
-L["Usage: /pa reset (clears the target), /pa reset macro (drops your own macro lines) or /pa reset profiles (puts the profiles back on the older layout)"] =
-    "Verwendung: /pa reset (löscht das Ziel), /pa reset macro (verwirft deine eigenen Makrozeilen) oder /pa reset profiles (setzt die Profile auf den älteren Aufbau zurück)"
+L["Usage: /pa reset (clears the target) or /pa reset profiles (puts the profiles back on the older layout)"] =
+    "Verwendung: /pa reset (löscht das Ziel) oder /pa reset profiles (setzt die Profile auf den älteren Aufbau zurück)"
 
 -- ─── Remaining options ───────────────────────────────────────────────────────
 
@@ -308,8 +304,10 @@ L["Turning the combat potion off is enough."] =
     "Den Kampftrank abzuschalten genügt."
 L["Using one trinket slot instead of both is enough."] =
     "Ein Schmuckstückplatz statt beider genügt."
-L["Making Power Infusion the primary macro instead of Voidform is enough."] =
-    "Seele der Macht statt Leerenform als Hauptmakro zu wählen genügt."
+L["Taking Power Infusion out of this macro is enough -- the \"PriestAssist PI\" macro still casts it."] =
+    "Seele der Macht aus diesem Makro zu nehmen genügt -- das Makro \"PriestAssist PI\" wirkt sie weiterhin."
+L["Turn off the combat potion, the racial or the second trinket for this macro in the Macro tab."] =
+    "Schalte für dieses Makro im Macro Tab den Kampftrank, die Volksfähigkeit oder das zweite Schmuckstück ab."
 
 -- ─── Assembled messages ──────────────────────────────────────────────────────
 --
@@ -354,10 +352,6 @@ L["%s macro(s) created in your %s macro tab. Drag them onto your action bar."] =
     "%s Makro(s) im Makro-Tab (%s) erstellt. Zieh sie auf deine Aktionsleiste."
 L["%s macro(s) moved to your %s macro tab. Please drag them back onto your action bar."] =
     "%s Makro(s) in den Makro-Tab (%s) verschoben. Bitte zieh sie wieder auf deine Aktionsleiste."
-L["Custom lines removed from \"%s\"."] =
-    "Eigene Zeilen aus \"%s\" entfernt."
-L["Custom lines saved to \"%s\"."] =
-    "Eigene Zeilen in \"%s\" gespeichert."
 
 -- ─── Content profiles ────────────────────────────────────────────────────────
 --
