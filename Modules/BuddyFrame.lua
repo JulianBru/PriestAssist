@@ -153,9 +153,15 @@ local STRIPE_GAP = 2
 -- The range indicator, hanging a third of its own size off the icon's top
 -- right so it reads as a badge on the icon rather than as part of the artwork.
 local RANGE_ICON = 14
--- How often the range is asked. The library caches for a tenth of a second, so
--- the cost of this is the call itself; the number is about how quickly the
--- picture follows you walking, not about CPU.
+-- How often the range is asked, and the only throttle that does anything for
+-- us. The library caches its answer for a tenth of a second, but ours are a
+-- quarter apart, so every one of them is already stale and recomputes -- that
+-- cache is for several callers asking about the same unit at once, not for one
+-- caller on a timer.
+--
+-- What it costs when it does recompute is small: getRangeWithCheckerList does a
+-- binary search over the checkers, so about four range calls per answer rather
+-- than one per checker. Four times a second, while the frame is on screen.
 local RANGE_INTERVAL = 0.25
 
 
@@ -726,10 +732,11 @@ local function UpdateRangeIcon(unit)
         return
     end
 
-    -- Nothing to judge without a target. The frame already says so -- empty
-    -- name, no placeholder, red stripe -- and a triangle on top of that would
-    -- warn about an empty window rather than about a problem.
-    if not unit then
+    -- Switched off, or nothing to judge. The second is not a problem worth a
+    -- triangle: the frame already says there is no target -- empty name, no
+    -- placeholder, red stripe -- and a warning on top of that would be about an
+    -- empty window rather than about anything you could fix.
+    if not unit or ns.GetDB().buddyFrame.rangeCheck == false then
         frame.range:Hide()
         return
     end
@@ -738,6 +745,64 @@ local function UpdateRangeIcon(unit)
 
     frame.range:SetTexture(inRange and ns.CHECK_ICON_PATH or ns.WARNING_ICON_PATH)
     frame.range:Show()
+end
+
+--- Start or stop the range ticker, and say whether it moved.
+---
+--- SetScript rather than HookScript, because a hook cannot be taken off again:
+--- it would keep being called every frame just to return early, which is the
+--- opposite of switching something off. Nothing else on this frame uses
+--- OnUpdate, so there is nothing to clobber -- Minimap.lua does the same thing
+--- with the same pair of calls.
+---
+--- Two switches, both real. The script is removed when the option is off, and
+--- the game does not call OnUpdate on a hidden frame anyway, so a frame that is
+--- merely not on screen costs nothing either.
+---
+--- Distance is the one thing here that has to be looked at rather than waited
+--- for. Every other part of the buddy frame hangs off an event; two players
+--- walking apart broadcasts nothing.
+function ns.SetRangeTicker(on)
+    local frame = frames.buddyFrame
+
+    if not frame then
+        return false
+    end
+
+    -- Two conditions, not one, and both are checked here rather than left to
+    -- the caller. The option says whether the player wants it; `enabled` says
+    -- whether there is a frame to want it on. A range check for a window that
+    -- is switched off is work for nobody, and the first version of this only
+    -- ever asked about the option -- the guarantee lived in which branch of
+    -- ns.UpdateBuddyFrame the call happened to sit in, which is the kind of
+    -- coupling that goes wrong when somebody reorders two lines.
+    on = on and ns.GetDB().buddyFrame.enabled and true or false
+
+    local running = frame:GetScript("OnUpdate") ~= nil
+
+    if on == running then
+        return false
+    end
+
+    if not on then
+        frame:SetScript("OnUpdate", nil)
+        return true
+    end
+
+    frame.rangeElapsed = 0
+
+    frame:SetScript("OnUpdate", function(self, elapsed)
+        self.rangeElapsed = (self.rangeElapsed or 0) + elapsed
+
+        if self.rangeElapsed < RANGE_INTERVAL then
+            return
+        end
+
+        self.rangeElapsed = 0
+        UpdateRangeIcon(ResolveUnit(ns.GetAssignedTarget()))
+    end)
+
+    return true
 end
 
 local function UpdateBuddySlot()
@@ -1188,27 +1253,7 @@ function ns.CreateBuddyFrame()
     frame.range:SetPoint("TOPRIGHT", frame.buddy, "TOPRIGHT", RANGE_ICON / 3, RANGE_ICON / 3)
     frame.range:Hide()
 
-    -- OnUpdate rather than a timer, and on the frame itself rather than
-    -- anywhere else, because that is the switch: the game does not run OnUpdate
-    -- on a hidden frame, so this stops on its own whenever the buddy frame is
-    -- not on screen. No registration to remember, nothing to unregister, and no
-    -- way for it to outlive what it draws.
-    --
-    -- Everything else here reacts to an event. Distance does not: two players
-    -- walk apart and nothing is broadcast, so this is the one part of the frame
-    -- that has to look.
     frame.rangeElapsed = 0
-
-    frame:HookScript("OnUpdate", function(self, elapsed)
-        self.rangeElapsed = self.rangeElapsed + elapsed
-
-        if self.rangeElapsed < RANGE_INTERVAL then
-            return
-        end
-
-        self.rangeElapsed = 0
-        UpdateRangeIcon(ResolveUnit(ns.GetAssignedTarget()))
-    end)
 
     -- Our own name never changes for the life of the session, so it is written
     -- once here rather than on every refresh. Priest white either way -- it is
@@ -1238,6 +1283,12 @@ function ns.UpdateBuddyFrame()
 
     if not (db.enabled and ns.IsPriest()) then
         ns.SetFrequentEvents(false)
+        -- With the events. Hiding the frame stops OnUpdate on its own, but only
+        -- while it stays hidden -- and this path is also the one a non-priest
+        -- takes, where the frame may never have been built. Taking the script
+        -- off is the switch; relying on the frame being hidden is a guess about
+        -- who shows it next.
+        ns.SetRangeTicker(false)
 
         -- Hiding is what releases the container: its OnHide drops the unit
         -- registrations, so nothing of ours is left listening to UNIT_AURA.
@@ -1253,6 +1304,10 @@ function ns.UpdateBuddyFrame()
     end
 
     ns.SetFrequentEvents(true)
+    -- Alongside the events, and for the same reason: a feature nobody has
+    -- switched on should not be waking up. This one is not an event but a
+    -- script, so it is a separate call rather than another entry in that list.
+    ns.SetRangeTicker(db.rangeCheck ~= false)
 
     local frame = frames.buddyFrame
 

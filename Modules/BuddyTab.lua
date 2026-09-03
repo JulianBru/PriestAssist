@@ -67,10 +67,23 @@ ns.RegisterConfigModule({
         controls.buddyTargetName:SetPoint("TOPLEFT", controls.buddyOwnName,
             "TOPLEFT", HALF, 0)
 
+        -- Its own row rather than beside the two names: those two are about
+        -- what the frame shows, this one also decides whether something keeps
+        -- running. Off means the script is taken off the frame, not skipped.
+        controls.buddyRangeCheck = ns.UI.CreateCheckButton(p,
+            "Show whether your target is in range",
+            function(checked)
+                ns.GetDB().buddyFrame.rangeCheck = checked and true or false
+                ns.ApplyBuddyFrameSettings()
+            end)
+        controls.buddyRangeCheck:SetClickWidth(HALF - 8)
+        controls.buddyRangeCheck:SetPoint("TOPLEFT", controls.buddyOwnName,
+            "BOTTOMLEFT", 0, -6)
+
         -- Style and visibility, side by side: both answer "what does it look
         -- like and when", and neither needs the full width.
         controls.buddyStyle = ns.UI.CreateDropdown(p, HALF - 4, 4)
-        controls.buddyStyle:SetPoint("TOPLEFT", controls.buddyOwnName,
+        controls.buddyStyle:SetPoint("TOPLEFT", controls.buddyRangeCheck,
             "BOTTOMLEFT", 0, -34)
         controls.buddyStyle:SetLabel("Style", accent)
         controls.buddyStyle:SetItems({
@@ -193,6 +206,7 @@ ns.RegisterConfigModule({
             cc.buddyLocked:SetChecked(buddy.locked and true or false)
             cc.buddyOwnName:SetChecked(buddy.showOwnName ~= false)
             cc.buddyTargetName:SetChecked(buddy.showTargetName ~= false)
+            cc.buddyRangeCheck:SetChecked(buddy.rangeCheck ~= false)
             cc.buddyGlow:SetChecked(buddy.glow ~= false)
             cc.buddyScale:SetValue(math.floor((buddy.scale or 1) * 100 + 0.5))
             cc.buddyVisibility:SetSelectedValue(buddy.visibility or "always")

@@ -523,6 +523,12 @@ ns.DEFAULTS = {
         glow = true,
         glowColor = "gold",
 
+        -- On, like the glow, and for the same reason: it is the signal rather
+        -- than decoration. It is also the only thing on the frame that has to
+        -- look rather than wait -- two players walk apart and nothing is
+        -- broadcast -- so switching it off really stops something.
+        rangeCheck = true,
+
         -- always | group | instance | combat
         visibility = "always",
         point = {
