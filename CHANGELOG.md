@@ -1,118 +1,65 @@
 # Priest Assist
 
-## [1.9-alpha6](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha6) (2026-09-01)
+## [1.9](https://github.com/JulianBru/PriestAssist/tree/v1.9) (2026-09-03)
+
+Changes how settings are stored. Your profiles are migrated the first time you
+log in, copied to every specialisation unchanged, so nothing is lost.
+
+There is a way back, but it ends on 1.8.2: every version from 1.9 onwards
+migrates again on login. **If you do not want your profiles migrated, 1.8.2 is
+the last version you can use.** See the last entry.
 
 ### Added
 
-- German. The settings panel, its explanations, the reminder and everything the addon prints in chat. Anything not yet translated falls back to English on its own, so nothing is missing, only English.
+- Profiles are kept per specialisation. Discipline, Holy and Shadow each have their own Open World, Delves, Dungeon, Raid and PvP profile, so a healer's macro no longer carries what a Shadow priest's needs.
 
-  Where German players say the English word, the English word stays: Glow, Cooldown, Ready Check, Reminder, Raid, Frame Strata, Damage Gain.
+- A specialisation you have never played gets its profiles on first login. Healers start without combat potion, trinket or racial.
 
-- Key bindings, in their own Priest Assist category: set your Power Infusion target, choose the best target automatically, toggle the buddy frame, open the settings.
+- German, throughout: the settings panel, the reminder and everything printed in chat. Anything untranslated falls back to English on its own.
 
-  The first two end in writing a macro, and the game does not allow that during combat. Pressing them mid-fight queues the change and says so, as `/pa` has always done.
+- Key bindings in their own category: set your target, pick the best one, toggle the buddy frame, open the settings.
 
-### Changed
+- A buddy frame with two cooldowns side by side — your Power Infusion on the left, your target's major cooldown on the right. Off until you ask for it, with its own tab for style, size, spacing, names and glow.
 
-- Chat sent to other players stays English whatever your own language is, because there is no way to know what the people reading it use. Only what the addon shows you is translated.
+- The right icon lights up with a glow for as long as their cooldown runs. That is the moment to press Power Infusion.
 
-- Nothing translated is ever saved. Profiles still store `raid`, dropdowns still store their value rather than their label, so switching language leaves every setting exactly where it was.
+- Cooldowns are known for 25 of the 26 damage specialisations. Frost Mage cannot be done.
 
-### Added
+- The left icon shows how long your own Power Infusion is still running, not only when it comes back.
 
-- A Buddy tab in the settings. The frame can be switched on, locked, scaled and reset from there, the two names turned off separately, and the space between the icons set as a number rather than being whatever the layout happened to produce.
-
-- Three styles. Framed is what it looked like before, Frameless drops the outer box and keeps the icons, and Target only shows the person you are infusing without your own Power Infusion beside it.
-
-  Unlocked, the frame keeps its box and ignores the visibility rule whatever the style says, so it can always be found and moved.
-
-- A rule for when the frame appears at all: always, only in a group, only in dungeons and raids, or only in combat.
-
-- An Info button listing what is watched for each of the twenty-five specialisations, with the spell's own tooltip on hover. Five entries carry a note, because the aura being watched is not the cooldown anybody would name — Assassination is read from Finish the Job rather than from Deathmark, which lands on the enemy.
-
-- The left icon now shows how long your own Power Infusion is still running, not only when it comes back. It reads the buff off yourself, which works because Twins of the Sun Priestess grants you the effect when you infuse somebody else; without that talent the duration simply does not appear and the cooldown still does.
-
-### Changed
-
-- New defaults: names off, icons close together, and the frame still off until you ask for it.
-
-- Nothing runs while the frame is switched off. The events it needs are registered when it is turned on and dropped when it is turned off, so a feature nobody uses no longer wakes several times a second in combat.
-
-- Damage Gain data resimulated on 29 August.
-
-### Fixed
-
-- Your Power Infusion icon was greyed out from login until the first time you cast it, whether or not it was on cooldown. It had been asking the game for an active cooldown and treating any answer as one, and a known spell answers either way.
-
-## [1.9-alpha4](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha4) (2026-08-31)
-
-### Added
-
-- A frame showing two cooldowns side by side: your own Power Infusion on the left, and the major cooldown of whoever you are set to infuse on the right. `/pa buddy` turns it on, `/pa buddy lock` pins it in place, and it is off until you ask for it.
-
-  The right icon is dim while you are waiting and lights up with a moving border for as long as their cooldown is running, which is the moment to press yours. Their name is above it in class colour, and the stripe underneath turns red if they are no longer in the group.
-
-  A prototype, and it looks like one. There is no settings tab yet, the size and the colours are fixed, and the frame moves by dragging it.
-
-  Neither half reads anything it is not allowed to. Since 12.0 an addon cannot look at another player's auras during an encounter, and since 12.1 the same is true of your own cooldown in seconds — so both halves ask the game for a handle and let it draw the numbers instead.
-
-- Cooldowns are known for 25 of the 26 damage specialisations. Frost Mage is the exception and cannot be done: since Icy Veins was removed its damage comes from Shatter procs rather than from a cooldown, so there is no window on the mage to watch for.
-
-  Several specialisations are read from a buff that runs alongside the cooldown rather than from the cooldown itself, because the cooldown lands on the enemy or summons something. Assassination is read from Finish the Job and Destruction from Crashing Chaos, which lasts longer than the burst it marks.
-
-  Where a specialisation has more than one candidate — Affliction can be read from Summon Darkglare or from Malevolence — both are watched.
-
-### Fixed
-
-- Looking up which group member a stored name belongs to could throw an error rather than return an answer, in the content where names are withheld from addons. It is guarded now. Nothing depended on it before this release, so the fault was never reachable.
-
-### Added
-
-- A warning when the player you are set to infuse shares their name with somebody else in the group. Two players called Kelmar from different realms are one name to the addon — the specialisation and gain it holds belong to whichever of them it heard from last, and the macro cannot tell them apart either.
-
-  Said when you enter a dungeon or raid and on a ready check, both of which are moments you can still do something about it. Only about your own target: two players sharing a name neither of whom you are infusing costs nothing.
-
-  It cannot promise the opposite. A name the client will not let an addon read — which happens in combat — takes no part in the comparison, so saying nothing means none was found rather than none is there.
-
-## [1.9-alpha2](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha2) (2026-08-27)
-
-Everything in alpha 1 still applies, including how to go back.
-
-### Fixed
-
-- A macro over WoW's 255 character limit was written anyway and cut off by the game, which usually cost the last line — the combat potion, or half of a `/use item:` that then did nothing. It is left alone now instead, and the message says which setting to turn off, having tried them to find one that is enough.
-
-  This is reachable without any custom lines: Voidform as the primary macro, with a potion, both trinket slots and a racial, comes to 263 characters on a target with a long name.
-
-- Working out who infuses whom searched every possible assignment, which is fine for the two or three priests a group actually has and stops responding at ten. Above six it now serves the Shadow priests first and lets the healers take what is left — measured at 85 to 92 % of the best answer, in groups where the difference is academic anyway.
-
-## [1.9-alpha1](https://github.com/JulianBru/PriestAssist/tree/v1.9-alpha1) (2026-08-27)
-
-An alpha, because it changes how settings are stored. Your existing profiles are copied to every specialisation unchanged and the previous layout is kept, but the change cannot be undone by installing an older version alone — see the last entry.
-
-### Added
-
-- Profiles are kept per specialisation. Discipline, Holy and Shadow each have their own Open World, Delves, Dungeon, Raid and PvP profile, so a healer's macro no longer has to carry what a Shadow priest's needs.
-
-  Icons above the profile selector choose which one you are editing. Your own is selected whenever the panel opens, and changing specialisation in game changes the whole set with it.
-
-- A specialisation that has never been played gets its profiles the first time you log in on it. Discipline and Holy start without combat potion, trinket or racial: a healer takes Power Infusion for the raid's damage, and those three lines are about their own.
+- A warning when your target shares a name with somebody else in the group. The addon and the macro cannot tell two Kelmars apart.
 
 - `/pa open` opens the settings panel.
 
 ### Changed
 
-- The reminder on entering a dungeon or raid is unchanged in behaviour but now reads from the profile of the specialisation you are actually on.
+- Damage Gain data resimulated on 1 September.
+
+- Chat sent to other players stays English whatever your own language is. Only what the addon shows you is translated.
+
+- Nothing translated is ever saved, so switching language leaves every setting where it was.
+
+- Nothing runs while the buddy frame is off. Its events are registered when you turn it on and dropped when you turn it off.
+
+- The reminder reads from the profile of the specialisation you are actually on.
 
 ### Fixed
 
-- A priest who left the group kept their target reserved for up to ten minutes, pushing everyone else onto worse ones. Their claim is dropped with them now. Somebody who is merely quiet — wiped and running back — still keeps theirs.
+- A macro over WoW's 255 character limit was written anyway and cut off by the game, usually losing the last line. It is left alone now, and the message says which setting to turn off.
 
-- Asking the group what it is doing did not ask what its targets are worth. Anybody who joins can immediately become the one computing the assignment, and without those numbers they fell back to their own tables for every priest they had not heard from.
+- Working out who infuses whom stopped responding at ten priests.
+
+- A priest who left the group kept their target reserved for up to ten minutes. Somebody merely quiet still keeps theirs.
+
+- A priest joining mid-fight fell back to their own tables for every priest they had not heard from.
+
+- Your Power Infusion icon was greyed out from login until the first time you cast it.
+
+- Looking up a group member by name could throw an error where the client withholds names from addons.
 
 ### If you want to go back
 
-`/pa reset profiles` puts the profiles back the way 1.8 stored them, then **log out** — not `/reload` — and install the older version. Reloading would migrate them again; the addon holds the migration after a restore and says so on every login until `/pa reset profiles cancel`.
+`/pa reset profiles` restores the 1.8 layout, then **log out** — not `/reload` — and install 1.8.2 or older. Reloading would migrate them again; the addon holds the migration until `/pa reset profiles cancel`.
 
 ## [1.8.2](https://github.com/JulianBru/PriestAssist/tree/v1.8.2) (2026-08-27)
 
