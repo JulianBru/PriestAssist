@@ -105,6 +105,29 @@ ns.RegisterConfigModule({
                 ns.RefreshConfigPanel()
             end)
 
+            -- In the extras column, not the trinket's. It sat under "Trinket"
+            -- first, and the heading then said something false about the one
+            -- row it stood over: Power Word: Barrier has no trinket, and a
+            -- column heading that lies is worse than an empty cell. Under
+            -- "Also in this macro" it is at least true -- the placement
+            -- conditional is part of the macro.
+            --
+            -- The trinket cell stays empty for this row rather than being
+            -- filled with something. Nothing belongs there.
+            if entry.alternative and entry.alternative.placement then
+                local alternative = entry.alternative
+
+                row.placement = ns.UI.CreateDropdown(row, TRINKET_W + 40, 4)
+                row.placement:SetPoint("LEFT", row, "LEFT", EXTRA_X, 0)
+                row.placement:SetItems(ns.MACRO_PLACEMENT_OPTIONS)
+                row.placement:SetOnSelect(function(value)
+                    ns.GetProfileForEditedMacro(alternative.id)
+                        .macros[alternative.id].placement = value
+                    ns.RequestMacroUpdate()
+                    ns.RefreshConfigPanel()
+                end)
+            end
+
             row.racial = ns.UI.CreateCheckButton(row, "Racial", function(checked)
                 ns.GetProfileForEditedMacro(entry.id).macros[entry.id].racial =
                     checked and true or false
@@ -300,7 +323,20 @@ ns.RegisterConfigModule({
 
         for _, entry in ipairs(visible) do
             local row = cc.macroRows[entry.id]
-            local settings = profile.macros and profile.macros[entry.id] or {}
+
+            -- The talented shape of this macro. For Ultimate Penitence that may
+            -- be Power Word: Barrier, which is a different spell with different
+            -- settings under its own id -- so the row is drawn for `form`, not
+            -- for the catalogue entry.
+            --
+            -- ResolveMacroForm answers for the character that is logged in. The
+            -- tab can edit another specialisation's profile, where the question
+            -- has no answer, and it falls back to the main entry there: the
+            -- alternative's stored settings are left alone, just not shown.
+            local form = ns.ResolveMacroForm(entry.id)
+            local shown = ns.MACRO_BY_ID[form] or entry
+            local settings = profile.macros and profile.macros[form] or {}
+            local alternate = shown.main ~= nil
 
             row:ClearAllPoints()
             row:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, offset)
@@ -308,12 +344,23 @@ ns.RegisterConfigModule({
 
             previous, offset = row, -4
 
-            row.label:SetText(ns.GetSpellName(entry.spellID, entry.name))
+            row.label:SetText(ns.GetSpellName(shown.spellID, shown.name))
+
+            -- One of the two, never both. Trinket, racial and Power Infusion
+            -- belong to a damage cooldown; nobody presses a defensive to spend
+            -- them, so the alternative offers a placement instead and nothing
+            -- else.
+            row.trinket:SetShown(not alternate)
             row.trinket:SetSelectedValue(settings.trinket or "none")
+
+            if row.placement then
+                row.placement:SetShown(alternate)
+                row.placement:SetSelectedValue(settings.placement or "none")
+            end
 
             -- Only characters with one of the four on-use racials see the box,
             -- and it is labelled with the one they actually have.
-            row.racial:SetShown(racialName ~= nil)
+            row.racial:SetShown(racialName ~= nil and not alternate)
             row.racial:SetChecked(settings.racial and true or false)
 
             if racialName and row.racial.SetLabel then
@@ -326,10 +373,12 @@ ns.RegisterConfigModule({
             end
 
             if row.powerInfusion then
+                row.powerInfusion:SetShown(not alternate)
                 row.powerInfusion:SetChecked(settings.powerInfusion and true or false)
             end
 
             if row.mouseover then
+                row.mouseover:SetShown(not alternate)
                 row.mouseover:SetChecked(settings.mouseover and true or false)
             end
 
@@ -380,11 +429,19 @@ ns.RegisterConfigModule({
 
         -- The potion and the text field both name a macro, and both lists hold
         -- only what this specialisation has.
+        --
+        -- Named by the talented spell, the same way the rows above are. The
+        -- value stays the catalogue id -- it is what both settings store and
+        -- what the text field edits -- but a list that said "Ultimate
+        -- Penitence" next to a row and a body that both said Power Word:
+        -- Barrier was three names for one macro and only one of them right.
         local options = {}
 
         for _, entry in ipairs(visible) do
+            local shown = ns.MACRO_BY_ID[ns.ResolveMacroForm(entry.id)] or entry
+
             options[#options + 1] = {
-                text = ns.GetSpellName(entry.spellID, entry.name),
+                text = ns.GetSpellName(shown.spellID, shown.name),
                 value = entry.id,
             }
         end

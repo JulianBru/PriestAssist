@@ -52,7 +52,27 @@ ns.MACRO_CATALOGUE = {
     -- /cast. Without it the config row would have to say "PriestAssist VF".
     { id = "voidform",   spec = 258, name = "PriestAssist VF", spellID = 228260,
       build = "voidform" },
-    { id = "penitence",  spec = 256, name = "PriestAssist UP", spellID = 421453 },
+    -- Ultimate Penitence shares a choice node with Power Word: Barrier, so a
+    -- Discipline priest has one or the other and never both. `alternative` is
+    -- the second shape of the *same* macro: same name, same slot on the bar,
+    -- same keybind, and the body follows whichever is talented.
+    --
+    -- Not a seventh catalogue entry, which was the first idea: that writes a
+    -- second macro, and a second macro needs its own key and its own place on
+    -- the bar. Swapping a talent must not turn into rearranging an action bar.
+    --
+    -- Not a [known:] construction either, the way Voidform does it. That costs
+    -- 156 of the 255 characters before anything else is in the macro -- both
+    -- names appear twice -- and it does not solve the real problem: the
+    -- conditional only picks the spell on its own line, so the trinket, the
+    -- potion and the Power Infusion lines below would fire for a defensive
+    -- too. Conditioning each of those as well comes to 471 characters.
+    --
+    -- The alternative carries its own settings under its own id, so the
+    -- Ultimate Penitence configuration survives untouched while Barrier is
+    -- talented, and comes back when it is not.
+    { id = "penitence",  spec = 256, name = "PriestAssist UP", spellID = 421453,
+      alternative = { id = "barrier", spellID = 62618, placement = true } },
     { id = "evangelism", spec = 256, name = "PriestAssist EV", spellID = 472433,
       mouseover = true },
     { id = "hymn",       spec = 257, name = "PriestAssist HY", spellID = 64843 },
@@ -64,8 +84,27 @@ ns.MACRO_CATALOGUE = {
 -- default -- which is what ns.ResolveMacroVariant used to do.
 ns.MACRO_BY_ID = {}
 
+-- Which ids own a settings table, in order. Alternatives are in here and the
+-- catalogue is not enough to find them, but they are deliberately absent from
+-- ns.MACRO_VARIANT_ORDER further down: that list is what gets *written*, and an
+-- alternative is written under its main entry's name or not at all.
+ns.MACRO_SETTINGS_ORDER = {}
+
 for _, entry in ipairs(ns.MACRO_CATALOGUE) do
     ns.MACRO_BY_ID[entry.id] = entry
+    ns.MACRO_SETTINGS_ORDER[#ns.MACRO_SETTINGS_ORDER + 1] = entry.id
+
+    if entry.alternative then
+        -- Reachable by id like any other, so settings, defaults and the
+        -- migration need no special case. `main` points back, because the
+        -- writer has to find the name and the specialisation.
+        entry.alternative.main = entry.id
+        entry.alternative.spec = entry.spec
+        entry.alternative.name = entry.name
+
+        ns.MACRO_BY_ID[entry.alternative.id] = entry.alternative
+        ns.MACRO_SETTINGS_ORDER[#ns.MACRO_SETTINGS_ORDER + 1] = entry.alternative.id
+    end
 end
 
 -- Name used before the addon split the macro per variant.
@@ -84,11 +123,29 @@ ns.MACRO_ICON_OVERRIDES = {
 -- Fixed order so both macros are always processed the same way.
 -- Kept as the order macros are written in. Derived rather than typed, so a new
 -- catalogue entry cannot be forgotten here.
+--
+-- Alternatives are not in here on purpose. This is the list of macros the addon
+-- creates in the client, and an alternative is a second body for a macro that
+-- already exists rather than a macro of its own.
 ns.MACRO_VARIANT_ORDER = {}
 
 for _, entry in ipairs(ns.MACRO_CATALOGUE) do
     ns.MACRO_VARIANT_ORDER[#ns.MACRO_VARIANT_ORDER + 1] = entry.id
 end
+
+-- Where Power Word: Barrier goes. Stored English like every other value, so a
+-- language change cannot corrupt the database.
+ns.MACRO_PLACEMENT_OPTIONS = {
+    -- No conditional at all, which is not "at your feet" -- that is what
+    -- [@player] does. A ground-targeted spell with nothing in front of it hands
+    -- you the green circle to click, or goes straight to the cursor if the
+    -- client's own ground-targeting setting says so. Either way the addon is
+    -- not deciding, which is what this entry means.
+    { value = "none",      text = "Placement circle" },
+    { value = "cursor",    text = "At the cursor" },
+    { value = "player",    text = "On yourself" },
+    { value = "mouseover", text = "On your mouseover" },
+}
 ns.ADDON_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\icon.tga"
 ns.POWER_INFUSION_ICON = "|TInterface\\Icons\\Spell_Holy_PowerInfusion:0|t"
 ns.DEFAULT_REMINDER_TEXT = "Priest Assist Ready"
@@ -307,16 +364,24 @@ ns.PVP_DIFFICULTY_IDS = {
 local function MacroDefaults()
     local macros = {}
 
-    for _, entry in ipairs(ns.MACRO_CATALOGUE) do
-        macros[entry.id] = {
+    -- Over the settings order, not the catalogue: an alternative owns a table
+    -- of its own so that its custom lines are its own. They are not shared with
+    -- the main entry -- the two cast different spells, and a line written for
+    -- one of them is at best noise under the other.
+    for _, id in ipairs(ns.MACRO_SETTINGS_ORDER) do
+        macros[id] = {
             userAdded = "",
             trinket = "none",
             racial = false,
             -- The PI macro *is* the Power Infusion; the Voidform macro has
             -- carried it since the option existed. Nowhere else is it a guess
             -- the addon may make for the player.
-            powerInfusion = (entry.id == "standalone" or entry.id == "voidform"),
+            powerInfusion = (id == "standalone" or id == "voidform"),
             mouseover = false,
+            -- Where the spell lands, for an entry whose catalogue row offers
+            -- it. "none" is the plain cast with no conditional -- the game's
+            -- own placement, which is what the player already has today.
+            placement = "none",
         }
     end
 

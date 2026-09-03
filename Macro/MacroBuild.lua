@@ -246,10 +246,45 @@ function ns.ResolveMacroVariant(variant, profile)
     return ns.PROFILE_DEFAULTS.macroVariant
 end
 
+--- Which shape a macro currently has: itself, or its catalogue alternative.
+---
+--- Ultimate Penitence and Power Word: Barrier share a choice node, so which one
+--- a Discipline priest has is a talent question, not a setting. One macro is
+--- written either way -- see the catalogue -- and this is the only place that
+--- asks the client which spell is in the book.
+---
+--- The only place on purpose. The body builder, the custom lines and the Macro
+--- tab all need the answer, and three callers of IsSpellKnown is three chances
+--- to disagree about which macro the player is looking at.
+---
+--- Falls back to the main entry whenever it cannot tell -- an alternative
+--- nobody has talented, but also the tab editing a specialisation the character
+--- is not in, where the question has no answer at all.
+function ns.ResolveMacroForm(variant)
+    local entry = ns.MACRO_BY_ID[variant]
+    local alternative = entry and entry.alternative
+
+    if not alternative then
+        return variant
+    end
+
+    local known = C_SpellBook and C_SpellBook.IsSpellKnown
+
+    if known and alternative.spellID and known(alternative.spellID) then
+        return alternative.id
+    end
+
+    return variant
+end
+
+-- Through ResolveMacroForm, so a macro standing in its alternative shape reads
+-- and writes that shape's lines. They are not shared: the two cast different
+-- spells, and a line meant for one is at best noise under the other.
 function ns.GetUserAdded(variant, profile)
     profile = profile or ns.GetActiveProfile()
 
-    local settings = profile.macros and profile.macros[ns.ResolveMacroVariant(variant, profile)]
+    local id = ns.ResolveMacroForm(ns.ResolveMacroVariant(variant, profile))
+    local settings = profile.macros and profile.macros[id]
 
     return (settings and settings.userAdded) or ""
 end
@@ -257,7 +292,7 @@ end
 function ns.SetUserAdded(variant, text, profile)
     profile = profile or ns.GetActiveProfile()
 
-    local id = ns.ResolveMacroVariant(variant, profile)
+    local id = ns.ResolveMacroForm(ns.ResolveMacroVariant(variant, profile))
 
     profile.macros = profile.macros or {}
     profile.macros[id] = profile.macros[id] or {}
@@ -268,7 +303,10 @@ end
 -- is. Two entries override it: the Power Infusion macro carries the addon's own
 -- icon, and Voidform deliberately does not use the Voidform spell icon.
 function ns.GetMacroIconForVariant(variant)
-    local id = ns.ResolveMacroVariant(variant)
+    -- Through the form, unlike the name: the macro keeps its name whichever
+    -- spell it casts, but the picture in the spellbook should be the spell that
+    -- is actually in it.
+    local id = ns.ResolveMacroForm(ns.ResolveMacroVariant(variant))
     local override = ns.MACRO_ICON_OVERRIDES[id]
 
     if override then
@@ -291,6 +329,16 @@ end
 -- Everything the addon generates itself, i.e. the macro without the user's own
 -- lines appended. Used both for building the final macro and for splitting the
 -- generated part back off the text the user edited in the config panel.
+
+-- Stored value to macro unit. "none" is absent rather than mapped to nothing,
+-- so an unknown value saved by a hand-edited SavedVariables file comes out as
+-- the plain cast instead of as a conditional the client cannot parse.
+local PLACEMENT_UNIT = {
+    cursor    = "cursor",
+    player    = "player",
+    mouseover = "mouseover",
+}
+
 --- The cast line for a plain catalogue entry: the spell, and a mouseover
 --- conditional where the entry offers one and the profile asked for it.
 ---
@@ -299,11 +347,25 @@ end
 --- sensibly and do not need the option. See docs/MACRO_FACTORY.md section 4.
 function ns.BuildCatalogueCastLine(entry, profile)
     local name = ns.GetSpellName(entry.spellID, entry.name)
+    local settings = profile and profile.macros and profile.macros[entry.id]
 
-    if entry.mouseover and profile and profile.macros
-        and profile.macros[entry.id]
-        and profile.macros[entry.id].mouseover then
+    if entry.mouseover and settings and settings.mouseover then
         return "/cast [@mouseover,help,nodead][] " .. name
+    end
+
+    -- Where the spell lands, for an entry whose catalogue row offers it. Only
+    -- Power Word: Barrier does: it is placed rather than aimed, and where you
+    -- want it depends on the pull, not on a setting the addon could guess.
+    --
+    -- Each carries an empty fallback clause, so a missing mouseover or a cast
+    -- the client will not place still comes out as the plain spell rather than
+    -- as nothing at all.
+    if entry.placement and settings then
+        local unit = PLACEMENT_UNIT[settings.placement or "none"]
+
+        if unit then
+            return "/cast [@" .. unit .. "][] " .. name
+        end
     end
 
     return "/cast " .. name
@@ -315,23 +377,39 @@ function ns.BuildGeneratedMacroBody(variant, profile, singleRank)
     variant = ns.ResolveMacroVariant(variant, profile)
     profile = profile or ns.GetProfileForMacro(variant)
 
+    -- The talented shape of this macro, which for Ultimate Penitence may be
+    -- Power Word: Barrier. Everything below reads settings through `form`
+    -- rather than through `variant`, so the alternative brings its own custom
+    -- lines and its own placement and leaves the main entry's untouched.
+    --
+    -- `variant` still names the macro. The two differ only here.
+    local form = ns.ResolveMacroForm(variant)
+
     local targetName = ns.GetAssignedTarget()
     local lines = {}
 
     -- Each macro always carries its own signature spell, and which one that is
     -- comes from the catalogue rather than from a chain of comparisons.
-    local entry = ns.MACRO_BY_ID[variant]
+    local entry = ns.MACRO_BY_ID[form]
 
     if entry and entry.build == "voidform" then
         local showtooltipLine, castLine = ns.BuildVoidformLines()
         lines[#lines + 1] = showtooltipLine
         lines[#lines + 1] = castLine
-    elseif variant == "standalone" then
+    elseif form == "standalone" then
         lines[#lines + 1] = "#showtooltip"
         lines[#lines + 1] = ns.BuildPowerInfusionLines(targetName)
     elseif entry and entry.spellID then
         lines[#lines + 1] = "#showtooltip"
         lines[#lines + 1] = ns.BuildCatalogueCastLine(entry, profile)
+    end
+
+    -- An alternative is the whole macro. Nothing the main entry carries applies
+    -- to it: nobody presses a defensive to spend a trinket, a potion or an
+    -- infusion, and a Barrier that also fired those would be worse than one
+    -- that did nothing. It gets its placement and its own lines, and stops.
+    if entry and entry.main then
+        return table.concat(lines, "\n"), targetName
     end
 
     -- What this macro carries beyond its own spell, asked per macro rather than
@@ -341,10 +419,10 @@ function ns.BuildGeneratedMacroBody(variant, profile, singleRank)
     -- cooldown does nothing, so two macros carrying the trinket do not lose it,
     -- they align it with whichever button is pressed first. The potion is not
     -- like that -- it is consumed -- so exactly one macro per profile holds it.
-    local settings = (profile.macros and profile.macros[variant]) or {}
+    local settings = (profile.macros and profile.macros[form]) or {}
 
-    local trinketLines = ns.BuildTrinketLines(profile, variant)
-    local racialLine = settings.racial and ns.BuildRacialLines(profile, variant) or nil
+    local trinketLines = ns.BuildTrinketLines(profile, form)
+    local racialLine = settings.racial and ns.BuildRacialLines(profile, form) or nil
     local combatPotionLines = nil
 
     if profile.potionMacro == variant then

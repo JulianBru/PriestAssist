@@ -204,6 +204,10 @@ eventFrame:RegisterEvent("ADDON_LOADED")
 eventFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
 eventFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 eventFrame:RegisterEvent("PLAYER_DIFFICULTY_CHANGED")
+-- Ultimate Penitence and Power Word: Barrier share a talent choice node, and
+-- the macro's body follows whichever is taken -- so a loadout change has to
+-- rewrite it. Nothing else here cares about talents.
+eventFrame:RegisterEvent("TRAIT_CONFIG_UPDATED")
 -- MRT offers no "note changed" event, so re-read on the moments where a raid
 -- lead would have just edited it. The text is compared before anything happens.
 eventFrame:RegisterEvent("READY_CHECK")
@@ -267,6 +271,17 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
             ns.AnswerTopRequest(requested ~= "" and requested or nil, replyChannel, arg2)
         end
 
+        return
+    end
+
+    -- A loadout change can swap Ultimate Penitence for Power Word: Barrier, and
+    -- the macro is written for whichever is taken. Not reported: nothing was
+    -- assigned and nothing chosen, the macro just follows the talents.
+    --
+    -- No combat guard needed here. RequestMacroUpdate already queues until
+    -- PLAYER_REGEN_ENABLED, and talents cannot be changed in combat anyway.
+    if event == "TRAIT_CONFIG_UPDATED" then
+        ns.RequestMacroUpdate()
         return
     end
 
