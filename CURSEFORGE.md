@@ -14,7 +14,9 @@
 
 ### PriestAssist
 
-Assigning Power Infusion is the same three clicks every pull: open the macro editor, retype a name, save, close. PriestAssist does it for you. Target the player you want to buff, press one key, and your macros rewrite themselves.
+Without an addon, changing your Power Infusion target means opening the macro editor between pulls, retyping a name, saving and closing — every time the plan changes.
+
+PriestAssist does that part for you. Target the player you want to buff and press one key, or click the minimap button, and your macros rewrite themselves.
 
 Then it answers the harder question — *when*. A small frame shows your own Power Infusion beside your target's major cooldown, so you press yours the moment theirs goes up instead of guessing.
 
