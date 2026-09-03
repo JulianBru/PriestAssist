@@ -801,13 +801,37 @@ local function MigrateToMacroTable(existingData)
         return
     end
 
-    for _, set in pairs(existingData.profiles) do
+    for specKey, set in pairs(existingData.profiles) do
         if type(set) == "table" then
             for _, profile in pairs(set) do
                 if type(profile) == "table" and type(profile.macros) ~= "table" then
                     local primary = profile.macroVariant
+                    local entry = ns.MACRO_BY_ID[primary]
 
-                    if not ns.MACRO_BY_ID[primary] then
+                    -- The macro has to be one this specialisation actually
+                    -- builds, and after 1.9 it often is not.
+                    --
+                    -- 1.9 copied one flat set of profiles under every
+                    -- specialisation, `macroVariant` included, which was
+                    -- harmless while that field only chose between two macros
+                    -- every priest had. It stops being harmless here, where it
+                    -- becomes the macro that carries the combat potion: a
+                    -- Shadow player who set Voidform as primary in 1.8 ends up
+                    -- with "voidform" in their Discipline and Holy profiles
+                    -- too, and those never build the Voidform macro -- it is
+                    -- written from the Shadow set. The potion would then sit in
+                    -- no macro at all, with a potion still selected above it
+                    -- and the field below it blank.
+                    --
+                    -- Falling back to the Power Infusion macro rather than to
+                    -- the specialisation's own cooldown: every specialisation
+                    -- has it, and in 1.8 the potion was on a button the player
+                    -- pressed, which that one still is.
+                    if entry and entry.spec and entry.spec ~= specKey then
+                        entry = nil
+                    end
+
+                    if not entry then
                         primary = "standalone"
                     end
 

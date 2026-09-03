@@ -48,7 +48,7 @@ If your target is dead or out of range the macro falls through to your current t
 
 Trinket, racial and the Power Infusion line are chosen for each macro separately. Your damage cooldown can carry everything; a healing cooldown can carry nothing but itself.
 
-The combat potion is the exception, because it is consumed rather than put on cooldown: one profile, one potion, and you pick which macro holds it.
+The combat potion is the exception, because it is consumed rather than put on cooldown. Within one profile it sits in a single macro and you pick which — but profiles are per specialization, so your Discipline raid setup can keep it in Ultimate Penitence while Shadow keeps it in Voidform.
 
 Evangelism can be cast on your mouseover, so it does not land on you when nothing is targeted. Power Word: Barrier can be placed at your cursor, on yourself or on your mouseover.
 
