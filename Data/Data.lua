@@ -160,6 +160,10 @@ ns.ADDON_DESCRIPTION =
 ns.LINK_GITHUB = "https://github.com/JulianBru/PriestAssist"
 ns.LINK_CURSEFORGE = "https://www.curseforge.com/wow/addons/priestassist"
 
+-- Beside the word "active" in the profile list. A texture rather than a glyph:
+-- the game font draws a bullet as an empty box, which is why that line said
+-- "active" and nothing else until now.
+ns.ACTIVE_DOT_PATH = "Interface\\AddOns\\PriestAssist\\Media\\green-dot.tga"
 ns.WARNING_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\warning.tga"
 ns.HELP_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\help.tga"
 ns.INFO_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\info.tga"

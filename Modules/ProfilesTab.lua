@@ -58,6 +58,15 @@ ns.RegisterConfigModule({
             row.marker = ns.UI.CreateFontString(row, "", accent, "FONT_SMALL")
             row.marker:SetPoint("RIGHT", -4, 0)
 
+            -- Left of the word, not in it. An inline |T| escape would ride on
+            -- the text's baseline and follow its colour changes; a texture of
+            -- its own sits centred against the row and stays green.
+            row.dot = row:CreateTexture(nil, "ARTWORK")
+            row.dot:SetSize(10, 10)
+            row.dot:SetPoint("RIGHT", row.marker, "LEFT", -5, 0)
+            row.dot:SetTexture(ns.ACTIVE_DOT_PATH)
+            row.dot:Hide()
+
             row.profileKey = key
             row:SetScript("OnClick", function() ns.SetActiveProfile(key) end)
             row:SetScript("OnEnter", function(self) self.label:SetColor(accent) end)
@@ -74,8 +83,8 @@ ns.RegisterConfigModule({
             for _, row in ipairs(rows) do
                 local isActive = (row.profileKey == activeKey)
                 row.label:SetColor(isActive and accent or "text")
-                -- No bullet glyph: the game font renders it as a box.
                 row.marker:SetText(isActive and "active" or "")
+                row.dot:SetShown(isActive)
             end
         end
 
