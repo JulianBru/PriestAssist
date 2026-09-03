@@ -4,9 +4,9 @@
 
 ## Short summary (the 255-character field)
 
-> Keeps a Power Infusion and a Voidform macro pointed at your current target, switches settings automatically by content, and can read your assignment straight out of the raid note. Combat potions, trinket lines and a configurable reminder.
+> Quality-of-life for priests: cooldown macros it writes for you, profiles that follow the content and your specialization, and a frame that shows when your Power Infusion target's burst is up — and whether they are in range.
 
-*(238 characters.)*
+*(223 characters.)*
 
 ---
 
@@ -14,104 +14,85 @@
 
 ### PriestAssist
 
-Assigning Power Infusion is the same three clicks every pull: open the macro editor, retype a name, save, close. PriestAssist does it for you. Target the player you want to buff, hit one key, and your macros rewrite themselves.
+Assigning Power Infusion is the same three clicks every pull: open the macro editor, retype a name, save, close. PriestAssist does it for you. Target the player you want to buff, press one key, and your macros rewrite themselves.
 
-It also nudges you when you forget — a short reminder appears when you zone into a raid or dungeon, so you notice before the first boss rather than after it.
+Then it answers the harder question — *when*. A small frame shows your own Power Infusion beside your target's major cooldown, so you press yours the moment theirs goes up instead of guessing.
 
 ***
 
-### Two macros, always current
+### Six macros, always current
 
-PriestAssist creates and maintains two macros — in your general macro tab or, if you prefer, the character-specific one:
+One macro per cooldown, created and maintained for you:
 
-*   **PriestAssist PI** — Power Infusion.
-*   **PriestAssist VF** — `Void Volley` / `Voidform`.
+*   **PriestAssist PI** — Power Infusion
+*   **PriestAssist VF** — Void Volley / Voidform
+*   **PriestAssist UP** — Ultimate Penitence, or Power Word: Barrier if that is what you talented
+*   **PriestAssist EV** — Evangelism
+*   **PriestAssist HY** — Divine Hymn
+*   **PriestAssist AP** — Apotheosis
 
-Running `/pa` rebuilds both around whoever you have targeted. They stay on your action bars permanently; nothing is deleted or shuffled when you change settings.
+Every priest gets all six, so changing specialization never leaves an empty slot on your bar. `/pa` rebuilds them around whoever you have targeted.
 
 ```
-/cast [@BuffPowerInfusion,help,nodead][] Power Infusion
+/cast [@Kelmar,help,nodead][] Power Infusion
 /cast [@player] Power Infusion
 ```
 
-If your assigned target is dead or out of range, the macro falls through to your current target and then to yourself, so the cooldown never goes to waste.
+If your target is dead or out of range the macro falls through to your current target and then to yourself, so the cooldown is never wasted.
 
 ***
 
-### One button owns the cooldowns
+### Every setting is per macro
 
-Pick which of the two is your primary. That macro gets the shared cooldowns — trinket, Power Infusion and your combat potion — while the other is left with just its own spell.
+Trinket, racial and the Power Infusion line are chosen for each macro separately. Your damage cooldown can carry everything; a healing cooldown can carry nothing but itself.
 
-So if you open with Voidform and want Power Infusion a moment later, make PI your primary: the Voidform button won't burn it early.
+The combat potion is the exception, because it is consumed rather than put on cooldown: one profile, one potion, and you pick which macro holds it.
+
+Evangelism can be cast on your mouseover, so it does not land on you when nothing is targeted. Power Word: Barrier can be placed at your cursor, on yourself or on your mouseover.
 
 ***
 
-### A profile per kind of content, and per specialisation
+### See when to press it
 
-Open World, Delves, Dungeon, Raid and PvP each get their own profile, covering the primary macro, combat potion, potion priority, trinket slot, target announcement and custom lines.
+Switch on the buddy frame and you get two icons: your own Power Infusion on the left, your target's major cooldown on the right. The right one lights up with a glow for exactly as long as their burst runs — that is your window.
 
-Each of the three priest specialisations keeps its own set of those. A healer takes Power Infusion for the raid's damage, so their macro has no reason to carry a trinket, a potion or a racial — and a Shadow priest's does. Discipline, Holy and Shadow are separate, because the two healing specialisations play differently enough to want different lines.
+A check mark or a warning triangle tells you whether they are in range, so you find out before you press it rather than after.
 
-Your own specialisation is selected whenever you open the settings, and the icons above the profile selector switch to another one if you want to set it up in advance. Changing specialisation in game changes the whole set with it.
+Cooldowns are known for 25 of the 26 damage specializations. Several are read from a buff that runs alongside the cooldown rather than from the cooldown itself, because some land on the enemy instead of the caster; an Info button lists every one of them.
 
-Switch automatic profiles on and the right one is applied the moment you zone in. Nothing is loaded or swapped — the same two macros stay on your bars and only their contents change, so you never re-drag a button.
+***
+
+### A profile per kind of content, and per specialization
+
+Open World, Delves, Dungeon, Raid and PvP each get their own profile. Each of the three specializations keeps its own set of those, because a healer taking Power Infusion for the raid's damage wants different lines than a Shadow priest.
+
+Turn on automatic switching and the right profile applies the moment you zone in. Nothing is loaded or swapped — the same macros stay on your bars and only their contents change, so you never re-drag a button.
 
 ***
 
 ### Assignments from the raid note
 
-If your raid writes assignments into the note, PriestAssist reads them. Lines shaped like this are picked up on ready check, pull and roster changes:
+If your raid note has a `PI:` line naming you, PriestAssist reads your target out of it. MRT and NorthernSkyRaidTools are both supported, and the note always outranks the automatic pick — the raid leader's plan wins.
 
-```
-Power Infusion
-PI: YourName TargetName
-```
-
-Your target is set without a word in raid chat — the raid already has the note. Works with MRT and with NorthernSkyRaidTools; either one is enough. `/pa` still overrides it until the note's Power Infusion assignment changes — editing an unrelated line does not take your target away — and if there is no assignment for you, you get a quiet reminder in your own chat instead of silence.
+`/pa note` reports exactly what the parser sees, which is the quickest way to tell a note problem from a settings one.
 
 ***
 
-### Combat potions and trinkets
+### Who is actually worth it
 
-Pick a potion and PriestAssist injects the `/use item:` lines for you, ordered by the rank you prefer, with the cheap fleeting ones consumed first.
+The Damage Gain tab ranks every specialization by what Power Infusion is worth on it, as a percentage and as absolute damage, from simulation data that is refreshed after tuning passes.
 
-Supported: Light's Potential, Draught of Rampant Abandon, Potion of Recklessness and Liquid Luster, crafted and fleeting. A separate setting decides which trinket slot gets used — none, the top one, the bottom one, or both.
-
-***
-
-### Edit the macro right in the config
-
-The Macro tab shows the macro you pick in an editable field. Add your own lines at the bottom, click away, and they're applied. A live counter tracks how much of WoW's 255-character budget is left.
-
-Each macro keeps its own additions, which matters because the ones carrying a trinket, a racial and a potion have far less of that budget to spare. Your lines survive every rebuild until you clear the field yourself; the generated lines above them stay under addon control.
-
-***
-
-### Your assignment stays put
-
-The player you assign is remembered. Change your potion, swap the primary macro, or let a profile switch mid-raid — the macros rebuild around the same person, with no announcement.
-
-Only `/pa`, the minimap button and the Update Macro button reassign, and the assignment survives a reload.
-
-***
-
-### Raid and dungeon reminder
-
-A configurable text reminder fades in when you enter an instance. Choose the font (LibSharedMedia fonts are picked up automatically), outline, size, frame strata and fade-out delay. Drag it anywhere in Edit Mode.
-
-***
-
-### Optional target announcements
-
-Off by default, and set per profile — announce in raids, stay quiet in the open world. Turn it on and your Power Infusion target is posted to party, raid or instance chat, whichever matches the group you're in. It fires only when you deliberately assign someone, never when you change a setting.
+`/pa top` names the best targets in your group and who should take whom. Priests running the addon tell each other who they have claimed, so two of you do not infuse the same player.
 
 ***
 
 ### Also worth knowing
 
-*   **In your language.** Spell names come from your own client, so the macros come out right on a German, French or any other locale.
-*   **Combat safe.** WoW blocks macro edits in combat, so the update is queued and applied the moment you drop out of it.
-*   **Minimap button.** Left-click updates the macro, right-click opens the config. Draggable, and hideable if you'd rather keep things clean.
+*   **In your language.** Spell names come from your client, so macros are correct on any locale. The interface is available in German.
+*   **Key bindings.** Set your target, pick the best one, toggle the buddy frame, open the settings.
+*   **Combat safe.** WoW blocks macro edits in combat, so changes are queued and applied the moment you drop out.
+*   **Minimap button.** Left-click updates, right-click opens the settings. Draggable and hideable.
+*   **Reminder.** A short notice when you zone into a raid or dungeon with no target set, so you notice before the first boss rather than after it.
 
 ***
 
@@ -119,39 +100,42 @@ Off by default, and set per profile — announce in raids, stay quiet in the ope
 
 | Command                |What it does                                |
 | ---------------------- |------------------------------------------- |
-| <code>/pa</code>       |Update both macros to your current target   |
+| <code>/pa</code>       |Update the macros to your current target    |
 | <code>/pa open</code>  |Open the settings panel                     |
+| <code>/pa auto</code>  |Assign whoever gains most, once             |
 | <code>/pa top X</code> |Best targets, and who should take whom      |
-| <code>/pa note top</code> |The same assignment as raid note lines to copy |
-| <code>/pa reset</code> |Clear the Power Infusion target |
-| <code>/pa reset profiles</code> |Put the profiles back on the pre-1.9 layout |
 | <code>/pa note</code>  |Report what the raid note says              |
+| <code>/pa note top</code> |The same assignment as raid note lines to copy |
 | <code>/pa comm</code>  |Who else has a Power Infusion target        |
 | <code>/pa version</code> |What everyone in the group is running     |
+| <code>/pa buddy</code> |Toggle the buddy frame                      |
+| <code>/pa reset</code> |Clear the Power Infusion target             |
 | <code>/pa show</code>  |Preview the reminder                        |
 | <code>/pa help</code>  |List all commands                           |
 
-Priests without the addon can ask in chat with `!pa top`. Note that incoming chat cannot be read inside dungeons and raids, where the game treats it as protected — there the command stays silent, and `/pa top` is the way.
+Priests without the addon can ask in chat with `!pa top`. Incoming chat cannot be read inside dungeons and raids, where the game treats it as protected — there the command stays silent and `/pa top` is the way.
+
+Custom macro lines are edited in the Macro tab, in the text field under the macro you pick.
 
 ***
 
 ### Getting started
 
-1.  Install and log in on a Priest.
-2.  Target the player you want to buff and type `/pa`. Both macros appear in your general macro tab.
-3.  Drag them to your action bars.
-4.  Right-click the minimap button to configure the reminder, which macro is primary, the macro tab, potions and trinket slot.
-5.  Optional: open the Profiles tab, tick automatic switching, and set up a profile per kind of content.
+1.  Install and log in on a priest.
+2.  Target the player you want to buff and press `/pa`. The macros appear in your general macro tab.
+3.  Drag the ones you use to your action bars.
+4.  Right-click the minimap button to set up trinkets, potions and the reminder.
+5.  Optional: turn on the buddy frame in the Buddy tab, and automatic profiles in the Profiles tab.
 
 ***
 
 ### Notes
 
 *   **Retail only.** Classic is not supported.
-*   **LibSharedMedia-3.0** is optional. Install it and your full font collection shows up in the reminder settings; without it you get the four Blizzard fonts.
-*   **MRT or NorthernSkyRaidTools** are only needed for raid note assignments. Everything else works on its own.
-*   WoW caps macros at 255 characters. PriestAssist warns you if your combination of potion, trinket and custom lines goes over. When Voidform is your primary macro, only one potion rank is inserted for exactly this reason.
-*   Macros live in the general tab by default, which holds 120. The character tab holds 18, so make sure two slots are free before switching to it.
+*   **LibSharedMedia-3.0** is optional — install it and your full font collection appears in the reminder settings.
+*   **MRT or NorthernSkyRaidTools** are only needed for raid note assignments.
+*   WoW caps macros at 255 characters. PriestAssist measures each one and refuses to write a macro that would be cut off, naming the setting to turn off.
+*   Macros live in the general tab by default, which holds 120. The character tab holds 18.
 
 ***
 
@@ -159,55 +143,39 @@ Priests without the addon can ask in chat with `!pa top`. Note that incoming cha
 
 **Does anything update while I'm in combat?**
 
-No. WoW does not allow macros to be edited in combat, and no addon can work around that. PriestAssist queues the change and applies it the second you drop out of combat. In practice you rarely notice, because zone changes, ready checks and pulls all happen out of combat.
+No. WoW does not allow macros to be edited in combat, and no addon can work around that. The change is queued and applied the second you drop out. In practice you rarely notice: zone changes, ready checks and pulls all happen out of combat.
 
 **Do I need an English client?**
 
-No. Spell names are taken from your own client, so every locale gets the correct macro text automatically.
+No. Spell names are taken from your own client, so every locale gets the correct macro text.
 
-**I entered a dungeon and nothing switched. Why?**
+**Are profiles saved per character?**
 
-Automatic switching is off until you turn it on, in the Profiles tab. The line at the bottom of that tab always shows what the addon currently detects, which is the quickest way to tell a detection problem from a settings one.
+They are shared across your account, but split by specialization — two priests with the same specialization share settings, while Discipline and Shadow do not overwrite each other.
+
+**What happens to my profiles when I update?**
+
+They are carried over unchanged. Nothing looks different until you edit one.
 
 **Can I have a separate profile for Mythic+?**
 
 Not at the moment. Mythic+ shares the Dungeon profile on purpose: a key going live changes the difficulty mid-instance, and you do not want your macros rewritten seconds before the pull.
 
-**Are profiles saved per character?**
-
-No, they are shared across your account — but split by specialisation, so two priests with the same specialisation share settings while Discipline and Shadow do not overwrite each other.
-
-**What happens to my profiles when I update?**
-
-They are copied to every specialisation, unchanged. Nothing looks different until you edit one of them, and the previous layout is kept — `/pa reset profiles` puts it back if you want to go to an older version.
-
-**Why does the raid note do nothing outside a raid?**
-
-That is deliberate — assignments only apply in raid content. You can still check the whole chain anywhere with `/pa note`, which reports which note sources are available, whether any assignments exist, and which one matches you.
-
 **Can I edit the generated lines in the text field?**
 
-Only your own lines below them stick. The generated part belongs to the addon and is rebuilt from your settings and your current target. If you change it anyway, the block is restored and whatever you typed is kept as one of your own lines, with a note in your chat so nothing disappears silently.
+Only your own lines below them stick. The generated part belongs to the addon and is rebuilt from your settings and your target. If you change it anyway it is restored, and whatever you typed is kept as one of your own lines with a note in chat, so nothing disappears silently.
 
-**What happens if my macro gets too long?**
+**I talented Power Word: Barrier. What happens to the Ultimate Penitence macro?**
 
-You get a warning in chat and WoW truncates the rest. Shorten your custom lines, drop a trinket slot, or make Power Infusion the primary macro — the Voidform one carries considerably more text.
-
-**Why is a specialisation above another one that gains more damage?**
-
-The list is sorted by percentage by default, and the two do not agree: Power Infusion adds damage times percentage, so a specialisation that hits harder can gain more from a smaller percentage. The number being sorted by is shown bright, the other dimmed. A checkbox under the table swaps them, for the order and for `/pa auto`.
+The same macro casts Barrier instead — same name, same slot, same keybind, so nothing moves on your bar. Your Ultimate Penitence settings are kept and come back when you talent it again.
 
 **Does my target survive logging out?**
 
 A `/reload` and a reconnect keep it. A fresh login clears it, so you never start an evening still aimed at somebody from the last raid.
 
-**Does changing a setting announce my target again in raid chat?**
-
-No. Only a deliberate assignment does that: `/pa`, the minimap button or the Update Macro button. Setting changes and profile switches rebuild silently.
-
 **Something looks wrong. What should I send?**
 
-The full Lua error text if there is one, plus what you were doing at the time. `/pa note` output helps for anything note related.
+The full Lua error text if there is one, plus what you were doing at the time.
 
 ***
 
