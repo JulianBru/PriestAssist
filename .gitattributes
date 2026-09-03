@@ -1,0 +1,24 @@
+# Line endings are settled here rather than by hand.
+#
+# The repository stores LF for every text file. What sits in the working tree is
+# not our business: this folder is edited from Windows and synced through a
+# mount that rewrites files with CRLF whenever it feels like it, and chasing
+# that was costing more than it was worth. `text=auto eol=lf` makes git
+# normalise on the way in and on comparison, so a file whose line endings
+# flipped no longer reads as a file that was rewritten.
+#
+# It is only ever a diff problem. Lua does not care, WoW does not care and the
+# packager does not care -- but a file that flips shows up as every line
+# changed, which buries the one line that really changed and takes `git blame`
+# with it. That happened once, at 12,829 lines.
+* text=auto eol=lf
+
+# Binary, so never touched. Listed explicitly because `text=auto` guesses from
+# content, and a .tga that happens to contain no null bytes early on can be
+# guessed wrong -- at which case git would "fix" the line endings inside an
+# image.
+*.tga binary
+*.blp binary
+*.ogg binary
+*.mp3 binary
+*.png binary

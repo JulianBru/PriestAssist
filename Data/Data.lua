@@ -6,6 +6,10 @@ local UI = ns.UI
 -- than the name: locale independent by construction, and shorter in every
 -- language than spelling the name out.
 ns.POWER_INFUSION_SPELL_ID = 10060
+-- Yards. Every friendly spell a priest has is 40, which is what LibRangeCheck
+-- estimates with, so the buddy frame's indicator compares against this rather
+-- than against a band the library happened to return.
+ns.POWER_INFUSION_RANGE = 40
 ns.VOID_VOLLEY_SPELL_ID = 1242173
 
 -- On-use racial cooldowns worth firing alongside the rest of the burst. Only
@@ -165,6 +169,11 @@ ns.LINK_CURSEFORGE = "https://www.curseforge.com/wow/addons/priestassist"
 -- "active" and nothing else until now.
 ns.ACTIVE_DOT_PATH = "Interface\\AddOns\\PriestAssist\\Media\\green-dot.tga"
 ns.WARNING_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\warning.tga"
+-- The buddy frame's range indicator. Two pictures, no third: the check mark is
+-- shown only for an answer that really said "in range", and everything else --
+-- out of range, no unit, not visible, dead -- is the triangle. See
+-- ns.IsBuddyInRange.
+ns.CHECK_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\checkmark.tga"
 ns.HELP_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\help.tga"
 ns.INFO_ICON_PATH = "Interface\\AddOns\\PriestAssist\\Media\\info.tga"
 

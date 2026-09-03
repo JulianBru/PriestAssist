@@ -9,6 +9,7 @@
 
 Libs\LibStub\LibStub.lua
 Libs\LibSpecialization\LibSpecialization.lua
+Libs\LibRangeCheck-3.0\LibRangeCheck-3.0.lua
 Libs\LibPriestAssist\LibPriestAssist.lua
 
 Locales\Locale.lua

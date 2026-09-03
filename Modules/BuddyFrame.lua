@@ -150,6 +150,13 @@ local NAME_GAP = 3
 local TITLE_H = 18
 local STRIPE = 2
 local STRIPE_GAP = 2
+-- The range indicator, hanging a third of its own size off the icon's top
+-- right so it reads as a badge on the icon rather than as part of the artwork.
+local RANGE_ICON = 14
+-- How often the range is asked. The library caches for a tenth of a second, so
+-- the cost of this is the call itself; the number is about how quickly the
+-- picture follows you walking, not about CPU.
+local RANGE_INTERVAL = 0.25
 
 
 -- The same two-colour box the Current Target row in the config panel is built
@@ -583,6 +590,51 @@ local function BuddySpells()
     return specID and ns.BUDDY_COOLDOWNS[specID] or nil, target
 end
 
+--- Whether Power Infusion would reach the player we are set to infuse.
+---
+--- Deliberately answers only true or false, never "do not know". Everything the
+--- caller could do with a third answer is what it does with false: there is no
+--- check mark to show for a target that is dead, gone, not loaded or not
+--- resolvable, and a picture saying "go ahead" over any of those is worse than
+--- one saying "no".
+---
+--- That is also why the true case is written positively. Turned around --
+--- "false only when the library says out of range" -- a nil would fall through
+--- to the check mark, which is the one outcome that must not happen.
+---
+--- LibRangeCheck rather than C_Spell.IsSpellInRange: the library already knows
+--- about units that do not exist and units that are not visible, and it caches
+--- its answer for a tenth of a second, which is what makes a ticker cheap. It
+--- estimates with the priest's own 40-yard friendly spells rather than with
+--- Power Infusion itself, which is the same 40 yards.
+function ns.IsBuddyInRange(unit)
+    if not unit then
+        return false
+    end
+
+    local rangeCheck = LibStub and LibStub("LibRangeCheck-3.0", true)
+
+    if not rangeCheck then
+        return false
+    end
+
+    -- checkVisible: a player the client has not loaded is not somebody you are
+    -- about to infuse, whatever the roster says.
+    local minRange, maxRange = rangeCheck:GetRange(unit, true)
+
+    if not minRange then
+        return false
+    end
+
+    -- maxRange is nil when the target is beyond everything the library can
+    -- measure, which is further than Power Infusion reaches.
+    if not maxRange then
+        return false
+    end
+
+    return maxRange <= ns.POWER_INFUSION_RANGE
+end
+
 local function SpellFilterFor(spells)
     local include = {}
 
@@ -661,6 +713,33 @@ local function UpdateBuddyStyle(target, spells, unit)
     frame.stripe:Show()
 end
 
+--- The check mark or the triangle, from a unit token that was resolved a moment
+--- ago rather than remembered.
+---
+--- Its own function because it runs on a ticker as well as on the refresh: the
+--- distance between two players changes while nothing happens, so there is no
+--- event to hang this on. Everything else on the frame reacts to something.
+local function UpdateRangeIcon(unit)
+    local frame = frames.buddyFrame
+
+    if not (frame and frame.range) then
+        return
+    end
+
+    -- Nothing to judge without a target. The frame already says so -- empty
+    -- name, no placeholder, red stripe -- and a triangle on top of that would
+    -- warn about an empty window rather than about a problem.
+    if not unit then
+        frame.range:Hide()
+        return
+    end
+
+    local inRange = ns.IsBuddyInRange(unit)
+
+    frame.range:SetTexture(inRange and ns.CHECK_ICON_PATH or ns.WARNING_ICON_PATH)
+    frame.range:Show()
+end
+
 local function UpdateBuddySlot()
     local frame = frames.buddyFrame
 
@@ -678,6 +757,7 @@ local function UpdateBuddySlot()
     local unit = ResolveUnit(target)
 
     UpdateBuddyStyle(target, spells, unit)
+    UpdateRangeIcon(unit)
 
     local container = frame.buddy.container
 
@@ -1088,6 +1168,47 @@ function ns.CreateBuddyFrame()
     frame.stripe:SetPoint("TOPRIGHT", frame.buddy, "BOTTOMRIGHT", 0, -STRIPE_GAP)
     frame.stripe:SetHeight(STRIPE)
     frame.stripe:Hide()
+
+    -- Whether Power Infusion would reach them. On the icon rather than beside
+    -- it, so Measure never learns about it: anything in the layout would make
+    -- the frame wider for everybody and change width again whenever the option
+    -- moved. An overlay costs no room at any spacing and works in all three
+    -- styles.
+    --
+    -- Parented to the frame for the same reason as the stripe above, and it is
+    -- worth repeating because it is not obvious: the aura container is a child
+    -- frame, so anything drawn inside the holder ends up beneath the aura
+    -- button whatever its draw layer.
+    --
+    -- Top right. Bottom right is where a count would normally sit, but the
+    -- stripe is already along the bottom edge, and the cooldown swipe draws
+    -- from the centre.
+    frame.range = frame:CreateTexture(nil, "OVERLAY")
+    frame.range:SetSize(RANGE_ICON, RANGE_ICON)
+    frame.range:SetPoint("TOPRIGHT", frame.buddy, "TOPRIGHT", RANGE_ICON / 3, RANGE_ICON / 3)
+    frame.range:Hide()
+
+    -- OnUpdate rather than a timer, and on the frame itself rather than
+    -- anywhere else, because that is the switch: the game does not run OnUpdate
+    -- on a hidden frame, so this stops on its own whenever the buddy frame is
+    -- not on screen. No registration to remember, nothing to unregister, and no
+    -- way for it to outlive what it draws.
+    --
+    -- Everything else here reacts to an event. Distance does not: two players
+    -- walk apart and nothing is broadcast, so this is the one part of the frame
+    -- that has to look.
+    frame.rangeElapsed = 0
+
+    frame:HookScript("OnUpdate", function(self, elapsed)
+        self.rangeElapsed = self.rangeElapsed + elapsed
+
+        if self.rangeElapsed < RANGE_INTERVAL then
+            return
+        end
+
+        self.rangeElapsed = 0
+        UpdateRangeIcon(ResolveUnit(ns.GetAssignedTarget()))
+    end)
 
     -- Our own name never changes for the life of the session, so it is written
     -- once here rather than on every refresh. Priest white either way -- it is
