@@ -152,7 +152,12 @@ local STRIPE = 2
 local STRIPE_GAP = 2
 -- The range indicator, hanging a third of its own size off the icon's top
 -- right so it reads as a badge on the icon rather than as part of the artwork.
-local RANGE_ICON = 14
+--
+-- 18 of the icon's 44. Started at 14, which was legible standing still and
+-- easy to miss mid-pull -- the thing it competes with is a moving glow around
+-- the same corner. Much past this and it starts covering the icon rather than
+-- sitting on it.
+local RANGE_ICON = 18
 -- How often the range is asked, and the only throttle that does anything for
 -- us. The library caches its answer for a tenth of a second, but ours are a
 -- quarter apart, so every one of them is already stale and recomputes -- that
@@ -1248,9 +1253,26 @@ function ns.CreateBuddyFrame()
     -- Top right. Bottom right is where a count would normally sit, but the
     -- stripe is already along the bottom edge, and the cooldown swipe draws
     -- from the centre.
-    frame.range = frame:CreateTexture(nil, "OVERLAY")
-    frame.range:SetSize(RANGE_ICON, RANGE_ICON)
-    frame.range:SetPoint("TOPRIGHT", frame.buddy, "TOPRIGHT", RANGE_ICON / 3, RANGE_ICON / 3)
+    -- In a frame of its own, not as a texture on `frame`. That was the first
+    -- version and it drew *behind* the icon: a child frame always paints over
+    -- its parent's regions whatever draw layer they are on, and the icon holder
+    -- is a child. The stripe gets away with being a plain texture because it
+    -- sits below the icon and overlaps nothing.
+    --
+    -- Twenty above the holder. It has to clear the holder, the aura container
+    -- inside it, and the container's own stack -- button, cooldown, glow and
+    -- the countdown text, which reach the button's level plus three. Those are
+    -- built later and their levels are not ours to read, so the number is
+    -- deliberately generous rather than exact.
+    local badge = CreateFrame("Frame", nil, frame)
+    badge:SetFrameLevel(frame.buddy:GetFrameLevel() + 20)
+    badge:SetSize(RANGE_ICON, RANGE_ICON)
+    badge:SetPoint("TOPRIGHT", frame.buddy, "TOPRIGHT", RANGE_ICON / 3, RANGE_ICON / 3)
+    badge:EnableMouse(false)
+
+    frame.rangeBadge = badge
+    frame.range = badge:CreateTexture(nil, "OVERLAY")
+    frame.range:SetAllPoints()
     frame.range:Hide()
 
     frame.rangeElapsed = 0
