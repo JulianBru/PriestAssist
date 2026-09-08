@@ -6,9 +6,10 @@ local UI = ns.UI
 -- than the name: locale independent by construction, and shorter in every
 -- language than spelling the name out.
 ns.POWER_INFUSION_SPELL_ID = 10060
--- Yards. Every friendly spell a priest has is 40, which is what LibRangeCheck
--- estimates with, so the buddy frame's indicator compares against this rather
--- than against a band the library happened to return.
+-- Yards, and only the fallback. The real figure is read from the spell, because
+-- it is not a constant: Phantom Reach takes it to 46, and C_Spell.GetSpellInfo
+-- reports the talented value -- measured in game. This is what the buddy frame
+-- uses if the spell cannot be looked up at all.
 ns.POWER_INFUSION_RANGE = 40
 ns.VOID_VOLLEY_SPELL_ID = 1242173
 

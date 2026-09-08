@@ -634,6 +634,23 @@ end
 --- its answer for a tenth of a second, which is what makes a ticker cheap. It
 --- estimates with the priest's own 40-yard friendly spells rather than with
 --- Power Infusion itself, which is the same 40 yards.
+--- How far Power Infusion actually reaches, this character, right now.
+---
+--- Asked of the spell rather than written down, because it is not a constant:
+--- Phantom Reach takes it from 40 to 46, and `maxRange` follows the talent --
+--- measured in game, 46 with it and 40 without.
+---
+--- The same call LibRangeCheck labels its own spell checkers from, so its steps
+--- and this threshold move together instead of drifting apart.
+local function PowerInfusionRange()
+    local info = C_Spell and C_Spell.GetSpellInfo
+        and C_Spell.GetSpellInfo(ns.POWER_INFUSION_SPELL_ID)
+    local range = info and info.maxRange
+
+    return (type(range) == "number" and range > 0) and range
+        or ns.POWER_INFUSION_RANGE
+end
+
 function ns.IsBuddyInRange(unit)
     if not unit then
         return false
@@ -647,19 +664,29 @@ function ns.IsBuddyInRange(unit)
 
     -- checkVisible: a player the client has not loaded is not somebody you are
     -- about to infuse, whatever the roster says.
-    local minRange, maxRange = rangeCheck:GetRange(unit, true)
+    local minRange = rangeCheck:GetRange(unit, true)
 
+    -- No answer at all. Not a distance, so not a check mark.
     if not minRange then
         return false
     end
 
-    -- maxRange is nil when the target is beyond everything the library can
-    -- measure, which is further than Power Infusion reaches.
-    if not maxRange then
-        return false
-    end
-
-    return maxRange <= ns.POWER_INFUSION_RANGE
+    -- The *lower* bound, and this is the whole of the fix.
+    --
+    -- GetRange answers with a band -- somewhere between min and max. Asking
+    -- `maxRange <= 40` asks whether the target is *certainly* within range,
+    -- which is a different and much stricter question, and it only holds while
+    -- the band is narrow. Out of combat it is: the library measures with items
+    -- in five-yard steps. In combat those are gone -- item and interact checks
+    -- are restricted for a friendly unit -- and all that is left are the
+    -- priest's own 40-yard spells, plus Gift of the Naaru, which the library
+    -- appends to every class list. One coarse band, and the strict question
+    -- stops being answerable: the triangle then showed for the whole fight.
+    --
+    -- The lower bound asks what we actually want to know: the closest they can
+    -- possibly be. A band cannot straddle the spell's own range while a checker
+    -- sits exactly there, and for a priest one always does.
+    return minRange < PowerInfusionRange()
 end
 
 local function SpellFilterFor(spells)
