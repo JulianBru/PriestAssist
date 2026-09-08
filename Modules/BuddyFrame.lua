@@ -140,6 +140,22 @@ ns.BUDDY_COOLDOWNS = {
     -- that is what a priest will recognise. Malevolence is the Hellcaller one.
     [267] = { 417282, 442726,
               note = "Summon Infernal buffs nobody, so a talent that comes with it is used." },
+
+    -- Priest. Left out at first, on the grounds that Blizzard's list puts Power
+    -- Infusion first for Shadow and watching for the spell you are about to
+    -- cast is circular. That reasoning does not survive its own document:
+    -- docs/BUDDY_COOLDOWNS.md opens by establishing that the order in
+    -- TrackedCooldowns is a whitelist rather than a ranking, and two rows were
+    -- already wrong for trusting it. Voidform is second in the same list.
+    --
+    -- Worth having: a healer's list rates Shadow at 2.76%, mid-table, so /pa
+    -- auto hands one out without being asked. An empty right-hand icon for a
+    -- target the addon itself chose looks broken, and is.
+    --
+    -- 194249, the aura, not 228260 -- that is the cast, and it is what the
+    -- Voidform macro fires.
+    [258] = { 194249,
+              note = "Two Power Infusions do not stack. At about 15 seconds left theirs has run out, which is when yours is worth giving." },
 }
 
 local ICON = 44

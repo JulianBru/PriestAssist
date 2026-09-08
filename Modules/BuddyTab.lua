@@ -16,7 +16,7 @@ ns.RegisterConfigModule({
         local sec = ctx.SectionHeader(p, "Buddy Frame")
 
         -- Which spell each specialisation is watched for is the one thing about
-        -- this feature nobody can guess, and the answer is twenty-five rows
+        -- this feature nobody can guess, and the answer is twenty-six rows
         -- long. It goes behind a button rather than into the tab.
         -- On the header line rather than below it. Below it is where the other
         -- tabs put theirs, but they have nothing beside it -- here the first row

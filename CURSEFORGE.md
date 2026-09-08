@@ -60,7 +60,7 @@ Switch on the buddy frame and you get two icons: your own Power Infusion on the 
 
 A check mark or a warning triangle tells you whether they are in range, so you find out before you press it rather than after.
 
-Cooldowns are known for 25 of the 26 damage specializations. Several are read from a buff that runs alongside the cooldown rather than from the cooldown itself, because some land on the enemy instead of the caster; an Info button lists every one of them.
+Every specialization the addon rates as a Power Infusion target has a cooldown to watch, except Frost Mage — since Icy Veins was removed its damage comes from procs, so there is no window. Several are read from a buff that runs alongside the cooldown rather than from the cooldown itself, because some land on the enemy instead of the caster; an Info button lists every one of them.
 
 ***
 
