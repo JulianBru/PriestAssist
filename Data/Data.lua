@@ -530,6 +530,12 @@ ns.DEFAULTS = {
         -- broadcast -- so switching it off really stops something.
         rangeCheck = true,
 
+        -- Off, unlike the glow. A sound is the one part of this frame that
+        -- reaches you when you are not looking at it, which is the point and
+        -- also the reason nobody should get one without asking.
+        sound = false,
+        soundName = "Power Infusion (1)",
+
         -- always | group | instance | combat
         visibility = "always",
         point = {
@@ -577,6 +583,80 @@ function ns.GetAvailableFonts()
     end
 
     return ns.BUILTIN_FONTS
+end
+
+-- The addon's own, always offered, and first in the list so it is what somebody
+-- who never installed LibSharedMedia hears. The file is not registered with
+-- LibSharedMedia on purpose: doing that would put a PriestAssist sound into
+-- every other addon's dropdown.
+ns.BUILTIN_SOUNDS = {
+    {
+        name = "Power Infusion (1)",
+        path = "Interface\\AddOns\\PriestAssist\\Media\\Sounds\\Power_Infusion_1.mp3",
+    },
+    {
+        name = "Power Infusion (2)",
+        path = "Interface\\AddOns\\PriestAssist\\Media\\Sounds\\Power_Infusion_2.mp3",
+    },
+}
+
+--- Every sound the player can choose, ours first and LibSharedMedia's after.
+---
+--- Unlike the fonts, the built-in list is not a fallback for a missing library
+--- but a permanent entry: it is the one sound that says the thing this addon is
+--- about, and a spoken cue beats a generic chime for a signal you react to
+--- without looking.
+function ns.GetAvailableSounds()
+    local sounds = {}
+
+    for _, entry in ipairs(ns.BUILTIN_SOUNDS) do
+        sounds[#sounds + 1] = { name = entry.name, path = entry.path }
+    end
+
+    local sharedMedia = ns.GetSharedMedia()
+
+    if sharedMedia then
+        local extra = {}
+
+        for name, path in pairs(sharedMedia:HashTable("sound")) do
+            extra[#extra + 1] = { name = name, path = path }
+        end
+
+        table.sort(extra, function(left, right)
+            return left.name < right.name
+        end)
+
+        for _, entry in ipairs(extra) do
+            sounds[#sounds + 1] = entry
+        end
+    end
+
+    return sounds
+end
+
+--- The file path for a stored name, or nil.
+---
+--- Nil rather than a fallback sound on purpose. A name that no longer resolves
+--- means the library that provided it is gone, and playing something else
+--- instead would be the addon choosing a sound the player never picked.
+function ns.ResolveSound(name)
+    for _, sound in ipairs(ns.GetAvailableSounds()) do
+        if sound.name == name then
+            return sound.path
+        end
+    end
+
+    return nil
+end
+
+function ns.GetSoundDropdownItems()
+    local items = {}
+
+    for _, sound in ipairs(ns.GetAvailableSounds()) do
+        items[#items + 1] = { text = sound.name, value = sound.name }
+    end
+
+    return items
 end
 
 function ns.ResolveFont(name)

@@ -192,6 +192,36 @@ ns.RegisterConfigModule({
             end)
         controls.buddyGlow:SetPoint("LEFT",
             controls.buddyGlowColor.button, "LEFT", -HALF, 0)
+
+        -- Sound, in the same section as the glow: both answer "how does it tell
+        -- me", and this one is the version that works while you are looking
+        -- somewhere else. Same arrangement as the row above -- dropdown first
+        -- because it carries its label overhead, checkbox hung off it.
+        controls.buddySoundPick = ns.UI.CreateDropdown(p, HALF - 4, 8)
+        controls.buddySoundPick:SetPoint("TOPLEFT", controls.buddyGlowColor,
+            "BOTTOMLEFT", 0, -34)
+        controls.buddySoundPick:SetLabel("Sound", accent)
+        controls.buddySoundPick:SetOnSelect(function(value)
+            ns.GetDB().buddyFrame.soundName = value
+            ns.ApplyBuddyFrameSettings()
+
+            -- Played once on picking, because a list of names tells you nothing
+            -- about what they sound like.
+            local path = ns.ResolveSound(value)
+
+            if path then
+                PlaySoundFile(path, "Master")
+            end
+        end)
+
+        controls.buddySound = ns.UI.CreateCheckButton(p,
+            "Play a sound when their cooldown starts",
+            function(checked)
+                ns.GetDB().buddyFrame.sound = checked and true or false
+                ns.ApplyBuddyFrameSettings()
+            end)
+        controls.buddySound:SetPoint("LEFT",
+            controls.buddySoundPick.button, "LEFT", -HALF, 0)
     end,
     -- Moved out of ns.RefreshConfigPanel with 6.7. The body is unchanged; the
     -- four values it used to read from that function's scope arrive in `state`.
@@ -208,6 +238,14 @@ ns.RegisterConfigModule({
             cc.buddyTargetName:SetChecked(buddy.showTargetName ~= false)
             cc.buddyRangeCheck:SetChecked(buddy.rangeCheck ~= false)
             cc.buddyGlow:SetChecked(buddy.glow ~= false)
+            cc.buddySound:SetChecked(buddy.sound and true or false)
+
+            -- Rebuilt on every refresh rather than once at build: which sounds
+            -- exist depends on LibSharedMedia, and other addons register theirs
+            -- at their own load time, which may be after ours.
+            cc.buddySoundPick:SetItems(ns.GetSoundDropdownItems())
+            cc.buddySoundPick:SetSelectedValue(buddy.soundName
+                or ns.DEFAULTS.buddyFrame.soundName)
             cc.buddyScale:SetValue(math.floor((buddy.scale or 1) * 100 + 0.5))
             cc.buddyVisibility:SetSelectedValue(buddy.visibility or "always")
             cc.buddyGlowColor:SetSelectedValue(buddy.glowColor or "gold")

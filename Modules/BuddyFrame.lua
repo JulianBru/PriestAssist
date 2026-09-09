@@ -853,6 +853,77 @@ function ns.SetRangeTicker(on)
     return true
 end
 
+-- What ns.SetBuddySound last registered, so it can take it off again. The IDs
+-- are the engine's; there is no way to ask it what we asked for.
+local soundIDs, soundedUnit, soundedSpells, soundedFile = {}, nil, nil, nil
+
+--- Play a sound when the watched cooldown starts.
+---
+--- C_UnitAuras.AddAuraSound is the same bargain as the aura container: we name a
+--- unit and a spell, the engine watches and plays, and we are told nothing. That
+--- is why it is allowed to work on somebody else's buff at all, and it is the
+--- only way to get this -- the addon cannot see the aura to react to it.
+---
+--- Registered per spell, because a specialisation can have more than one
+--- candidate and the engine takes one at a time.
+---
+--- **No ShouldAurasBeSecret guard**, deliberately. NorthernSkyRaidTools refuses
+--- to register at all while auras are secret, which is exactly dungeons, raids
+--- and keys -- the only content this frame is for. Whether that is the API
+--- refusing or NSRT being careful is not answerable from their source, and
+--- copying the guard would make it impossible to find out. If the engine says
+--- no, AddAuraSound returns nil and nothing here breaks.
+function ns.SetBuddySound(unit, spells)
+    local db = ns.GetDB().buddyFrame
+    local file = db.sound and db.enabled and ns.ResolveSound(db.soundName) or nil
+
+    if not (unit and spells and file) then
+        unit, spells, file = nil, nil, nil
+    end
+
+    -- Nothing moved. Re-registering on every SPELL_UPDATE_COOLDOWN would mean
+    -- tearing down and rebuilding several registrations a second in combat.
+    if unit == soundedUnit and spells == soundedSpells and file == soundedFile then
+        return false
+    end
+
+    if C_UnitAuras and C_UnitAuras.RemoveAuraSound then
+        for _, id in ipairs(soundIDs) do
+            C_UnitAuras.RemoveAuraSound(id)
+        end
+    end
+
+    wipe(soundIDs)
+    soundedUnit, soundedSpells, soundedFile = unit, spells, file
+
+    if not file then
+        return true
+    end
+
+    local add = C_UnitAuras and C_UnitAuras.AddAuraSound
+    local trigger = Enum and Enum.UnitAuraSoundTrigger
+        and Enum.UnitAuraSoundTrigger.Added
+
+    if not (add and trigger) then
+        return true
+    end
+
+    for _, spellID in ipairs(spells) do
+        local id = add(trigger, {
+            unitToken     = unit,
+            spellID       = spellID,
+            soundFileName = file,
+            outputChannel = "Master",
+        })
+
+        if id then
+            soundIDs[#soundIDs + 1] = id
+        end
+    end
+
+    return true
+end
+
 local function UpdateBuddySlot()
     local frame = frames.buddyFrame
 
@@ -871,6 +942,9 @@ local function UpdateBuddySlot()
 
     UpdateBuddyStyle(target, spells, unit)
     UpdateRangeIcon(unit)
+    -- Alongside the container and on the same two values, so the sound is bound
+    -- to whoever the icon is bound to and never to the previous target.
+    ns.SetBuddySound(unit, spells)
 
     local container = frame.buddy.container
 
@@ -901,6 +975,7 @@ local function UpdateBuddySlot()
         end
 
         watchedSpells, watchedUnit = nil, nil
+        ns.SetBuddySound(nil, nil)
         return
     end
 
@@ -1354,6 +1429,10 @@ function ns.UpdateBuddyFrame()
         -- off is the switch; relying on the frame being hidden is a guess about
         -- who shows it next.
         ns.SetRangeTicker(false)
+        -- And the sound. Unlike the container this is not held by a frame, so
+        -- hiding one releases nothing: the engine keeps playing for a unit
+        -- nobody is watching until the registration is taken back.
+        ns.SetBuddySound(nil, nil)
 
         -- Hiding is what releases the container: its OnHide drops the unit
         -- registrations, so nothing of ours is left listening to UNIT_AURA.
