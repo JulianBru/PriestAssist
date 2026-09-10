@@ -1,5 +1,5 @@
 ## Interface: 120000, 120001, 120005, 120007, 120100
-## Version: 1.10-alpha5
+## Version: 1.10
 ## Title: Priest Assist
 ## Author: Julsanity (CheersItsJulian)
 ## SavedVariables: PriestAssistDB
@@ -46,6 +46,7 @@ Modules\MacroTab.lua
 Modules\ProfilesTab.lua
 Modules\ReminderTab.lua
 
+Modules\WhatsNew.lua
 Modules\Options.lua
 Modules\Minimap.lua
 Modules\BuddyGlow.lua

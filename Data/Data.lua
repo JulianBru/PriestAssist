@@ -478,6 +478,13 @@ ns.DEFAULTS = {
     -- Heartbeat, so a fresh login can be told from a reconnect. See
     -- ns.ClearAssignmentForNewSession.
     lastSeen = 0,
+
+    -- The addon version whose "what's new" window has been shown. Empty rather
+    -- than the current version, so that ns.ShouldShowWhatsNew can tell an
+    -- upgrade from a fresh install: a database with nothing in it at all is a
+    -- first install and gets the version written silently, because nothing is
+    -- new to somebody who has never run this.
+    whatsNewVersion = "",
     reminderEnabled = true,
     reminderDuration = 5,
     reminderEnterDelay = 2,
@@ -550,6 +557,38 @@ ns.DEFAULTS = {
         hidden = false,
     },
 }
+
+--- What the .toc says, or an empty string.
+---
+--- Asked of the client rather than kept as a constant, so it cannot disagree
+--- with the file the packager stamps.
+function ns.CurrentVersion()
+    local version = C_AddOns and C_AddOns.GetAddOnMetadata
+        and C_AddOns.GetAddOnMetadata(ns.ADDON_NAME, "Version")
+
+    return type(version) == "string" and version or ""
+end
+
+--- Whether the "what's new" window is owed to this player.
+---
+--- Compared as strings, and deliberately not parsed. Any version that is not
+--- the one recorded counts, which includes going backwards -- somebody who
+--- downgrades has genuinely changed what they are running, and a comparison
+--- that tried to decide "newer" would need to understand 1.10-alpha5 against
+--- 1.10, which is more cleverness than the question deserves.
+function ns.ShouldShowWhatsNew()
+    local current = ns.CurrentVersion()
+
+    if current == "" then
+        return false
+    end
+
+    return ns.GetDB().whatsNewVersion ~= current
+end
+
+function ns.MarkWhatsNewSeen()
+    ns.GetDB().whatsNewVersion = ns.CurrentVersion()
+end
 
 function ns.GetSharedMedia()
     if not LibStub then
@@ -966,6 +1005,14 @@ local function MigrateProfiles(existingData)
 
     -- After the spec split, so it walks the shape it expects either way.
     MigrateToMacroTable(existingData)
+
+    -- A first install is caught up by definition: there is no previous version
+    -- for anything to be new against. Written here rather than left to the
+    -- window's own check, because this is the only place that can still tell an
+    -- empty database from one CopyDefaults has since filled in.
+    if isFreshInstall then
+        existingData.whatsNewVersion = ns.CurrentVersion()
+    end
 
     existingData.dbVersion = ns.DB_VERSION
 end

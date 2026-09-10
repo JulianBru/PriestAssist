@@ -992,6 +992,18 @@ function UI.CreateHeaderedFrame(parent, name, title, width, height, frameStrata,
     sep:SetHeight(1)
     sep:SetColorTexture(C.separator[1], C.separator[2], C.separator[3], 1.0)
 
+    -- Addon icon, left of the title. The title sits at x=36 and always has, so
+    -- the gap was already there -- it just had nothing in it on every window
+    -- except the config panel, which drew its own copy.
+    --
+    -- ns.ADDON_ICON_PATH comes from Data.lua, which loads after this file. That
+    -- is fine: nothing here runs at load, only when a window is created.
+    local icon = frame:CreateTexture(nil, "OVERLAY")
+    icon:SetSize(18, 18)
+    icon:SetPoint("LEFT", frame, "TOPLEFT", 10, -(TITLE_H / 2) - 1)
+    icon:SetTexture(ns.ADDON_ICON_PATH)
+    frame.icon = icon
+
     -- Title text
     local titleFS = frame:CreateFontString(nil, "OVERLAY")
     titleFS:SetFont(GetFont(), 13, nil)

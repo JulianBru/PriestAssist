@@ -66,5 +66,14 @@ ns.RegisterConfigModule({
             "Pick a link, then press Ctrl+C to copy it. Addons cannot open a browser.",
             "textDim", "FONT_SMALL")
         urlHint:SetPoint("TOPLEFT", controls.aboutUrl, "BOTTOMLEFT", 0, -6)
+
+        -- Here rather than behind a slash command: the version and the links are
+        -- already on this tab, so it is where somebody looks for "what changed".
+        -- Shown once by itself after an update; this is the way back to it for
+        -- anybody who closed it before reading.
+        controls.whatsNewButton = ns.UI.CreateButton(p, "What's New", accent, 140, 24)
+        controls.whatsNewButton:SetPoint("TOPLEFT", urlHint, "BOTTOMLEFT", 0, -18)
+        controls.whatsNewButton:SetIcon(ns.INFO_ICON_PATH, 14)
+        controls.whatsNewButton:SetOnClick(function() ns.ShowWhatsNew() end)
     end,
 })

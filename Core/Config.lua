@@ -272,6 +272,18 @@ function ns.ShowPlanAsNote()
     frame:Raise()
 end
 
+--- The shell every info window shares: title bar in the theme colour, a close
+--- button, and a scrolling body that content is stacked into.
+---
+--- Public since 1.10, so a window does not have to live in this file to use it.
+--- Config.lua is the panel's shell -- the tabs moved into Modules/ under 6.7 and
+--- a window that merely borrows a frame has no more business here than they did.
+--- The three below have not moved yet; they can, one at a time, and nothing
+--- about them needs to change when they do.
+---
+--- Returns the frame, and a builder **only on the first call**. Afterwards the
+--- window already exists and the second return is nil -- callers put their whole
+--- layout behind `if build then`.
 local function InfoWindow(key, title, width, height)
     local frame = frames[key]
 
@@ -407,6 +419,8 @@ local function InfoWindow(key, title, width, height)
                         child:SetHeight(contentHeight)
                     end }
 end
+
+ns.InfoWindow = InfoWindow
 
 -- The exact shape of the line is the one thing about the note feature that
 -- cannot be guessed, so it is offered as copyable text rather than described.
@@ -915,11 +929,8 @@ function ns.CreateConfigPanel()
         end
     end)
 
-    -- Addon icon in the header (left of title text)
-    local headerIcon = configPanel:CreateTexture(nil, "OVERLAY")
-    headerIcon:SetSize(18, 18)
-    headerIcon:SetPoint("LEFT", configPanel, "TOPLEFT", 10, -HEADER_END / 2 + 1)
-    headerIcon:SetTexture(ns.ADDON_ICON_PATH)
+    -- The addon icon in the header used to be drawn here. It moved into
+    -- UI.CreateHeaderedFrame in 1.10 so every window has one, not just this one.
 
     -- Version label (right side of header, before close button).
     -- Read from the TOC at runtime, so it never needs bumping by hand.

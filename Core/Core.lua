@@ -343,6 +343,24 @@ eventFrame:SetScript("OnEvent", function(_, event, arg1, arg2)
         ns.ScheduleInstanceReminder(1)
         ns.ScheduleContentProfileCheck(1)
 
+        -- Delayed, and not because anything here is slow: PLAYER_LOGIN fires
+        -- under the loading screen, and a window that opens behind it is a
+        -- window the player never sees dismiss itself. Three seconds is after
+        -- the world is up and before anybody has pulled anything.
+        --
+        -- Marked as seen when it is *shown*, not when it is closed. Closing is
+        -- not the only way out -- a reload, a disconnect, logging straight back
+        -- out -- and a window that reappears until dismissed the approved way
+        -- is more annoying than one seen once and missed.
+        if ns.ShouldShowWhatsNew() then
+            C_Timer.After(3, function()
+                if ns.ShouldShowWhatsNew() then
+                    ns.MarkWhatsNewSeen()
+                    ns.ShowWhatsNew()
+                end
+            end)
+        end
+
         -- Keeps the heartbeat current while playing, so a disconnect leaves a
         -- recent value behind rather than the one from the last reload.
         -- Deliberately not touched here: PLAYER_LOGIN runs before

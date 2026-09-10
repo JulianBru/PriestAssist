@@ -867,12 +867,16 @@ local soundIDs, soundedUnit, soundedSpells, soundedFile = {}, nil, nil, nil
 --- Registered per spell, because a specialisation can have more than one
 --- candidate and the engine takes one at a time.
 ---
---- **No ShouldAurasBeSecret guard**, deliberately. NorthernSkyRaidTools refuses
---- to register at all while auras are secret, which is exactly dungeons, raids
---- and keys -- the only content this frame is for. Whether that is the API
---- refusing or NSRT being careful is not answerable from their source, and
---- copying the guard would make it impossible to find out. If the engine says
---- no, AddAuraSound returns nil and nothing here breaks.
+--- **No ShouldAurasBeSecret guard, and that is settled rather than hopeful.**
+--- NorthernSkyRaidTools refuses to register at all while auras are secret,
+--- which is exactly the content this frame is for. Copying that would have made
+--- it impossible to find out whether the API or the addon was the cautious one.
+---
+--- It is the addon. Confirmed in a raid: the sound fires while auras are
+--- secret. Which follows, once you see what this function is --
+--- Blizzard_Deprecated resolves the old AddPrivateAuraAppliedSound straight
+--- onto it, so this *is* the private aura mechanism, and private auras exist
+--- precisely so an addon can react to something it is not allowed to read.
 function ns.SetBuddySound(unit, spells)
     local db = ns.GetDB().buddyFrame
     local file = db.sound and db.enabled and ns.ResolveSound(db.soundName) or nil
