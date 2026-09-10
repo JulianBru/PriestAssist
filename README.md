@@ -38,12 +38,8 @@ Profiles are shared across your account, so two priests with the same specialisa
 | `/pa note top` | The same assignment as raid note lines, to copy |
 | `/pa comm` | Who else has a Power Infusion target |
 | `/pa version` | What everyone in the group is running |
-| `/pa add <text>` | Append custom lines to the primary macro |
 | `/pa reset` | Clear the Power Infusion target |
-| `/pa reset macro` | Remove custom lines from the primary macro |
 | `/pa reset profiles` | Put the profiles back on the pre-1.9 layout |
-| `/pa mode powerinfusion` | Make `PriestAssist PI` the primary macro |
-| `/pa mode voidform` | Make `PriestAssist VF` the primary macro |
 | `/pa show` | Preview the reminder |
 | `/pa help` | List all commands |
 

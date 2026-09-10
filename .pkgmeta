@@ -16,6 +16,9 @@ externals:
   # inside it that actually holds the library. Without the subpath the packager
   # would copy the whole repository, and without .git it asks for credentials.
   Libs/LibSpecialization: https://github.com/BigWigsMods/LibSpecialization.git/LibSpecialization
+  # The copy checked in is whatever was to hand while the buddy frame's range
+  # indicator was written. This is the one that ships.
+  Libs/LibRangeCheck-3.0: https://github.com/WeakAuras/LibRangeCheck-3.0.git/LibRangeCheck-3.0
 
 # Shown as a relation on the CurseForge project page.
 optional-dependencies:

@@ -1,5 +1,59 @@
 # Priest Assist
 
+## [1.10](https://github.com/JulianBru/PriestAssist/tree/v1.10) (2026-09-10)
+
+### Added
+
+- Four more macros: Ultimate Penitence and Evangelism for Discipline, Divine Hymn and Apotheosis for Holy. Every priest gets all six, so a specialisation change never empties a slot on your bar.
+
+- Every setting is per macro now. Trinket, racial and Power Infusion are chosen for each one separately.
+
+- Evangelism can be cast on your mouseover, so it does not land on you when nothing is targeted.
+
+- Ultimate Penitence shares a talent choice with Power Word: Barrier. Talent Barrier and the same macro casts it — same name, same slot, same key. It carries a placement option instead of the trinket, the racial and Power Infusion, and each keeps its own custom lines.
+
+- The specialisation buttons in the settings say Discipline, Holy and Shadow instead of only showing an icon.
+
+- The buddy frame shows whether Power Infusion would reach your target, with a switch in the Buddy tab.
+
+- A sound when your target's cooldown starts, off by default and chosen in the Buddy tab. Two Power Infusion callouts are included, and anything from LibSharedMedia is offered alongside them.
+
+- The buddy frame watches Shadow priests too. It was left out on the grounds that a Shadow priest's own cooldown is Power Infusion, which is circular — but the automatic pick rates them mid-table and hands one out, and the frame then showed nothing. The note says to press yours at about 15 seconds left, once theirs has run out.
+
+- A window on the first login after an update, listing what changed. The About tab has a button back to it.
+
+### Changed
+
+- The Macro tab has one row per macro of the specialisation you are editing. The row underneath picks which macro the text field shows.
+
+- The combat potion still belongs to the profile, because it is consumed rather than put on cooldown. "Potion goes in" chooses which macro carries it.
+
+- Your 1.9 settings carry over. The macro that was primary keeps its trinket, its racial, its potion and its custom lines; the other five start empty.
+
+- An unrecognised `/pa` command prints the help. It used to assign whoever you had targeted, so a typo changed your target without saying so.
+
+- The settings window is wider.
+
+- Buddy frame: "Icon Spacing" is the distance between the two icons. With the names shown it was not — the default 42 drew 57 — and the slider did not even move in one direction.
+
+- Buddy frame: the name columns are as wide as the names, not as wide as the longest name there could be. Short names let the icons sit closer.
+
+### Removed
+
+- `/pa add`, `/pa reset macro` and `/pa mode`. All three worked on "the primary macro", and there is no primary macro any more. Custom lines are edited in the Macro tab, which always knows which macro is open.
+
+### Fixed
+
+- Buddy frame: "Show own name" made the frame wider and showed no name.
+
+- Checkboxes standing side by side: the left one swallowed clicks meant for the right one, box included. Every checkbox was 420 pixels wide however short its label.
+
+- The advice printed when a macro goes over 255 characters named the wrong setting. Anyone with a combat potion configured was told to turn the potion off whatever the real cause was.
+
+- German: a few strings had lost their translation and showed in English.
+
+- Updating from 1.8 with Voidform as your primary macro left Discipline and Holy with no combat potion in any macro. 1.9 had copied that choice to every specialisation, where it pointed at a macro those two never build. The potion moves to the Power Infusion macro instead; Shadow keeps Voidform.
+
 ## [1.9](https://github.com/JulianBru/PriestAssist/tree/v1.9) (2026-09-03)
 
 Changes how settings are stored. Your profiles are migrated the first time you

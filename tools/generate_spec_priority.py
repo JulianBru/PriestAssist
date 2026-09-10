@@ -339,7 +339,7 @@ def main() -> int:
     parser.add_argument("--shadow-url")
     parser.add_argument("--healer-file")
     parser.add_argument("--shadow-file")
-    parser.add_argument("--output", default="SpecPriority.lua")
+    parser.add_argument("--output", default="Data/SpecPriority.lua")
     parser.add_argument("--date", help="DD/MM/YYYY, when the sheet's simulations were run; "
                                        "overrides the sheet's own changelog")
     parser.add_argument("--check", action="store_true",

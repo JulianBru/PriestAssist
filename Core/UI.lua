@@ -256,12 +256,17 @@ end
 
 -- ─── UI.CreateCheckButton ─────────────────────────────────────────────────────
 
+local CHECK_BOX_W     = 14
+local CHECK_LABEL_GAP = 6
+
 function UI.CreateCheckButton(parent, label, onCheck)
+    -- Sized to its own label at the end of this function, so the width below is
+    -- only what the frame holds until then.
     local container = CreateFrame("Frame", nil, parent)
     container:SetSize(240, 20)
 
     local box = CreateFrame("Frame", nil, container, BackdropTemplateMixin and "BackdropTemplate" or nil)
-    box:SetSize(14, 14)
+    box:SetSize(CHECK_BOX_W, CHECK_BOX_W)
     box:SetPoint("LEFT", 0, 0)
     StyleFrame(box, C.bgWidget, C.border)
 
@@ -276,20 +281,21 @@ function UI.CreateCheckButton(parent, label, onCheck)
     container._checked         = false
 
     local lbl = NewFS(container, label, "text", 12)
-    lbl:SetPoint("LEFT", box, "RIGHT", 6, 0)
+    lbl:SetPoint("LEFT", box, "RIGHT", CHECK_LABEL_GAP, 0)
     lbl:SetJustifyH("LEFT")
     container.label = lbl
 
     -- For labels that are only known at runtime, such as the name of whichever
-    -- racial this character happens to have.
+    -- racial this character happens to have. Re-measured, or the widget would
+    -- keep the clickable area of whatever it said before.
     function container:SetLabel(text)
         self.label:SetText(L(text) or "")
+        self:FitToLabel()
     end
 
     local hit = CreateFrame("Button", nil, container)
     hit:SetPoint("TOPLEFT",     container, "TOPLEFT",     0, 0)
     hit:SetPoint("BOTTOMRIGHT", container, "BOTTOMRIGHT", 0, 0)
-    hit:SetHitRectInsets(0, -180, 0, 0)
 
     local function Apply(v)
         container._checked = v
@@ -299,19 +305,33 @@ function UI.CreateCheckButton(parent, label, onCheck)
     function container:SetChecked(v) Apply(v and true or false) end
     function container:GetChecked()  return container._checked   end
 
+    --- The clickable area is the box plus its label, and nothing beyond it.
+    ---
+    --- Until 1.10 it was a 240px container with the hit rect stretched 180px
+    --- further right, so that a long label stayed clickable. Both numbers were
+    --- guesses and neither had anything to do with the text, which left every
+    --- checkbox 420 pixels wide however short its label. Two of them in columns
+    --- 274 apart -- the General tab -- meant the left one swallowed every click
+    --- meant for the right one, its box included. Where nothing sat alongside,
+    --- the same 420px turned empty panel into a toggle.
+    ---
+    --- Measuring has no number in it that can be wrong. GetStringWidth is the
+    --- rendered width, so it also follows the client's font and locale.
+    function container:FitToLabel()
+        local text = self.label:GetStringWidth() or 0
+
+        self:SetWidth(CHECK_BOX_W + CHECK_LABEL_GAP + math.max(text, 1))
+    end
+
+    --- A deliberately wider target than the label needs, for a checkbox that
+    --- should fill its column rather than end where its text does.
+    function container:SetClickWidth(width)
+        self:SetWidth(width)
+    end
+
     --- Greyed out and unclickable, for a setting that exists but has nothing to
     --- act on. The hit area is a local button, so this is the only way in from
     --- outside; without it a disabled checkbox would still toggle itself.
-    --- Constrain the clickable area to an explicit width.
-    ---
-    --- By default the hit rect runs 180 pixels past the container so a long
-    --- label stays clickable. That is invisible until two of these sit side by
-    --- side, at which point the left one swallows every click meant for the
-    --- right one -- and the label under the cursor is not the box that toggles.
-    function container:SetClickWidth(width)
-        self:SetWidth(width)
-        hit:SetHitRectInsets(0, 0, 0, 0)
-    end
 
     function container:SetEnabled(enabled)
         enabled = enabled ~= false
@@ -357,6 +377,8 @@ function UI.CreateCheckButton(parent, label, onCheck)
     container:HookScript("OnShow", function()
         if container._checked then fill:Show() else fill:Hide() end
     end)
+
+    container:FitToLabel()
 
     return container
 end
@@ -499,8 +521,18 @@ function UI.CreateDropdown(parent, width, maxSlots)
     dd.offset       = 0
     dd.selectedValue = nil
 
+    -- Anchored on both sides rather than given a width, so the button is the
+    -- dropdown's width by construction and cannot drift from it.
+    --
+    -- It carried its own copy of `width` until 1.10. Identical at build, and
+    -- nothing resized a dropdown afterwards, so the two never disagreed -- but
+    -- dd:SetWidth() moved the frame and left the button where it was, which
+    -- looks like it worked until you open the list. The spec selector needs a
+    -- width that follows its labels, and the dropdown beside it has to give
+    -- that width back.
     dd.button = UI.CreateButton(dd, "", "accent_hover", width or 300, 22)
     dd.button:SetPoint("TOPLEFT", 0, 0)
+    dd.button:SetPoint("TOPRIGHT", 0, 0)
     dd.button.text:ClearAllPoints()
     dd.button.text:SetPoint("LEFT", 8, 0)
     dd.button.text:SetJustifyH("LEFT")
@@ -552,8 +584,14 @@ function UI.CreateDropdown(parent, width, maxSlots)
     end
 
     for i = 1, dd.maxSlots do
+        -- Both sides again, and for the same reason as dd.button: this was the
+        -- third place holding a copy of `width`, and the one I missed when the
+        -- other two were fixed. The list took its width at open, the rows kept
+        -- the one from login, and the highlight under the cursor ran past the
+        -- right edge of the list it was inside.
         local itemBtn = UI.CreateButton(dd.list, "", "accent_transparent", (width or 300) - 4, 20)
         itemBtn:SetPoint("TOPLEFT", 2, -2 - (i - 1) * 22)
+        itemBtn:SetPoint("TOPRIGHT", -2, -2 - (i - 1) * 22)
         itemBtn.text:ClearAllPoints()
         itemBtn.text:SetPoint("LEFT", 8, 0)
         itemBtn.text:SetJustifyH("LEFT")
@@ -629,6 +667,10 @@ function UI.CreateDropdown(parent, width, maxSlots)
         end
         UI.CloseDropdown()
         dd.list:ClearAllPoints()
+        -- Taken at open rather than at build, for the same reason the button is
+        -- anchored instead of sized: the dropdown may be narrower now than it
+        -- was at login.
+        dd.list:SetWidth(dd:GetWidth())
         dd.list:SetPoint("TOPLEFT", dd.button, "BOTTOMLEFT", 0, -2)
         dd.list:SetFrameLevel((dd:GetFrameLevel() or 1) + 50)
         Refresh()
@@ -949,6 +991,18 @@ function UI.CreateHeaderedFrame(parent, name, title, width, height, frameStrata,
     sep:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -1, -(TITLE_H + 1))
     sep:SetHeight(1)
     sep:SetColorTexture(C.separator[1], C.separator[2], C.separator[3], 1.0)
+
+    -- Addon icon, left of the title. The title sits at x=36 and always has, so
+    -- the gap was already there -- it just had nothing in it on every window
+    -- except the config panel, which drew its own copy.
+    --
+    -- ns.ADDON_ICON_PATH comes from Data.lua, which loads after this file. That
+    -- is fine: nothing here runs at load, only when a window is created.
+    local icon = frame:CreateTexture(nil, "OVERLAY")
+    icon:SetSize(18, 18)
+    icon:SetPoint("LEFT", frame, "TOPLEFT", 10, -(TITLE_H / 2) - 1)
+    icon:SetTexture(ns.ADDON_ICON_PATH)
+    frame.icon = icon
 
     -- Title text
     local titleFS = frame:CreateFontString(nil, "OVERLAY")

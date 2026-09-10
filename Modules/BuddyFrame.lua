@@ -140,6 +140,22 @@ ns.BUDDY_COOLDOWNS = {
     -- that is what a priest will recognise. Malevolence is the Hellcaller one.
     [267] = { 417282, 442726,
               note = "Summon Infernal buffs nobody, so a talent that comes with it is used." },
+
+    -- Priest. Left out at first, on the grounds that Blizzard's list puts Power
+    -- Infusion first for Shadow and watching for the spell you are about to
+    -- cast is circular. That reasoning does not survive its own document:
+    -- docs/BUDDY_COOLDOWNS.md opens by establishing that the order in
+    -- TrackedCooldowns is a whitelist rather than a ranking, and two rows were
+    -- already wrong for trusting it. Voidform is second in the same list.
+    --
+    -- Worth having: a healer's list rates Shadow at 2.76%, mid-table, so /pa
+    -- auto hands one out without being asked. An empty right-hand icon for a
+    -- target the addon itself chose looks broken, and is.
+    --
+    -- 194249, the aura, not 228260 -- that is the cast, and it is what the
+    -- Voidform macro fires.
+    [258] = { 194249,
+              note = "Two Power Infusions do not stack. At about 15 seconds left theirs has run out, which is when yours is worth giving." },
 }
 
 local ICON = 44
@@ -150,6 +166,24 @@ local NAME_GAP = 3
 local TITLE_H = 18
 local STRIPE = 2
 local STRIPE_GAP = 2
+-- The range indicator, hanging a third of its own size off the icon's top
+-- right so it reads as a badge on the icon rather than as part of the artwork.
+--
+-- 18 of the icon's 44. Started at 14, which was legible standing still and
+-- easy to miss mid-pull -- the thing it competes with is a moving glow around
+-- the same corner. Much past this and it starts covering the icon rather than
+-- sitting on it.
+local RANGE_ICON = 18
+-- How often the range is asked, and the only throttle that does anything for
+-- us. The library caches its answer for a tenth of a second, but ours are a
+-- quarter apart, so every one of them is already stale and recomputes -- that
+-- cache is for several callers asking about the same unit at once, not for one
+-- caller on a timer.
+--
+-- What it costs when it does recompute is small: getRangeWithCheckerList does a
+-- binary search over the checkers, so about four range calls per answer rather
+-- than one per checker. Four times a second, while the frame is on screen.
+local RANGE_INTERVAL = 0.25
 
 
 -- The same two-colour box the Current Target row in the config panel is built
@@ -167,107 +201,6 @@ local HOLDER_BACKDROP = {
 -- a font string we could restyle, so matching the panel's typography means
 -- registering one. SetCountdownFont takes the global name, not the object.
 local COUNTDOWN_FONT = "PriestAssistBuddyCountdown"
-
--- ─── Marching ants ───────────────────────────────────────────────────────────
---
--- A dashed border that scrolls around the icon while the aura is up. The
--- approach is EllesmereUI's, from EllesmereUI_Glows.lua, and it exists because
--- the obvious libraries do not work here: LibCustomGlow's PixelGlow drives
--- itself from an OnUpdate that reads IsShown() every frame, and that read is
--- forbidden on an aura button's subtree, so it freezes mid-march.
---
--- Everything below is therefore C-side. Four Translation animations, started
--- once inside the creation window, then never touched again -- no per-frame Lua
--- to be blocked, in restricted content or out of it.
-local DASH_H = "Interface\\AddOns\\PriestAssist\\Media\\glow-dash-h.tga"
-local DASH_V = "Interface\\AddOns\\PriestAssist\\Media\\glow-dash-v.tga"
-local DASH_MASK = "Interface\\Buttons\\WHITE8X8"
-
--- Glow colours the panel offers. They are palette names, so the value stored in
--- the database is looked up rather than trusted -- an unknown one falls back to
--- gold instead of colouring the border with whatever GetColorRGB makes of it.
---
--- "accent" used to be here and was removed: the theme registers white over the
--- palette's accent, so it had become a second White.
-local GLOW_COLORS = {
-    gold   = true,
-    white  = true,
-    danger = true,
-}
-
-local ANT_COUNT = 8      -- dashes distributed around the whole perimeter
-local ANT_THICKNESS = 2
-local ANT_PERIOD = 4     -- seconds for one full lap
-
--- Each edge gets a strip one dash-cycle longer than the edge itself, a mask
--- clipping it back to the edge, and a translation of exactly one cycle. The
--- strip snaps back where the pattern repeats, so the loop is invisible and the
--- march is seamless.
---
--- The per-edge texture coordinates carry the running perimeter position, which
--- is what keeps the dashes continuous around the corners instead of each edge
--- starting its own pattern.
-local function StartMarchingAnts(host, size, r, g, b)
-    local perimeter = 4 * size
-    local cycle = perimeter / ANT_COUNT       -- pixels per dash
-    local step = ANT_PERIOD / ANT_COUNT       -- seconds per dash
-    local span = (size + cycle) / cycle       -- strip length in texture repeats
-
-    -- Clockwise from the top. `base` is where this edge sits along the
-    -- perimeter, measured in dashes.
-    local edges = {
-        { tex = DASH_H, dx =  cycle, dy = 0,      vertical = false, base = 0 },
-        { tex = DASH_V, dx = 0,      dy = -cycle, vertical = true,  base = size / cycle },
-        { tex = DASH_H, dx = -cycle, dy = 0,      vertical = false, base = 2 * size / cycle },
-        { tex = DASH_V, dx = 0,      dy =  cycle, vertical = true,  base = 3 * size / cycle },
-    }
-
-    for index, edge in ipairs(edges) do
-        local mask = host:CreateMaskTexture()
-        mask:SetTexture(DASH_MASK, "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
-
-        local strip = host:CreateTexture(nil, "OVERLAY", nil, 7)
-        strip:SetTexture(edge.tex, "REPEAT", "REPEAT")
-        strip:SetVertexColor(r, g, b, 1)
-        strip:AddMaskTexture(mask)
-
-        if edge.vertical then
-            mask:SetSize(ANT_THICKNESS, size)
-            strip:SetSize(ANT_THICKNESS, size + cycle)
-            strip:SetTexCoord(0, 1, edge.base, edge.base + span)
-
-            if index == 2 then
-                mask:SetPoint("TOPRIGHT")
-                strip:SetPoint("TOPRIGHT", host, "TOPRIGHT", 0, cycle)
-            else
-                mask:SetPoint("BOTTOMLEFT")
-                strip:SetPoint("BOTTOMLEFT", host, "BOTTOMLEFT", 0, -cycle)
-            end
-        else
-            mask:SetSize(size, ANT_THICKNESS)
-            strip:SetSize(size + cycle, ANT_THICKNESS)
-            strip:SetTexCoord(edge.base, edge.base + span, 0, 1)
-
-            if index == 1 then
-                mask:SetPoint("TOPLEFT")
-                strip:SetPoint("TOPLEFT", host, "TOPLEFT", -cycle, 0)
-            else
-                mask:SetPoint("BOTTOMLEFT")
-                strip:SetPoint("BOTTOMLEFT")
-            end
-        end
-
-        local group = strip:CreateAnimationGroup()
-        group:SetLooping("REPEAT")
-
-        local translation = group:CreateAnimation("Translation")
-        translation:SetSmoothing("NONE")
-        translation:SetOffset(edge.dx, edge.dy)
-        translation:SetDuration(step)
-
-        group:Play()
-    end
-end
 
 local function EnsureCountdownFont()
     local font = _G[COUNTDOWN_FONT] or CreateFont(COUNTDOWN_FONT)
@@ -325,18 +258,107 @@ end
 --- that always reserved a name row, so hiding the names left their space behind
 --- -- twenty-four pixels above the icon against twelve below it, which reads as
 --- a crooked box the moment there is only one icon to look at.
-local function Measure(db, compact)
+--- How wide a name column has to be for the names actually on the frame.
+---
+--- COLUMN is the worst case: twelve characters. Reserving it whatever the names
+--- say is where the dead space came from -- a nine-character name left sixteen
+--- pixels of nothing on each side of its icon, and the icons could not be
+--- brought closer than forty because two full-width columns would have
+--- overlapped. Measuring instead means short names give the space back and the
+--- floor drops with them.
+---
+--- Still clamped at both ends. Below ICON there is nothing to gain, since the
+--- icon is the wider of the two; above COLUMN the box would grow without limit
+--- for a name nobody can read at a glance anyway, and the font string cuts it.
+--- What a name needs, ignoring the width it has been given.
+---
+--- GetStringWidth answers with what is *drawn*, and these font strings carry a
+--- width -- so it can never report more than the column they are already in.
+--- Measuring the column from it is then a one-way street: once something has
+--- narrowed the strings, every later measurement agrees with the narrowing and
+--- the column can never grow back.
+---
+--- Turning the names off does exactly that. With them off the column is half
+--- the icon box, 44, and it is written to both strings whether they are shown
+--- or not. Turn them back on and the widest name measures 44, because that is
+--- all it is allowed to draw -- so the column stays at 44 and every name is cut
+--- to "Aniat...", for the rest of the session.
+local function NaturalWidth(fs)
+    if not fs then
+        return 0
+    end
+
+    if fs.GetUnboundedStringWidth then
+        return fs:GetUnboundedStringWidth() or 0
+    end
+
+    -- No such call on an older client: drop the constraint, measure, put it
+    -- back. Zero means "no fixed width" rather than "no width".
+    local width = fs:GetWidth()
+
+    fs:SetWidth(0)
+    local natural = fs:GetStringWidth() or 0
+    fs:SetWidth(width)
+
+    return natural
+end
+
+local function NameColumn(frame)
+    if not frame then
+        return COLUMN
+    end
+
+    local widest = math.max(NaturalWidth(frame.ownName),
+                            NaturalWidth(frame.buddyName))
+
+    return math.max(ICON, math.min(COLUMN, widest))
+end
+
+local function Measure(db, compact, column)
     local names = (db.showTargetName ~= false)
         or (not compact and db.showOwnName ~= false)
 
     local nameRow = names and (NAME_H + NAME_GAP) or 0
     local spacing = db.spacing or 42
-    local icons = compact and ICON or (ICON * 2 + spacing)
 
-    -- Names need more room than icons do, so the box widens for them rather
-    -- than letting two twelve-character names collide over narrow spacing.
-    local width = names and math.max(icons, compact and COLUMN or COLUMN * 2 + 8)
-        or icons
+    -- The slider is called "Icon Spacing" and used not to be one once the names
+    -- were on: the box was widened to fit them, and the extra went half to the
+    -- outer edges and half between the icons. At the default 42 the icons ended
+    -- up 57 apart. `column` made it worse by dividing with `spacing` while
+    -- `width` had been budgeted with 8, so each name got 59 pixels of the 76 it
+    -- is supposed to have.
+    --
+    -- Both come from one formula now. The icons sit centred in their columns,
+    -- so the gap between them is
+    --
+    --     width - 2*((column - ICON)/2) - 2*ICON  =  width - column - ICON
+    --
+    -- and setting that equal to `spacing` gives the width below. It holds at
+    -- every slider value, and the icons stay under their names.
+    --
+    -- Only a laid-out pair of names claims a column of its own. Everything else
+    -- falls through to half the box, which is what a lone icon needs to be
+    -- centred in. `column` comes from NameColumn and is therefore the width of
+    -- the names on screen, not of the longest name there could be.
+    column = (names and not compact) and (column or COLUMN) or nil
+
+    -- Two names of that width cannot be closer than `column - ICON`. Below that
+    -- they would overlap, so the slider stops moving the icons there rather
+    -- than letting the names run into each other -- plus 8 so they do not
+    -- touch. The floor drops as the names get shorter, and with the names off
+    -- there is nothing to collide and the full range works.
+    if column then
+        spacing = math.max(spacing, column - ICON + 8)
+    end
+
+    local width
+    if compact then
+        width = names and math.max(ICON, COLUMN) or ICON
+    elseif column then
+        width = column + ICON + spacing
+    else
+        width = ICON * 2 + spacing
+    end
 
     return {
         nameRow = nameRow,
@@ -349,7 +371,10 @@ local function Measure(db, compact)
         -- comes out an actual square. Counting it cost four pixels at the
         -- bottom that nothing balanced at the top.
         height  = nameRow + ICON,
-        column  = compact and width or (width - spacing) / 2,
+
+        -- With the names off the column is only what the icon is centred in,
+        -- and half the box is the right answer for that.
+        column  = compact and width or (column or (width - spacing) / 2),
     }
 end
 
@@ -357,8 +382,11 @@ end
 -- concatenated key: this runs on every refresh, and a string built to avoid
 -- twelve widget calls is not much of a saving.
 local lastLocked, lastStyle, lastScale
-local lastOwnName, lastTargetName, lastSpacing
+local lastOwnName, lastTargetName, lastSpacing, lastColumn
 
+-- The column is in here because it is no longer a constant: it follows the
+-- names, and the target's name changes without any setting moving. Left out,
+-- the box would keep the width it had for the previous target.
 local function ChromeUnchanged(db)
     return lastLocked == db.locked
         and lastStyle == (db.style or "framed")
@@ -366,6 +394,7 @@ local function ChromeUnchanged(db)
         and lastOwnName == (db.showOwnName ~= false)
         and lastTargetName == (db.showTargetName ~= false)
         and lastSpacing == (db.spacing or 42)
+        and lastColumn == NameColumn(frames.buddyFrame)
 end
 
 local function RememberChrome(db)
@@ -373,14 +402,31 @@ local function RememberChrome(db)
     lastOwnName = db.showOwnName ~= false
     lastTargetName = db.showTargetName ~= false
     lastSpacing = db.spacing or 42
+    lastColumn = NameColumn(frames.buddyFrame)
 end
 
-local function ApplyChrome()
+-- Declared here so EnsureChrome below can name it; defined further down, where
+-- the constants it measures with are in scope.
+local ApplyChrome
+
+--- Lay the frame out again if anything it is laid out from has moved.
+---
+--- This used to be the if-statement written out at its one call site. There are
+--- two now that the names are measured: one before the frame is shown, and one
+--- after a new target's name has been written into it.
+local function EnsureChrome(db)
+    if not ChromeUnchanged(db) then
+        ApplyChrome()
+        RememberChrome(db)
+    end
+end
+
+function ApplyChrome()
     local frame = frames.buddyFrame
     local db = ns.GetDB().buddyFrame
     local style = db.style or "framed"
     local compact = style == "compact"
-    local m = Measure(db, compact)
+    local m = Measure(db, compact, NameColumn(frame))
 
     -- Unlocked, the box and the title bar are always there whatever the style
     -- says: they are the handle. A frameless frame you cannot grab would be a
@@ -410,9 +456,15 @@ local function ApplyChrome()
     frame.ownName:SetWidth(m.column)
     frame.buddyName:SetWidth(m.column)
 
+    -- Always TOPLEFT, unlike the buddy name below: our own half is the left one
+    -- and is hidden outright in compact, so there is no second case.
+    --
+    -- The SetPoint went missing in the buddy frame's first commit, leaving a
+    -- ClearAllPoints with nothing after it and a comment about the *creation*
+    -- function sitting in the gap. A font string with no point is not drawn, so
+    -- "Show own name" reserved its column, set its text, and displayed nothing.
     frame.ownName:ClearAllPoints()
-    -- Positions and sizes are all set by ApplyChrome, which runs before the
-    -- frame is ever shown. What happens here is creation and parenting only.
+    frame.ownName:SetPoint("TOPLEFT")
 
     frame.buddyName:ClearAllPoints()
     frame.buddyName:SetPoint(compact and "TOPLEFT" or "TOPRIGHT")
@@ -469,7 +521,7 @@ end
 
 -- ─── Left: our own Power Infusion ────────────────────────────────────────────
 
-local function UpdateOwnCooldown()
+function ns.UpdateOwnCooldown()
     local frame = frames.buddyFrame
 
     if not (frame and type(frame.own) == "table" and frame.own.cooldown) then
@@ -526,7 +578,11 @@ local styledFor
 --
 -- A nil result is cached too. Somebody who is not in the group is exactly the
 -- case that would otherwise walk the whole roster every time and find nothing.
-local rosterGeneration = 0
+--
+-- The generation is not ours. ns.RosterGeneration is bumped by every roster
+-- invalidation in the addon, so this token expires on the same events the
+-- shared overview does -- one counter, one owner, rather than a second opinion
+-- here about when the group last changed.
 local cachedFor, cachedGeneration, cachedUnit = nil, -1, nil
 
 local function ResolveUnit(target)
@@ -534,11 +590,13 @@ local function ResolveUnit(target)
         return nil
     end
 
-    if cachedGeneration == rosterGeneration and cachedFor == target then
+    local generation = ns.RosterGeneration()
+
+    if cachedGeneration == generation and cachedFor == target then
         return cachedUnit
     end
 
-    cachedFor, cachedGeneration = target, rosterGeneration
+    cachedFor, cachedGeneration = target, generation
     cachedUnit = ns.UnitForName(target)
 
     return cachedUnit
@@ -557,6 +615,78 @@ local function BuddySpells()
 
     local specID = ns.GetKnownSpec and ns.GetKnownSpec(target)
     return specID and ns.BUDDY_COOLDOWNS[specID] or nil, target
+end
+
+--- Whether Power Infusion would reach the player we are set to infuse.
+---
+--- Deliberately answers only true or false, never "do not know". Everything the
+--- caller could do with a third answer is what it does with false: there is no
+--- check mark to show for a target that is dead, gone, not loaded or not
+--- resolvable, and a picture saying "go ahead" over any of those is worse than
+--- one saying "no".
+---
+--- That is also why the true case is written positively. Turned around --
+--- "false only when the library says out of range" -- a nil would fall through
+--- to the check mark, which is the one outcome that must not happen.
+---
+--- LibRangeCheck rather than C_Spell.IsSpellInRange: the library already knows
+--- about units that do not exist and units that are not visible, and it caches
+--- its answer for a tenth of a second, which is what makes a ticker cheap. It
+--- estimates with the priest's own 40-yard friendly spells rather than with
+--- Power Infusion itself, which is the same 40 yards.
+--- How far Power Infusion actually reaches, this character, right now.
+---
+--- Asked of the spell rather than written down, because it is not a constant:
+--- Phantom Reach takes it from 40 to 46, and `maxRange` follows the talent --
+--- measured in game, 46 with it and 40 without.
+---
+--- The same call LibRangeCheck labels its own spell checkers from, so its steps
+--- and this threshold move together instead of drifting apart.
+local function PowerInfusionRange()
+    local info = C_Spell and C_Spell.GetSpellInfo
+        and C_Spell.GetSpellInfo(ns.POWER_INFUSION_SPELL_ID)
+    local range = info and info.maxRange
+
+    return (type(range) == "number" and range > 0) and range
+        or ns.POWER_INFUSION_RANGE
+end
+
+function ns.IsBuddyInRange(unit)
+    if not unit then
+        return false
+    end
+
+    local rangeCheck = LibStub and LibStub("LibRangeCheck-3.0", true)
+
+    if not rangeCheck then
+        return false
+    end
+
+    -- checkVisible: a player the client has not loaded is not somebody you are
+    -- about to infuse, whatever the roster says.
+    local minRange = rangeCheck:GetRange(unit, true)
+
+    -- No answer at all. Not a distance, so not a check mark.
+    if not minRange then
+        return false
+    end
+
+    -- The *lower* bound, and this is the whole of the fix.
+    --
+    -- GetRange answers with a band -- somewhere between min and max. Asking
+    -- `maxRange <= 40` asks whether the target is *certainly* within range,
+    -- which is a different and much stricter question, and it only holds while
+    -- the band is narrow. Out of combat it is: the library measures with items
+    -- in five-yard steps. In combat those are gone -- item and interact checks
+    -- are restricted for a friendly unit -- and all that is left are the
+    -- priest's own 40-yard spells, plus Gift of the Naaru, which the library
+    -- appends to every class list. One coarse band, and the strict question
+    -- stops being answerable: the triangle then showed for the whole fight.
+    --
+    -- The lower bound asks what we actually want to know: the closest they can
+    -- possibly be. A band cannot straddle the spell's own range while a checker
+    -- sits exactly there, and for a priest one always does.
+    return minRange < PowerInfusionRange()
 end
 
 local function SpellFilterFor(spells)
@@ -587,6 +717,12 @@ local function UpdateBuddyStyle(target, spells, unit)
     styledFor = key
 
     frame.buddyName:SetTextSafe(ShortName(target))
+
+    -- The box is measured from the names, so a new target can change its width.
+    -- Here rather than in ns.UpdateBuddyFrame: that runs its chrome check before
+    -- this point, so a name arriving now would first be laid out on the next
+    -- refresh, in the previous target's column.
+    EnsureChrome(ns.GetDB().buddyFrame)
 
     local info = spellID and C_Spell and C_Spell.GetSpellInfo
         and C_Spell.GetSpellInfo(spellID)
@@ -631,6 +767,167 @@ local function UpdateBuddyStyle(target, spells, unit)
     frame.stripe:Show()
 end
 
+--- The check mark or the triangle, from a unit token that was resolved a moment
+--- ago rather than remembered.
+---
+--- Its own function because it runs on a ticker as well as on the refresh: the
+--- distance between two players changes while nothing happens, so there is no
+--- event to hang this on. Everything else on the frame reacts to something.
+local function UpdateRangeIcon(unit)
+    local frame = frames.buddyFrame
+
+    if not (frame and frame.range) then
+        return
+    end
+
+    -- Switched off, or nothing to judge. The second is not a problem worth a
+    -- triangle: the frame already says there is no target -- empty name, no
+    -- placeholder, red stripe -- and a warning on top of that would be about an
+    -- empty window rather than about anything you could fix.
+    if not unit or ns.GetDB().buddyFrame.rangeCheck == false then
+        frame.range:Hide()
+        return
+    end
+
+    local inRange = ns.IsBuddyInRange(unit)
+
+    frame.range:SetTexture(inRange and ns.CHECK_ICON_PATH or ns.WARNING_ICON_PATH)
+    frame.range:Show()
+end
+
+--- Start or stop the range ticker, and say whether it moved.
+---
+--- SetScript rather than HookScript, because a hook cannot be taken off again:
+--- it would keep being called every frame just to return early, which is the
+--- opposite of switching something off. Nothing else on this frame uses
+--- OnUpdate, so there is nothing to clobber -- Minimap.lua does the same thing
+--- with the same pair of calls.
+---
+--- Two switches, both real. The script is removed when the option is off, and
+--- the game does not call OnUpdate on a hidden frame anyway, so a frame that is
+--- merely not on screen costs nothing either.
+---
+--- Distance is the one thing here that has to be looked at rather than waited
+--- for. Every other part of the buddy frame hangs off an event; two players
+--- walking apart broadcasts nothing.
+function ns.SetRangeTicker(on)
+    local frame = frames.buddyFrame
+
+    if not frame then
+        return false
+    end
+
+    -- Two conditions, not one, and both are checked here rather than left to
+    -- the caller. The option says whether the player wants it; `enabled` says
+    -- whether there is a frame to want it on. A range check for a window that
+    -- is switched off is work for nobody, and the first version of this only
+    -- ever asked about the option -- the guarantee lived in which branch of
+    -- ns.UpdateBuddyFrame the call happened to sit in, which is the kind of
+    -- coupling that goes wrong when somebody reorders two lines.
+    on = on and ns.GetDB().buddyFrame.enabled and true or false
+
+    local running = frame:GetScript("OnUpdate") ~= nil
+
+    if on == running then
+        return false
+    end
+
+    if not on then
+        frame:SetScript("OnUpdate", nil)
+        return true
+    end
+
+    frame.rangeElapsed = 0
+
+    frame:SetScript("OnUpdate", function(self, elapsed)
+        self.rangeElapsed = (self.rangeElapsed or 0) + elapsed
+
+        if self.rangeElapsed < RANGE_INTERVAL then
+            return
+        end
+
+        self.rangeElapsed = 0
+        UpdateRangeIcon(ResolveUnit(ns.GetAssignedTarget()))
+    end)
+
+    return true
+end
+
+-- What ns.SetBuddySound last registered, so it can take it off again. The IDs
+-- are the engine's; there is no way to ask it what we asked for.
+local soundIDs, soundedUnit, soundedSpells, soundedFile = {}, nil, nil, nil
+
+--- Play a sound when the watched cooldown starts.
+---
+--- C_UnitAuras.AddAuraSound is the same bargain as the aura container: we name a
+--- unit and a spell, the engine watches and plays, and we are told nothing. That
+--- is why it is allowed to work on somebody else's buff at all, and it is the
+--- only way to get this -- the addon cannot see the aura to react to it.
+---
+--- Registered per spell, because a specialisation can have more than one
+--- candidate and the engine takes one at a time.
+---
+--- **No ShouldAurasBeSecret guard, and that is settled rather than hopeful.**
+--- NorthernSkyRaidTools refuses to register at all while auras are secret,
+--- which is exactly the content this frame is for. Copying that would have made
+--- it impossible to find out whether the API or the addon was the cautious one.
+---
+--- It is the addon. Confirmed in a raid: the sound fires while auras are
+--- secret. Which follows, once you see what this function is --
+--- Blizzard_Deprecated resolves the old AddPrivateAuraAppliedSound straight
+--- onto it, so this *is* the private aura mechanism, and private auras exist
+--- precisely so an addon can react to something it is not allowed to read.
+function ns.SetBuddySound(unit, spells)
+    local db = ns.GetDB().buddyFrame
+    local file = db.sound and db.enabled and ns.ResolveSound(db.soundName) or nil
+
+    if not (unit and spells and file) then
+        unit, spells, file = nil, nil, nil
+    end
+
+    -- Nothing moved. Re-registering on every SPELL_UPDATE_COOLDOWN would mean
+    -- tearing down and rebuilding several registrations a second in combat.
+    if unit == soundedUnit and spells == soundedSpells and file == soundedFile then
+        return false
+    end
+
+    if C_UnitAuras and C_UnitAuras.RemoveAuraSound then
+        for _, id in ipairs(soundIDs) do
+            C_UnitAuras.RemoveAuraSound(id)
+        end
+    end
+
+    wipe(soundIDs)
+    soundedUnit, soundedSpells, soundedFile = unit, spells, file
+
+    if not file then
+        return true
+    end
+
+    local add = C_UnitAuras and C_UnitAuras.AddAuraSound
+    local trigger = Enum and Enum.UnitAuraSoundTrigger
+        and Enum.UnitAuraSoundTrigger.Added
+
+    if not (add and trigger) then
+        return true
+    end
+
+    for _, spellID in ipairs(spells) do
+        local id = add(trigger, {
+            unitToken     = unit,
+            spellID       = spellID,
+            soundFileName = file,
+            outputChannel = "Master",
+        })
+
+        if id then
+            soundIDs[#soundIDs + 1] = id
+        end
+    end
+
+    return true
+end
+
 local function UpdateBuddySlot()
     local frame = frames.buddyFrame
 
@@ -648,6 +945,10 @@ local function UpdateBuddySlot()
     local unit = ResolveUnit(target)
 
     UpdateBuddyStyle(target, spells, unit)
+    UpdateRangeIcon(unit)
+    -- Alongside the container and on the same two values, so the sound is bound
+    -- to whoever the icon is bound to and never to the previous target.
+    ns.SetBuddySound(unit, spells)
 
     local container = frame.buddy.container
 
@@ -678,6 +979,7 @@ local function UpdateBuddySlot()
         end
 
         watchedSpells, watchedUnit = nil, nil
+        ns.SetBuddySound(nil, nil)
         return
     end
 
@@ -801,8 +1103,8 @@ local function BuildAuraContainer(parent)
             local settings = ns.GetDB().buddyFrame
 
             if settings.glow ~= false then
-                StartMarchingAnts(glow, ICON - 2,
-                    ns.UI.GetColorRGB(GLOW_COLORS[settings.glowColor] and settings.glowColor
+                ns.StartMarchingAnts(glow, ICON - 2,
+                    ns.UI.GetColorRGB(ns.GLOW_COLORS[settings.glowColor] and settings.glowColor
                         or "gold"))
             end
 
@@ -1059,6 +1361,44 @@ function ns.CreateBuddyFrame()
     frame.stripe:SetHeight(STRIPE)
     frame.stripe:Hide()
 
+    -- Whether Power Infusion would reach them. On the icon rather than beside
+    -- it, so Measure never learns about it: anything in the layout would make
+    -- the frame wider for everybody and change width again whenever the option
+    -- moved. An overlay costs no room at any spacing and works in all three
+    -- styles.
+    --
+    -- Parented to the frame for the same reason as the stripe above, and it is
+    -- worth repeating because it is not obvious: the aura container is a child
+    -- frame, so anything drawn inside the holder ends up beneath the aura
+    -- button whatever its draw layer.
+    --
+    -- Top right. Bottom right is where a count would normally sit, but the
+    -- stripe is already along the bottom edge, and the cooldown swipe draws
+    -- from the centre.
+    -- In a frame of its own, not as a texture on `frame`. That was the first
+    -- version and it drew *behind* the icon: a child frame always paints over
+    -- its parent's regions whatever draw layer they are on, and the icon holder
+    -- is a child. The stripe gets away with being a plain texture because it
+    -- sits below the icon and overlaps nothing.
+    --
+    -- Twenty above the holder. It has to clear the holder, the aura container
+    -- inside it, and the container's own stack -- button, cooldown, glow and
+    -- the countdown text, which reach the button's level plus three. Those are
+    -- built later and their levels are not ours to read, so the number is
+    -- deliberately generous rather than exact.
+    local badge = CreateFrame("Frame", nil, frame)
+    badge:SetFrameLevel(frame.buddy:GetFrameLevel() + 20)
+    badge:SetSize(RANGE_ICON, RANGE_ICON)
+    badge:SetPoint("TOPRIGHT", frame.buddy, "TOPRIGHT", RANGE_ICON / 3, RANGE_ICON / 3)
+    badge:EnableMouse(false)
+
+    frame.rangeBadge = badge
+    frame.range = badge:CreateTexture(nil, "OVERLAY")
+    frame.range:SetAllPoints()
+    frame.range:Hide()
+
+    frame.rangeElapsed = 0
+
     -- Our own name never changes for the life of the session, so it is written
     -- once here rather than on every refresh. Priest white either way -- it is
     -- there to make the pair read as a direction, from us to them, not to
@@ -1077,122 +1417,6 @@ function ns.CreateBuddyFrame()
     return frame
 end
 
--- Events the frame needs are registered here rather than in Core.lua: they are
--- nobody else's business, and a prototype should be removable by deleting one
--- file and one .toc line.
---
--- PLAYER_ENTERING_WORLD is the only one registered unconditionally, and it is
--- what turns the rest on at login. Everything else exists only while the frame
--- does: SPELL_UPDATE_COOLDOWN fires several times a second in combat, and a
--- switched-off feature has no business waking for it all night.
---
--- The last three serve the visibility rule -- entering and leaving combat, and
--- changing zone, are when "only in combat" and "only in dungeons" flip.
-local events = CreateFrame("Frame")
-events:RegisterEvent("PLAYER_ENTERING_WORLD")
-
-local FREQUENT_EVENTS = {
-    "SPELL_UPDATE_COOLDOWN",
-    "GROUP_ROSTER_UPDATE",
-    "PLAYER_REGEN_ENABLED",
-    "PLAYER_REGEN_DISABLED",
-    "ZONE_CHANGED_NEW_AREA",
-}
-
--- Filtered to the player, so somebody else's cast never reaches the handler.
-local CAST_EVENT = "UNIT_SPELLCAST_SUCCEEDED"
-
-local frequentEventsOn = false
-
-local function SetFrequentEvents(on)
-    on = on and true or false
-
-    if on == frequentEventsOn then
-        return
-    end
-
-    frequentEventsOn = on
-
-    for _, event in ipairs(FREQUENT_EVENTS) do
-        if on then
-            events:RegisterEvent(event)
-        else
-            events:UnregisterEvent(event)
-        end
-    end
-
-    if on then
-        events:RegisterUnitEvent(CAST_EVENT, "player")
-    else
-        events:UnregisterEvent(CAST_EVENT)
-    end
-end
-
--- Roster events arrive in a burst when a raid fills: thirty in two seconds,
--- each one otherwise a full refresh. Half a second of collection turns that
--- into one, and half a second is nothing against a target that has not been
--- assigned yet.
-local rosterPending = false
-
-local function RefreshAfterRoster()
-    if rosterPending then
-        return
-    end
-
-    rosterPending = true
-
-    C_Timer.After(0.5, function()
-        rosterPending = false
-        rosterGeneration = rosterGeneration + 1
-        ns.UpdateBuddyFrame()
-    end)
-end
-
-events:SetScript("OnEvent", function(_, event, _, _, spellID)
-    if not (ns.GetDB and ns.GetDB() and ns.GetDB().buddyFrame) then
-        return
-    end
-
-    -- The one moment we know a cooldown has begun. Everything else about it is
-    -- unreadable, so this is where the icon goes grey; the widget's
-    -- OnCooldownDone is where it comes back.
-    if event == CAST_EVENT then
-        local frame = frames.buddyFrame
-
-        if spellID == ns.POWER_INFUSION_SPELL_ID and frame and frame.own
-            and frame.own.icon then
-            frame.own.icon:SetDesaturated(true)
-        end
-
-        return
-    end
-
-    -- Our own cooldown is all this one can say anything about. Sending it
-    -- through the full refresh meant walking the raid for a unit token twice a
-    -- second, to re-answer a question the roster had not touched.
-    if event == "SPELL_UPDATE_COOLDOWN" then
-        -- The only thing here a cooldown change can move is the left half, and
-        -- the compact style has no left half. Same condition as the full path;
-        -- if the two ever disagree, this is the one that runs hundreds of times
-        -- a fight.
-        local frame = frames.buddyFrame
-
-        if frame and frame:IsShown()
-            and (ns.GetDB().buddyFrame.style or "framed") ~= "compact" then
-            UpdateOwnCooldown()
-        end
-
-        return
-    end
-
-    if event == "GROUP_ROSTER_UPDATE" then
-        RefreshAfterRoster()
-        return
-    end
-
-    ns.UpdateBuddyFrame()
-end)
-
 --- Rebuild what the frame watches. Cheap enough to call from any refresh.
 ---
 --- Switched off, this function is the only thing left of the feature: one table
@@ -1202,7 +1426,17 @@ function ns.UpdateBuddyFrame()
     local db = ns.GetDB().buddyFrame
 
     if not (db.enabled and ns.IsPriest()) then
-        SetFrequentEvents(false)
+        ns.SetFrequentEvents(false)
+        -- With the events. Hiding the frame stops OnUpdate on its own, but only
+        -- while it stays hidden -- and this path is also the one a non-priest
+        -- takes, where the frame may never have been built. Taking the script
+        -- off is the switch; relying on the frame being hidden is a guess about
+        -- who shows it next.
+        ns.SetRangeTicker(false)
+        -- And the sound. Unlike the container this is not held by a frame, so
+        -- hiding one releases nothing: the engine keeps playing for a unit
+        -- nobody is watching until the registration is taken back.
+        ns.SetBuddySound(nil, nil)
 
         -- Hiding is what releases the container: its OnHide drops the unit
         -- registrations, so nothing of ours is left listening to UNIT_AURA.
@@ -1217,17 +1451,17 @@ function ns.UpdateBuddyFrame()
         ns.CreateBuddyFrame()
     end
 
-    SetFrequentEvents(true)
+    ns.SetFrequentEvents(true)
+    -- Alongside the events, and for the same reason: a feature nobody has
+    -- switched on should not be waking up. This one is not an event but a
+    -- script, so it is a separate call rather than another entry in that list.
+    ns.SetRangeTicker(db.rangeCheck ~= false)
 
     local frame = frames.buddyFrame
 
-    -- Only when a setting actually moved. Nothing here reacts to the target or
-    -- the roster, so re-running it per event was twelve widget calls to arrive
-    -- at the layout that was already on screen.
-    if not ChromeUnchanged(db) then
-        ApplyChrome()
-        RememberChrome(db)
-    end
+    -- Only when something it lays out from actually moved. Re-running it per
+    -- event was twelve widget calls to arrive at the layout already on screen.
+    EnsureChrome(db)
 
     frame:SetShown(AllowedByVisibility())
 
@@ -1237,7 +1471,7 @@ function ns.UpdateBuddyFrame()
 
     -- Nothing to update on the left half when the style has removed it.
     if (db.style or "framed") ~= "compact" then
-        UpdateOwnCooldown()
+        ns.UpdateOwnCooldown()
     end
 
     UpdateBuddySlot()
