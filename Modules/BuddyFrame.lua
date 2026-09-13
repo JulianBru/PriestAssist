@@ -69,7 +69,12 @@ ns.BUDDY_COOLDOWNS = {
     -- keeps what the game removes.
 
     -- Druid
-    [102] = { 194223 },           -- Balance       Celestial Alignment
+    -- Balance: Celestial Alignment, or Incarnation where it replaces it. The
+    -- Wowhead entry for 102560 says "Replaces Celestial Alignment" outright, so
+    -- a druid who talented it has nothing at 194223 and the icon stayed empty.
+    -- Seen in a raid. 390414 is the same buff under a second ID; which one lands
+    -- is unknown, and an extra ID in the map costs nothing.
+    [102] = { 194223, 102560, 390414 },  -- Balance  Celestial Alignment, Incarnation
     -- Feral: Berserk, or Incarnation where it replaces it. Convoke the
     -- Spirits was here and came out again -- Blizzard lists it first, but it
     -- is optional, and Berserk or Incarnation is on every build.
