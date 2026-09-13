@@ -1,5 +1,15 @@
 # Priest Assist
 
+## [1.10.1](https://github.com/JulianBru/PriestAssist/tree/v1.10.1) (unreleased)
+
+### Fixed
+
+- The buddy frame showed nothing for a Balance Druid with Incarnation: Chosen of Elune.
+
+### Changed
+
+- Every window carries the addon icon in its title bar, not just the settings panel.
+
 ## [1.10](https://github.com/JulianBru/PriestAssist/tree/v1.10) (2026-09-10)
 
 ### Added
