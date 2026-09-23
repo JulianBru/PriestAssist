@@ -1,6 +1,12 @@
 # Priest Assist
 
-## [1.10.1](https://github.com/JulianBru/PriestAssist/tree/v1.10.1) (unreleased)
+## [1.10.2](https://github.com/JulianBru/PriestAssist/tree/v1.10.2)
+
+### Updated
+
+- Updated PI Data after this weeks tuning pass
+
+## [1.10.1](https://github.com/JulianBru/PriestAssist/tree/v1.10.1)
 
 ### Fixed
 
