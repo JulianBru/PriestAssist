@@ -1,5 +1,5 @@
 ## Interface: 120100, 120105
-## Version: 1.10.3
+## Version: 1.10.4
 ## Title: Priest Assist
 ## Author: Julsanity (CheersItsJulian)
 ## SavedVariables: PriestAssistDB

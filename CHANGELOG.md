@@ -1,6 +1,6 @@
 # Priest Assist
 
-## [1.10.3](https://github.com/JulianBru/PriestAssist/tree/v1.10.2)
+## [1.10.4](https://github.com/JulianBru/PriestAssist/tree/v1.10.2)
 
 ### Updated
 
