@@ -1,5 +1,11 @@
 # Priest Assist
 
+## [1.10.3](https://github.com/JulianBru/PriestAssist/tree/v1.10.2)
+
+### Updated
+
+- Updated PI Data
+
 ## [1.10.2](https://github.com/JulianBru/PriestAssist/tree/v1.10.2)
 
 ### Updated
